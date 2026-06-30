@@ -62,6 +62,8 @@ module Reef.Odonus
   , effectivePitchSet
   , setPitchSet
   , clearPitchSet
+  , cellIndexMax
+  , cellPitch
   , cycleRoot
   , cycleScaleType
   , numRandScales
@@ -209,7 +211,7 @@ renderCell o hd c =
 effectivePitchSet :: Odonus -> PitchSet
 effectivePitchSet o = case o.pitchSet of
   Just s -> s
-  Nothing -> PitchSet { offsets: o.scaleIvls, root: 60 + o.rootPc, period: Just 12 }
+  Nothing -> PitchSet { offsets: o.scaleIvls, root: 48 + o.rootPc, period: Just 12 }
 
 -- | Install an explicit PitchSet (the Vetula / pushed-record path).
 setPitchSet :: PitchSet -> Odonus -> Odonus
@@ -218,6 +220,18 @@ setPitchSet ps o = o { pitchSet = Just ps }
 -- | Drop back to the scale-derived set (standalone authoring).
 clearPitchSet :: Odonus -> Odonus
 clearPitchSet o = o { pitchSet = Nothing }
+
+-- | The top cell INDEX for this voice: `span` periods of the effective set, minus
+-- | one. The UI uses it as the NOTE knob's range — cells are indices now, not
+-- | chromatic values, so the old 36..84 range no longer applies.
+cellIndexMax :: Odonus -> Int
+cellIndexMax o = max 1 (o.span * cardinality (effectivePitchSet o)) - 1
+
+-- | The MIDI pitch a cell index realizes to in this voice's set (ignoring per-head
+-- | transpose / octave) — for the UI to label a cell with its sounding note, which
+-- | re-colours live as the set changes.
+cellPitch :: Odonus -> Int -> Int
+cellPitch o ix = PS.realize (effectivePitchSet o) (clampI 0 (cellIndexMax o) ix)
 
 -- | How many chords the table offers, and a chord's display name.
 numChordTable :: Int
