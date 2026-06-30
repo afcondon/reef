@@ -1,0 +1,22 @@
+package:
+  name: reef
+  description: >
+    Reef — a portable package of virtual-module engines for the live rig. Pure
+    sequencer cores (Odonus first; Balistes, Selene to follow) plus the wire
+    protocol to drive them, as one source of truth compiled to both the
+    Triggerfish JS frontend and the purerl-tidal Erlang engine. Builds on
+    harmonia (the theory layer).
+  dependencies:
+    - prelude
+    - arrays
+    - foldable-traversable
+    - integers
+    - maybe
+    - harmonia
+workspace:
+  extraPackages:
+    harmonia:
+      git: https://github.com/afcondon/purescript-harmonia.git
+      ref: v0.1.1
+  packageSet:
+    registry: 73.3.0
