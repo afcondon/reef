@@ -83,7 +83,6 @@ import Prelude
 
 import Data.Array (catMaybes, elem, filter, findIndex, mapWithIndex, null, replicate, modifyAt, length, zipWith, (!!), (:))
 import Data.Foldable (foldl)
-import Data.Int (floor, toNumber)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Scale (Scale, Distribution(..), applyDistribution, mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, shiftDegrees, spreadIvls)
@@ -125,7 +124,10 @@ orderOf ix = maybe defaultOrder _.order (patternLibrary !! ix)
 type Head =
   { cursor :: Int
   , seqPos :: Int
-  , accumulator :: Number
+  , accumulator :: Int   -- phase carry in 1/8-step units (`stepDenom`), 0..stepDenom-1.
+                         -- INTEGER, not a fractional float: it cannot drift across
+                         -- runtimes and serialises identically in state snapshots (a
+                         -- Number diverges in JSON formatting JS vs BEAM — cf the seed).
   , pendStep :: Int
   , speedIx :: Int
   , direction :: Int
@@ -316,12 +318,26 @@ speedTable = [ 0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 ]
 speedOf :: Head -> Number
 speedOf h = fromMaybe 1.0 (speedTable !! h.speedIx)
 
+-- | The phase accumulator counts 1/8-step units; `stepDenom` is that 8. Every
+-- | speed is a whole multiple of 1/8 (0.125 is the finest), so the phase advances
+-- | in exact integers — provably drift-free across runtimes, where a fractional
+-- | float `accumulator` would only be EMPIRICALLY identical (and would serialise
+-- | differently JS vs BEAM). `speedNumTable` is `speedTable * stepDenom`.
+stepDenom :: Int
+stepDenom = 8
+
+speedNumTable :: Array Int
+speedNumTable = [ 1, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64 ]
+
+speedNumOf :: Head -> Int
+speedNumOf h = fromMaybe stepDenom (speedNumTable !! h.speedIx)
+
 replicate16 :: forall a. a -> Array a
 replicate16 = replicate 16
 
 mkHead :: Int -> Int -> Int -> Boolean -> Int -> Head
 mkHead speedIx direction transp mute patternIx =
-  { cursor: 0, seqPos: 0, accumulator: 0.0, pendStep: 1
+  { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1
   , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16 }
 
 -- | Head I runs (Rows, 1.0×); II–IV start muted with distinct patterns + fugue
@@ -409,9 +425,11 @@ advanceHead cells h =
   let
     order = orderOf h.patternIx
     len = clampI 1 16 h.len
-    newAcc = h.accumulator + speedOf h
-    steps = floor newAcc
-    remain = newAcc - toNumber steps
+    -- Exact integer phase: accumulate 1/8-step units, whole steps are the integer
+    -- quotient, the carry is the remainder. (Both ≥ 0, so div/mod are unsigned.)
+    newAcc = h.accumulator + speedNumOf h
+    steps = newAcc `div` stepDenom
+    remain = newAcc `mod` stepDenom
     r = advanceSeqN order cells len (decodeDir h.direction) steps { pos: h.seqPos, pend: h.pendStep }
   in
     h { seqPos = r.pos
@@ -635,7 +653,7 @@ unifyHeads o = case o.heads !! 0 of
   Just h0 -> o { heads = map (\_ -> aligned h0) o.heads }
   Nothing -> o
   where
-  aligned h = h { cursor = 0, seqPos = 0, accumulator = 0.0, pendStep = 1, mute = false }
+  aligned h = h { cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1, mute = false }
 
 -- ---------------------------------------------------------------------------
 -- Reichian phasing macros — drive all four heads' OFFSET / LEN at once
