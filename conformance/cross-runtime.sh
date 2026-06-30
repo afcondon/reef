@@ -16,7 +16,10 @@ GOLDEN="$REEF/conformance/odonus-golden.txt"
 DATA='^ *[0-9]+ \|'
 
 echo "== node (JS backend) =="
-( cd "$REEF" && spago test 2>/dev/null ) | grep -E "$DATA" > /tmp/reef-node-out.txt
+( cd "$REEF" && spago build >/dev/null 2>&1 \
+  && node --input-type=module \
+       -e 'import { run } from "./output/Reef.Conformance/index.js"; process.stdout.write(run);' \
+  ) | grep -E "$DATA" > /tmp/reef-node-out.txt
 echo "== erl (purerl, via purerl-tidal) =="
 ( cd "$PURERL" && spago build >/dev/null 2>&1 && make erl-quick >/dev/null 2>&1 \
   && erl -pa ebin -noshell -eval 'io:format("~s~n", ['"'"'reef_conformance@ps'"'"':run()]), halt().' 2>/dev/null ) \
