@@ -40,41 +40,43 @@ main = do
     { actual: tableRender, expected: pitchSetGolden }
   log "Reef.PitchSet quantisation table golden: OK"
 
--- | The frozen render of `Reef.Conformance.run`. Head 0 walks the default scale
--- | quantisation (one 16-cell bar, repeated). Captured 2026-06-30; identical
--- | under node and the BEAM.
+-- | The frozen render of `Reef.Conformance.run`. Head 0 walks the default
+-- | PitchSet (C minor, cells = discrete indices) — a clean ascending two-octave
+-- | scale; octaves emerge from the set's period tiling (index 7 -> 72 = C5), not
+-- | a +12. Regenerated 2026-06-30 when renderCell moved to index-space realize;
+-- | identical under node and the BEAM.
 golden :: String
 golden = """  1 | h0 p62 d1 r1 v100
-  2 | h0 p62 d1 r1 v100
-  3 | h0 p63 d1 r1 v100
-  4 | h0 p65 d1 r1 v100
-  5 | h0 p65 d1 r1 v100
-  6 | h0 p67 d1 r1 v100
-  7 | h0 p67 d1 r1 v100
-  8 | h0 p68 d1 r1 v100
-  9 | h0 p70 d1 r1 v100
- 10 | h0 p70 d1 r1 v100
- 11 | h0 p72 d1 r1 v100
- 12 | h0 p72 d1 r1 v100
- 13 | h0 p74 d1 r1 v100
- 14 | h0 p74 d1 r1 v100
- 15 | h0 p75 d1 r1 v100
+  2 | h0 p63 d1 r1 v100
+  3 | h0 p65 d1 r1 v100
+  4 | h0 p67 d1 r1 v100
+  5 | h0 p68 d1 r1 v100
+  6 | h0 p70 d1 r1 v100
+  7 | h0 p72 d1 r1 v100
+  8 | h0 p74 d1 r1 v100
+  9 | h0 p75 d1 r1 v100
+ 10 | h0 p77 d1 r1 v100
+ 11 | h0 p79 d1 r1 v100
+ 12 | h0 p80 d1 r1 v100
+ 13 | h0 p82 d1 r1 v100
+ 14 | h0 p84 d1 r1 v100
+ 15 | h0 p86 d1 r1 v100
  16 | h0 p60 d1 r1 v100
  17 | h0 p62 d1 r1 v100
- 18 | h0 p62 d1 r1 v100
- 19 | h0 p63 d1 r1 v100
- 20 | h0 p65 d1 r1 v100
- 21 | h0 p65 d1 r1 v100
- 22 | h0 p67 d1 r1 v100
- 23 | h0 p67 d1 r1 v100
- 24 | h0 p68 d1 r1 v100
- 25 | h0 p70 d1 r1 v100
- 26 | h0 p70 d1 r1 v100
- 27 | h0 p72 d1 r1 v100
- 28 | h0 p72 d1 r1 v100
- 29 | h0 p74 d1 r1 v100
- 30 | h0 p74 d1 r1 v100
- 31 | h0 p75 d1 r1 v100
+ 18 | h0 p63 d1 r1 v100
+ 19 | h0 p65 d1 r1 v100
+ 20 | h0 p67 d1 r1 v100
+ 21 | h0 p68 d1 r1 v100
+ 22 | h0 p70 d1 r1 v100
+ 23 | h0 p72 d1 r1 v100
+ 24 | h0 p74 d1 r1 v100
+ 25 | h0 p75 d1 r1 v100
+ 26 | h0 p77 d1 r1 v100
+ 27 | h0 p79 d1 r1 v100
+ 28 | h0 p80 d1 r1 v100
+ 29 | h0 p82 d1 r1 v100
+ 30 | h0 p84 d1 r1 v100
+ 31 | h0 p86 d1 r1 v100
  32 | h0 p60 d1 r1 v100"""
 
 -- | The frozen quantisation table — agreed with AC 2026-06-30. Captured from

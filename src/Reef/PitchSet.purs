@@ -32,6 +32,7 @@ import Data.Int (floor, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (clamp)
 import Reef.Scale (Scale(..))
+import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
 -- | `offsets` ascending, literal semitones from `root` (the MIDI note of offset 0);
 -- | `period` = semitones until the whole list tiles (`Nothing` = finite, no tiling).
@@ -43,6 +44,15 @@ newtype PitchSet = PitchSet
 
 -- | Notes per period (= per octave for an octave-periodic set). The `N` that
 -- | "octave = +N indices" refers to.
+-- Wire codec (Reef.Protocol): a PitchSet travels on the record, so the frontend
+-- can hand the BEAM an arbitrary harmonic world. Newtype over a plain record, so
+-- the instances just (un)wrap and defer to simple-json's record instances.
+instance writeForeignPitchSet :: WriteForeign PitchSet where
+  writeImpl (PitchSet r) = writeImpl r
+
+instance readForeignPitchSet :: ReadForeign PitchSet where
+  readImpl f = map PitchSet (readImpl f)
+
 cardinality :: PitchSet -> Int
 cardinality (PitchSet s) = length s.offsets
 

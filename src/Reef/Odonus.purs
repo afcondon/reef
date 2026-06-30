@@ -82,6 +82,8 @@ import Data.Int (floor, toNumber)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Scale (Scale, Distribution(..), applyDistribution, mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, shiftDegrees, spreadIvls)
+import Reef.PitchSet (PitchSet(..), cardinality)
+import Reef.PitchSet (realize) as PS
 import Harmonia.Chord (Chord(..), Mode(Ionian), mcmullenYellow, mcmullenYellowNames, realize)
 
 type Cell =
@@ -150,11 +152,13 @@ type ChordSeq =
 type Odonus =
   { cells :: Array Cell   -- length 16
   , heads :: Array Head
-  , rootPc :: Int         -- scale root pitch-class 0..11
-  , scaleIvls :: Array Int -- in-scale semitone offsets from root (the mask)
-  , dist :: Distribution  -- how a cell integer becomes a pitch
-  , octaveShift :: Int    -- global ± octaves applied to the output
-  , degShift :: Int       -- global scalar transpose, in scale degrees (I..IX)
+  , rootPc :: Int         -- scale root pitch-class 0..11 (legacy: drives scaleOf / UI / chord path)
+  , scaleIvls :: Array Int -- in-scale semitone offsets from root (legacy: as above)
+  , dist :: Distribution  -- how a cell integer becomes a pitch (legacy: chord-off path now uses pitchSet)
+  , pitchSet :: PitchSet  -- the quantisation target the cells INDEX into (realize); the realize authority
+  , span :: Int           -- how many periods the cell indices span (replaces spread); bounds the cell index
+  , octaveShift :: Int    -- global ± periods (coarse), applied in index space
+  , degShift :: Int       -- global ± indices (fine scalar transpose)
   , gatePct :: Int        -- gated-note length as % of step spacing (>100 = legato)
   , chord :: ChordSeq     -- the chord-progression quantiser overlay
   }
@@ -182,18 +186,17 @@ scaleTypeName o = recogniseScale o.scaleIvls
 -- | degrees. Global octave applies in both cases.
 renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
-  let octave = 12 * o.octaveShift
-  in
     if o.chord.on then
-      quantiseToChordPCs (currentChordPCs o) (c.note + hd.transp) + octave
+      quantiseToChordPCs (currentChordPCs o) (c.note + hd.transp) + 12 * o.octaveShift
     else
-      let
-        scale = scaleOf o
-        base = applyDistribution o.dist scale c.note
-        headed = quantiseToScale scale (base + hd.transp)
-        degreed = shiftDegrees scale o.degShift headed
-      in
-        degreed + octave
+      -- Index-space realization (project_reef_quantisation_realize): the cell holds a
+      -- DISCRETE INDEX into the voice's PitchSet, bounded by span; per-voice (transp,
+      -- fine) + global (degShift fine, octaveShift coarse = ±period) offsets sum in,
+      -- then realize ONCE. Octaves emerge from the set's tiling, not a +12.
+      let n = cardinality o.pitchSet
+          baseIx = clampI 0 (max 1 (o.span * n) - 1) c.note
+          index = baseIx + hd.transp + o.degShift + o.octaveShift * n
+      in PS.realize o.pitchSet index
 
 -- | How many chords the table offers, and a chord's display name.
 numChordTable :: Int
@@ -299,7 +302,7 @@ defaultHeads =
 
 defaultCells :: Array Cell
 defaultCells =
-  mapWithIndex (\i _ -> { note: 60 + i, skip: false, gate: true, glide: false, dur: 1, ratchet: 1, vel: 100 })
+  mapWithIndex (\i _ -> { note: i, skip: false, gate: true, glide: false, dur: 1, ratchet: 1, vel: 100 })
     (replicate 16 unit)
 
 -- | The prototype progression: ii7 – V7 – Imaj7 – vi9, a ii–V–I–vi from the
@@ -311,6 +314,9 @@ defaultOdonus :: Odonus
 defaultOdonus =
   { cells: defaultCells, heads: defaultHeads
   , rootPc: 0, scaleIvls: [ 0, 2, 3, 5, 7, 8, 10 ], dist: Natural   -- C minor
+  -- C minor as a periodic PitchSet at middle C: cells index into this.
+  , pitchSet: PitchSet { offsets: [ 0, 2, 3, 5, 7, 8, 10 ], root: 60, period: Just 12 }
+  , span: 3
   , octaveShift: 0, degShift: 0, gatePct: 90, chord: defaultChord }
 
 -- ---------------------------------------------------------------------------
