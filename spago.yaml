@@ -13,6 +13,10 @@ package:
     - integers
     - maybe
     - harmonia
+    - simple-json   # wire codec; the only JSON codec in the purerl set, so the
+                    # same encode/decode compiles to both Triggerfish (JS) and the BEAM
+    - foreign
+    - either
   test:
     main: Test.Main
     dependencies:

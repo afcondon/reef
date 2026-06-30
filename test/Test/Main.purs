@@ -6,9 +6,12 @@ module Test.Main (main) where
 
 import Prelude
 
+import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
 import Reef.Conformance (run)
+import Reef.Odonus (defaultOdonus)
+import Reef.Protocol (decodeOdonus, encodeOdonus)
 import Test.Assert (assertEqual')
 
 main :: Effect Unit
@@ -16,6 +19,18 @@ main = do
   assertEqual' "Odonus stepEmit conformance (defaultOdonus, scale source, 32 steps)"
     { actual: run, expected: golden }
   log "Reef Odonus conformance golden: OK"
+  -- Protocol round-trip: encode -> decode -> re-encode must reproduce the
+  -- original JSON, proving the wire codec is faithful for the full Odonus
+  -- record. (Odonus has no Show, so we compare the canonical JSON form.)
+  let json = encodeOdonus defaultOdonus
+  case decodeOdonus json of
+    Left errs ->
+      assertEqual' "Protocol decode of encoded defaultOdonus must succeed"
+        { actual: "decode error: " <> show errs, expected: "Right _" }
+    Right odo ->
+      assertEqual' "Protocol round-trip (decode . encode is faithful)"
+        { actual: encodeOdonus odo, expected: json }
+  log "Reef.Protocol round-trip: OK"
 
 -- | The frozen render of `Reef.Conformance.run`. Head 0 walks the default scale
 -- | quantisation (one 16-cell bar, repeated). Captured 2026-06-30; identical

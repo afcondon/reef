@@ -34,6 +34,8 @@ import Data.Foldable (minimumBy)
 import Data.Int (floor, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Ord (abs)
+import Foreign (ForeignError(..), fail)
+import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
 -- | A concrete scale: `root` is the MIDI note of degree 1, `intervals` are
 -- | ascending semitone offsets within one period, `period` is semitones until
@@ -54,6 +56,19 @@ derive instance eqDistribution :: Eq Distribution
 instance showDistribution :: Show Distribution where
   show Natural = "Natural"
   show Equal = "Equal"
+
+-- | Wire representation for the reef protocol (see Reef.Protocol). Declared here,
+-- | beside the type, to stay non-orphan. `Distribution` is the only non-primitive
+-- | field in the Odonus record; a matched read/write pair keeps it symmetric.
+instance writeForeignDistribution :: WriteForeign Distribution where
+  writeImpl Natural = writeImpl "natural"
+  writeImpl Equal = writeImpl "equal"
+
+instance readForeignDistribution :: ReadForeign Distribution where
+  readImpl f = readImpl f >>= case _ of
+    "natural" -> pure Natural
+    "equal" -> pure Equal
+    other -> fail (ForeignError ("Reef.Scale: unknown Distribution " <> show (other :: String)))
 
 -- | A named scale shape (intervals only — root supplied separately so the UI
 -- | can pick root × type independently).
