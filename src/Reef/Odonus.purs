@@ -59,6 +59,9 @@ module Reef.Odonus
   , nudgeOffsets
   , scaleOf
   , renderCell
+  , effectivePitchSet
+  , setPitchSet
+  , clearPitchSet
   , cycleRoot
   , cycleScaleType
   , numRandScales
@@ -155,7 +158,7 @@ type Odonus =
   , rootPc :: Int         -- scale root pitch-class 0..11 (legacy: drives scaleOf / UI / chord path)
   , scaleIvls :: Array Int -- in-scale semitone offsets from root (legacy: as above)
   , dist :: Distribution  -- how a cell integer becomes a pitch (legacy: chord-off path now uses pitchSet)
-  , pitchSet :: PitchSet  -- the quantisation target the cells INDEX into (realize); the realize authority
+  , pitchSet :: Maybe PitchSet  -- explicit quantisation target (Vetula feed / pushed record); Nothing = derive from the scale fields
   , span :: Int           -- how many periods the cell indices span (replaces spread); bounds the cell index
   , octaveShift :: Int    -- global ± periods (coarse), applied in index space
   , degShift :: Int       -- global ± indices (fine scalar transpose)
@@ -193,10 +196,28 @@ renderCell o hd c =
       -- DISCRETE INDEX into the voice's PitchSet, bounded by span; per-voice (transp,
       -- fine) + global (degShift fine, octaveShift coarse = ±period) offsets sum in,
       -- then realize ONCE. Octaves emerge from the set's tiling, not a +12.
-      let n = cardinality o.pitchSet
+      let ps = effectivePitchSet o
+          n = cardinality ps
           baseIx = clampI 0 (max 1 (o.span * n) - 1) c.note
           index = baseIx + hd.transp + o.degShift + o.octaveShift * n
-      in PS.realize o.pitchSet index
+      in PS.realize ps index
+
+-- | The PitchSet the cells realize through: explicit if set (a Vetula feed or a
+-- | pushed record), else derived from the scale fields (standalone). This is why
+-- | the scale-authoring setters never touch pitchSet — they edit the scale and the
+-- | derived set follows. (Display layers can call this to label a cell's pitch.)
+effectivePitchSet :: Odonus -> PitchSet
+effectivePitchSet o = case o.pitchSet of
+  Just s -> s
+  Nothing -> PitchSet { offsets: o.scaleIvls, root: 60 + o.rootPc, period: Just 12 }
+
+-- | Install an explicit PitchSet (the Vetula / pushed-record path).
+setPitchSet :: PitchSet -> Odonus -> Odonus
+setPitchSet ps o = o { pitchSet = Just ps }
+
+-- | Drop back to the scale-derived set (standalone authoring).
+clearPitchSet :: Odonus -> Odonus
+clearPitchSet o = o { pitchSet = Nothing }
 
 -- | How many chords the table offers, and a chord's display name.
 numChordTable :: Int
@@ -314,8 +335,9 @@ defaultOdonus :: Odonus
 defaultOdonus =
   { cells: defaultCells, heads: defaultHeads
   , rootPc: 0, scaleIvls: [ 0, 2, 3, 5, 7, 8, 10 ], dist: Natural   -- C minor
-  -- C minor as a periodic PitchSet at middle C: cells index into this.
-  , pitchSet: PitchSet { offsets: [ 0, 2, 3, 5, 7, 8, 10 ], root: 60, period: Just 12 }
+  -- pitchSet Nothing → derive from the scale fields above (standalone C minor at
+  -- middle C); a Vetula feed or pushed record installs an explicit set.
+  , pitchSet: Nothing
   , span: 3
   , octaveShift: 0, degShift: 0, gatePct: 90, chord: defaultChord }
 
