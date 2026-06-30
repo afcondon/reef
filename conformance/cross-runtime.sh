@@ -26,4 +26,18 @@ echo "== diff node vs erl =="
 diff /tmp/reef-node-out.txt /tmp/reef-erl-out.txt && echo "  ✅ node == erl"
 echo "== diff vs committed golden =="
 diff "$GOLDEN" /tmp/reef-node-out.txt && echo "  ✅ matches golden"
-echo "ALL GREEN — Odonus engine identical on JS + Erlang, matches golden."
+
+# --- PitchSet quantisation table (Reef.PitchSetGolden.tableRender) -----------
+# The agreed quantisation examples — literal offsets, flat-equal mapping, finite
+# vs periodic, octave vs period-19. Pure, so it must render identically on both
+# backends. (The pinned golden itself lives in test/Test/Main.purs.)
+echo "== PitchSet table: node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { tableRender } from "./output/Reef.PitchSetGolden/index.js"; process.stdout.write(tableRender);' \
+  ) > /tmp/reef-pitchset-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_pitchSetGolden@ps'"'"':tableRender()]), halt().' 2>/dev/null \
+  ) > /tmp/reef-pitchset-erl.txt
+diff /tmp/reef-pitchset-node.txt /tmp/reef-pitchset-erl.txt && echo "  ✅ PitchSet table node == erl"
+
+echo "ALL GREEN — Odonus engine + PitchSet table identical on JS + Erlang, match goldens."
