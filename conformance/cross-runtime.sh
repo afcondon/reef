@@ -43,4 +43,36 @@ echo "== PitchSet table: node vs erl =="
   ) > /tmp/reef-pitchset-erl.txt
 diff /tmp/reef-pitchset-node.txt /tmp/reef-pitchset-erl.txt && echo "  ✅ PitchSet table node == erl"
 
-echo "ALL GREEN — Odonus engine + PitchSet table identical on JS + Erlang, match goldens."
+# --- generative determinism net (Reef.Conformance.genRun) --------------------
+# THE LOCKSTEP FOUNDATION (P1). 2000 steps with the 10 non-transcendental gen
+# sources active, threading runGen then stepEmit, the full evolving state sampled
+# every 25 steps. Must be byte-identical on both runtimes — that is what makes a
+# frontend co-simulation provably track the rig (reef/docs/PLAN-lockstep-cosimulation.md).
+GEN_GOLDEN="$REEF/conformance/genrun-golden.txt"
+echo "== genRun (2000-step generative): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { genRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(genRun);' \
+  ) > /tmp/reef-genrun-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':genRun()]), halt().' 2>/dev/null \
+  ) > /tmp/reef-genrun-erl.txt
+diff /tmp/reef-genrun-node.txt /tmp/reef-genrun-erl.txt && echo "  ✅ genRun node == erl (generative engine identical over 2000 steps)"
+diff "$GEN_GOLDEN" /tmp/reef-genrun-node.txt && echo "  ✅ genRun matches frozen golden"
+
+# --- Beta / pow transcendental diagnostic (Reef.Conformance.betaProbe) -------
+# The one transcendental in the engine: `pow`, inside the Marbles Beta weights
+# (GNotes). IEEE 754 does not mandate a correctly-rounded pow, so this is the one
+# place V8 Math.pow and BEAM math:pow could diverge. Empirically they agree here;
+# this guards that assumption.
+BETA_GOLDEN="$REEF/conformance/beta-golden.txt"
+echo "== betaProbe (pow): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { betaProbe } from "./output/Reef.Conformance/index.js"; process.stdout.write(betaProbe);' \
+  ) > /tmp/reef-beta-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':betaProbe()]), halt().' 2>/dev/null \
+  ) > /tmp/reef-beta-erl.txt
+diff /tmp/reef-beta-node.txt /tmp/reef-beta-erl.txt && echo "  ✅ betaProbe node == erl (V8 Math.pow == BEAM math:pow on these inputs)"
+diff "$BETA_GOLDEN" /tmp/reef-beta-node.txt && echo "  ✅ betaProbe matches frozen golden"
+
+echo "ALL GREEN — Odonus engine + PitchSet table + generative net + pow probe identical on JS + Erlang, match goldens."
