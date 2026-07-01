@@ -56,6 +56,7 @@ module Reef.Odonus
   , unifyHeads
   , fanOffsets
   , staggerLengths
+  , spreadOctaves
   , nudgeOffsets
   , scaleOf
   , renderCell
@@ -668,6 +669,14 @@ fanOffsets n o = o { heads = mapWithIndex (\i hd -> hd { offset = clampI 0 15 (i
 -- | (the heads fall out of step and slowly realign, Clapping-Music style).
 staggerLengths :: Int -> Odonus -> Odonus
 staggerLengths n o = o { heads = mapWithIndex (\i hd -> hd { len = clampI 1 16 (16 - i * n) }) o.heads }
+
+-- | SPREAD: fan the heads apart in register, transposing each by i·n scale-degrees
+-- | (0, n, 2n, 3n) — a Reichian register-fan companion to FAN/STAGGER. transp is in
+-- | pitch-set index units, so at n ≈ the scale's cardinality the four heads sit an
+-- | octave apart; n = 0 collapses to unison register. Clamped to the per-head
+-- | transpose range (±24) so a wide spread on a big set can't run away.
+spreadOctaves :: Int -> Odonus -> Odonus
+spreadOctaves n o = o { heads = mapWithIndex (\i hd -> hd { transp = clampI (-24) 24 (i * n) }) o.heads }
 
 -- | PHASE ±: rotate the whole canon — shift every head's offset by `d` steps.
 nudgeOffsets :: Int -> Odonus -> Odonus

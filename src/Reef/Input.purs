@@ -55,7 +55,7 @@ import Reef.Odonus
   , setChordPeriod, setChordPicks, setDegShift, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
-  , staggerLengths, toggleChord, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
+  , spreadOctaves, staggerLengths, toggleChord, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
   , toggleScaleNote, toggleSkip, unifyHeads
   )
 import Reef.PitchSet (PitchSet)
@@ -124,6 +124,7 @@ data Input
   | UnifyHeads
   | FanOffsets Int
   | StaggerLengths Int
+  | SpreadOctaves Int
   | NudgeOffsets Int
   -- gen-source config (mutates the synced gen array)
   | ToggleGen GenKind
@@ -194,6 +195,7 @@ applyInput = case _ of
   UnifyHeads -> onOdo unifyHeads
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
+  SpreadOctaves n -> onOdo (spreadOctaves n)
   NudgeOffsets d -> onOdo (nudgeOffsets d)
   ToggleGen k -> onGen (toggleGen k)
   SetRate k v -> onGen (setRate k v)
@@ -283,6 +285,7 @@ toWire = case _ of
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
+  SpreadOctaves n -> w0 { tag = "SpreadOctaves", a = n }
   NudgeOffsets d -> w0 { tag = "NudgeOffsets", a = d }
   ToggleGen k -> w0 { tag = "ToggleGen", a = kindCode k }
   SetRate k v -> w0 { tag = "SetRate", a = kindCode k, b = v }
@@ -337,6 +340,7 @@ fromWire w = case w.tag of
   "UnifyHeads" -> Just UnifyHeads
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)
+  "SpreadOctaves" -> Just (SpreadOctaves w.a)
   "NudgeOffsets" -> Just (NudgeOffsets w.a)
   "ToggleGen" -> map ToggleGen (kindOf w.a)
   "SetRate" -> map (\k -> SetRate k w.b) (kindOf w.a)
