@@ -28,15 +28,21 @@ module Reef.Conformance
   ( run, steps
   , genRun, genSteps, sampleEvery
   , betaProbe
+  , inputRun, inputSteps
   ) where
 
 import Prelude
 
-import Data.Array (range, snoc, mapWithIndex)
+import Data.Array (filter, range, snoc, mapWithIndex)
+import Data.Either (Either(..))
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round)
+import Data.Maybe (Maybe(..))
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
-import Reef.Gen (GenKind(GNotes), GenSource, genKinds, genDefaultRate, genDefaultAmt, runGen)
+import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt, runGen)
+import Reef.Input (Input(..), SimState, Tagged, applyInput)
+import Reef.PitchSet (PitchSet(..))
+import Reef.Protocol (decodeInput, encodeInput)
 import Reef.Marbles (Seed, seedFrom, rollValue)
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -127,16 +133,113 @@ digest i o seed =
     <> " s" <> show (round seed)
     <> " | " <> intercalate "," (map cellDig o.cells)
     <> " | " <> intercalate "  " (mapWithIndex headDig o.heads)
+
+cellDig :: Cell -> String
+cellDig c =
+  show c.note <> "/" <> show c.dur <> "/" <> show c.ratchet <> "/"
+    <> show ((if c.gate then 1 else 0) + (if c.skip then 2 else 0) + (if c.glide then 4 else 0))
+
+headDig :: Int -> Head -> String
+headDig _ h =
+  show h.cursor <> ":" <> show h.seqPos <> ":" <> show h.transp
+    <> ":" <> show h.speedIx <> ":" <> show h.patternIx <> ":" <> show h.len
+    <> (if h.mute then "m" else "")
+
+-- ── 2b. the input-protocol determinism net (the P3 proof) ─────────────────────
+
+-- | How many model steps the input run threads.
+inputSteps :: Int
+inputSteps = 400
+
+-- | A scripted lockstep session: a tick-tagged stream of user actions covering
+-- | every `Input` family — cell/head setters, the quantizer, the chord overlay,
+-- | the Reichian macros, gen-source config + the Marbles pad, and the three
+-- | seed-threading rolls (RollAllNotes / RollChords / SeedMelody). Several land on
+-- | the same tick (a batch). Enabling GNotes at tick 30 also folds the one
+-- | transcendental (`pow`, via the Beta) into the long run. These are the inputs
+-- | a frontend would broadcast; here both runtimes replay them in lockstep.
+inputScript :: Array Tagged
+inputScript =
+  [ { tick: 5, input: SetRoot 2 }
+  , { tick: 5, input: SetNote 0 7 }
+  , { tick: 12, input: ToggleHeadMute 1 }
+  , { tick: 12, input: SetHeadTransp 1 5 }
+  , { tick: 20, input: SetHeadSpeedIx 2 6 }
+  , { tick: 20, input: ToggleHeadMute 2 }
+  , { tick: 30, input: ToggleGen GNotes }
+  , { tick: 30, input: SetGenBias 700 }
+  , { tick: 30, input: SetGenSpread 300 }
+  , { tick: 45, input: RollAllNotes }
+  , { tick: 60, input: SetPitchSet (PitchSet { offsets: [ 0, 2, 4, 7, 9 ], root: 50, period: Just 12 }) }
+  , { tick: 75, input: CyclePattern 0 }
+  , { tick: 90, input: SetChordFeed [ [ 0, 4, 7 ], [ 2, 5, 9 ] ] }
+  , { tick: 90, input: ToggleChord }
+  , { tick: 110, input: RollChords }
+  , { tick: 130, input: FollowChord (Just [ 0, 3, 7 ]) }
+  , { tick: 150, input: ClearPitchSet }
+  , { tick: 150, input: SeedMelody }
+  , { tick: 175, input: FanOffsets 2 }
+  , { tick: 200, input: SetRate GHeads 120 }
+  , { tick: 200, input: SetAmt GTransp 60 }
+  , { tick: 230, input: NudgeOffsets 1 }
+  , { tick: 260, input: SetHeadMask 5 }
+  , { tick: 300, input: UnifyHeads }
+  , { tick: 340, input: SetSpread 5 }
+  , { tick: 380, input: ToggleDistribution }
+  ]
+
+-- | Apply one tick-tagged input THROUGH THE CODEC: encode to JSON then decode back
+-- | before applying. This puts `encodeInput`/`decodeInput` (both reef functions,
+-- | compiled to JS and Erlang) on the critical path of the golden — so the
+-- | cross-runtime diff proves the codec is byte-faithful on both runtimes, and the
+-- | frozen golden catches any `toWire`/`fromWire` asymmetry. A decode failure would
+-- | drop the input and diverge the digest, so a broken codec cannot pass silently.
+applyEncoded :: SimState -> Tagged -> SimState
+applyEncoded st t = case decodeInput (encodeInput t.input) of
+  Right i -> applyInput i st
+  Left _ -> st
+
+-- | The P3 net. At each tick: (1) apply any scheduled inputs (round-tripped through
+-- | the codec), (2) run the autonomous gen sources, (3) `stepEmit`. ONE seed threads
+-- | the per-tick `runGen` AND the roll inputs, so the lockstep seed-sync is exercised
+-- | end to end. The full SimState (Odonus + gen config + pad + seed) is digested
+-- | every `sampleEvery` steps — any divergence in input application, codec, gen, or
+-- | engine surfaces at the next sample. Must be byte-identical node ↔ BEAM.
+inputRun :: String
+inputRun =
+  let
+    s0 = { odo: defaultOdonus, gen: activeGen, spread: 0.5, bias: 0.5, seed: seedFrom 1 }
+    final = foldl advance { st: s0, out: [] } (range 1 inputSteps)
+  in
+    intercalate "\n" final.out
   where
-  cellDig :: Cell -> String
-  cellDig c =
-    show c.note <> "/" <> show c.dur <> "/" <> show c.ratchet <> "/"
-      <> show ((if c.gate then 1 else 0) + (if c.skip then 2 else 0) + (if c.glide then 4 else 0))
-  headDig :: Int -> Head -> String
-  headDig _ h =
-    show h.cursor <> ":" <> show h.seqPos <> ":" <> show h.transp
-      <> ":" <> show h.speedIx <> ":" <> show h.patternIx <> ":" <> show h.len
-      <> (if h.mute then "m" else "")
+  advance acc i =
+    let
+      due = filter (\t -> t.tick == i) inputScript
+      s1 = foldl applyEncoded acc.st due
+      g = runGen { gen: s1.gen, spread: s1.spread, bias: s1.bias, odo: s1.odo, seed: s1.seed }
+      r = stepEmit g.odo
+      s2 = s1 { odo = r.odo, seed = g.seed }
+      out' = if i `mod` sampleEvery == 0 then snoc acc.out (inputDigest i s2) else acc.out
+    in
+      { st: s2, out: out' }
+
+-- | A SimState digest: the Odonus fields (as in `digest`) plus the gen-source
+-- | config and the Marbles pad, so the gen-config inputs (ToggleGen / SetRate /
+-- | SetAmt) and the pad inputs (SetGenSpread / SetGenBias) are directly observable,
+-- | not just via their downstream effect on the notes. Pad as per-mille Ints to
+-- | stay format-clean across runtimes.
+inputDigest :: Int -> SimState -> String
+inputDigest i s =
+  pad4 i <> " | k" <> show s.odo.rootPc <> " [" <> intercalate "," (map show s.odo.scaleIvls) <> "]"
+    <> " s" <> show (round s.seed)
+    <> " sp" <> show (round (s.spread * 1000.0)) <> " bi" <> show (round (s.bias * 1000.0))
+    <> " | " <> intercalate "," (map cellDig s.odo.cells)
+    <> " | " <> intercalate "  " (mapWithIndex headDig s.odo.heads)
+    <> " | " <> intercalate "," (map genDig s.gen)
+  where
+  genDig :: GenSource -> String
+  genDig src = (if src.on then "1" else "0") <> ":" <> show src.rate <> ":" <> show src.amt
 
 -- ── 3. the transcendental (pow / Beta) diagnostic ────────────────────────────
 

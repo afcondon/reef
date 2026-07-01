@@ -75,4 +75,31 @@ echo "== betaProbe (pow): node vs erl =="
 diff /tmp/reef-beta-node.txt /tmp/reef-beta-erl.txt && echo "  ✅ betaProbe node == erl (V8 Math.pow == BEAM math:pow on these inputs)"
 diff "$BETA_GOLDEN" /tmp/reef-beta-node.txt && echo "  ✅ betaProbe matches frozen golden"
 
-echo "ALL GREEN — Odonus engine + PitchSet table + generative net + pow probe identical on JS + Erlang, match goldens."
+# --- input-protocol determinism net (Reef.Conformance.inputRun) --------------
+# THE P3 PROOF (reef/docs/PLAN-lockstep-cosimulation.md). A scripted tick-tagged
+# stream of user actions (every Input family, incl. the seed-threading rolls)
+# replayed in lockstep — each input encoded to JSON and decoded back THROUGH the
+# Reef.Protocol codec on the critical path, interleaved with the autonomous gen
+# sources and stepEmit, one seed threading both. The full SimState (Odonus + gen
+# config + pad + seed) is digested. Byte-identical here = the input protocol AND
+# its codec behave identically on both runtimes, which is what lets a frontend
+# broadcast tick-tagged inputs and have the rig apply them to the same state.
+INPUT_GOLDEN="$REEF/conformance/inputrun-golden.txt"
+echo "== inputRun (400-step lockstep input replay): node vs erl =="
+# UNLIKE the engine goldens above, inputRun exercises simple-json's wire codec
+# (encodeInput/decodeInput) — which on the BEAM defers to `jsx`. So the Erlang
+# side needs jsx's rebar dep ebin on its code path, not just `-pa ebin`. This is
+# the same dependency reef_voice will need to decode tick-tagged inputs live.
+# Add ONLY jsx's ebin: the broader `_build/.../*/ebin` glob would also pull in
+# purerl_tidal's own ebin, whose stale reef_conformance@ps.beam (rebar copies
+# reef in; `make erl-quick` only refreshes the root ebin/) shadows the fresh one.
+( cd "$REEF" && node --input-type=module \
+  -e 'import { inputRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(inputRun);' \
+  ) > /tmp/reef-inputrun-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':inputRun()]), halt().' 2>/dev/null \
+  ) > /tmp/reef-inputrun-erl.txt
+diff /tmp/reef-inputrun-node.txt /tmp/reef-inputrun-erl.txt && echo "  ✅ inputRun node == erl (input protocol + codec identical over 400 steps)"
+diff "$INPUT_GOLDEN" /tmp/reef-inputrun-node.txt && echo "  ✅ inputRun matches frozen golden"
+
+echo "ALL GREEN — Odonus engine + PitchSet table + generative net + pow probe + input protocol identical on JS + Erlang, match goldens."

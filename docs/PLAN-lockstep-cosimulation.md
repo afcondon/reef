@@ -109,7 +109,25 @@ simply doesn't emit notes.
 - **P2 — Deterministic phase.** Integer/rational accumulator; long-run identical
   including phasing.
 - **P3 — Input protocol + tick alignment.** `Input` ADT with tick-tags; frontend
-  reads tick from the Link anchor.
+  reads tick from the Link anchor. **Work item 3 DONE** (2026-06-30): `Reef.Input`
+  holds the `Input` ADT (every `Reef.Odonus`/`Reef.Gen` user action as data — cell/
+  head/quantizer/chord/Reich/gen-config setters + the three seed-threading rolls),
+  `SimState = { odo, gen, spread, bias, seed }` (the whole synced module state), a
+  pure `applyInput :: Input -> SimState -> SimState` interpreter, and a flat
+  `WireInput` record with `toWire`/`fromWire`; `Reef.Protocol` gained
+  `encodeInput`/`decodeInput` + `encodeTagged`/`decodeTagged` over simple-json.
+  Proven by `Reef.Conformance.inputRun`: a scripted tick-tagged session (every Input
+  family) replayed with each input **round-tripped through the codec on the critical
+  path**, interleaved with the autonomous gen sources + `stepEmit`, one seed
+  threading both — **byte-identical node ↔ BEAM over 400 steps** (frozen golden;
+  cross-runtime.sh ALL GREEN). En route this became the first reef code to exercise
+  simple-json *encoding* on the BEAM, surfacing that it defers to `jsx` (already a
+  purerl-tidal rebar dep — the live reef_voice decode path is covered; only the bare
+  `erl -pa ebin` conformance call needed jsx added explicitly). **Work item 4 (the
+  live Link-anchor `currentTick` read) is deferred to P4** — it is frontend/Binnacle
+  wiring with no lockstep client to consume it yet; the reef side already carries the
+  tick-tag (`Tagged.tick`) and the "apply at tick == tag" semantics, proven
+  deterministic.
 - **P4 — Co-sim live.** `reef_voice` applies tick-tagged inputs + emits MIDI;
   Triggerfish runs the lockstep client. Verify: a knob turn lands identically on
   both at the same tick (recorded MIDI == frontend's visualised note).

@@ -22,10 +22,19 @@
 module Reef.Protocol
   ( encodeOdonus
   , decodeOdonus
+  , encodeInput
+  , decodeInput
+  , encodeTagged
+  , decodeTagged
   ) where
 
-import Data.Either (Either)
-import Foreign (MultipleErrors)
+import Prelude
+
+import Data.Either (Either(..))
+import Data.List.NonEmpty (singleton)
+import Data.Maybe (Maybe(..))
+import Foreign (ForeignError(..), MultipleErrors)
+import Reef.Input (Input, Tagged, WireInput, fromWire, toWire)
 import Reef.Odonus (Odonus)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -40,3 +49,38 @@ encodeOdonus = writeJSON
 -- | Parse a JSON string from the wire back into an Odonus record.
 decodeOdonus :: String -> Either MultipleErrors Odonus
 decodeOdonus = readJSON
+
+-- ── the Input protocol (lockstep; see Reef.Input) ────────────────────────────
+--
+-- An `Input` is a user action as data. On the wire it travels as the flat
+-- `WireInput` record (so the codec is simple-json's record instance, same
+-- discipline as Odonus above) — `Reef.Input.toWire`/`fromWire` are the bijection.
+-- Defined once here, compiled to BOTH the JS frontend (which encodes) and purerl
+-- (which decodes), so the input protocol has the same structural-parity guarantee
+-- as the engine. Lockstep tags each input with the tick to apply it on.
+
+-- | Serialize one `Input` to a JSON string for the wire.
+encodeInput :: Input -> String
+encodeInput = writeJSON <<< toWire
+
+-- | Parse a JSON string back into an `Input`. An unknown tag (a `fromWire`
+-- | `Nothing`) becomes a decode error rather than a silent drop.
+decodeInput :: String -> Either MultipleErrors Input
+decodeInput s = do
+  w <- readJSON s :: Either MultipleErrors WireInput
+  case fromWire w of
+    Just i -> Right i
+    Nothing -> Left (singleton (ForeignError ("Reef.Protocol: unknown Input tag " <> show w.tag)))
+
+-- | Serialize a tick-tagged input (`{ tick, input }`) to the wire, flattening the
+-- | input to its `WireInput` so the whole thing is one simple-json record.
+encodeTagged :: Tagged -> String
+encodeTagged t = writeJSON { tick: t.tick, input: toWire t.input }
+
+-- | Parse a tick-tagged input back. Unknown input tag → decode error, as above.
+decodeTagged :: String -> Either MultipleErrors Tagged
+decodeTagged s = do
+  r <- readJSON s :: Either MultipleErrors { tick :: Int, input :: WireInput }
+  case fromWire r.input of
+    Just i -> Right { tick: r.tick, input: i }
+    Nothing -> Left (singleton (ForeignError ("Reef.Protocol: unknown Input tag " <> show r.input.tag)))
