@@ -102,4 +102,21 @@ echo "== inputRun (400-step lockstep input replay): node vs erl =="
 diff /tmp/reef-inputrun-node.txt /tmp/reef-inputrun-erl.txt && echo "  ✅ inputRun node == erl (input protocol + codec identical over 400 steps)"
 diff "$INPUT_GOLDEN" /tmp/reef-inputrun-node.txt && echo "  ✅ inputRun matches frozen golden"
 
-echo "ALL GREEN — Odonus engine + PitchSet table + generative net + pow probe + input protocol identical on JS + Erlang, match goldens."
+# --- SimState handoff net (Reef.Conformance.simRun) ---------------------------
+# THE P4d PROOF. Both runtimes DECODE the same real handoff JSON (a SimState the
+# JS frontend encoded, gen on + a seed) via Reef.Protocol.decodeSim, then step
+# stepTick from it. Byte-identical here = the BEAM's decodeSim rebuilds exactly
+# the state the browser encoded and evolves it identically — i.e. the lockstep
+# handoff lands the rig on the frontend's state. Also uses simple-json → jsx.
+SIM_GOLDEN="$REEF/conformance/simrun-golden.txt"
+echo "== simRun (SimState handoff decode + 400-step step): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { simRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(simRun);' \
+  ) > /tmp/reef-simrun-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':simRun()]), halt().' 2>/dev/null \
+  ) > /tmp/reef-simrun-erl.txt
+diff /tmp/reef-simrun-node.txt /tmp/reef-simrun-erl.txt && echo "  ✅ simRun node == erl (handoff decode + step identical over 400 steps)"
+diff "$SIM_GOLDEN" /tmp/reef-simrun-node.txt && echo "  ✅ simRun matches frozen golden"
+
+echo "ALL GREEN — Odonus engine + PitchSet table + generative net + pow probe + input protocol + SimState handoff identical on JS + Erlang, match goldens."

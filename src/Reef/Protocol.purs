@@ -26,6 +26,8 @@ module Reef.Protocol
   , decodeInput
   , encodeTagged
   , decodeTagged
+  , encodeSim
+  , decodeSim
   ) where
 
 import Prelude
@@ -34,7 +36,7 @@ import Data.Either (Either(..))
 import Data.List.NonEmpty (singleton)
 import Data.Maybe (Maybe(..))
 import Foreign (ForeignError(..), MultipleErrors)
-import Reef.Input (Input, Tagged, WireInput, fromWire, toWire)
+import Reef.Input (Input, SimState, Tagged, WireInput, WireSim, fromWire, fromWireSim, toWire, toWireSim)
 import Reef.Odonus (Odonus)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -84,3 +86,24 @@ decodeTagged s = do
   case fromWire r.input of
     Just i -> Right { tick: r.tick, input: i }
     Nothing -> Left (singleton (ForeignError ("Reef.Protocol: unknown Input tag " <> show r.input.tag)))
+
+-- ── the SimState handoff (lockstep P4d; see Reef.Input) ──────────────────────
+--
+-- One whole SimState — Odonus + gen config + Marbles pad + seed — sent once so
+-- the rig's reef_voice starts bit-identical to the frontend. Flattened to the
+-- integer `WireSim` (no bare Number on the wire), so decode(encode) round-trips
+-- byte-faithfully on each runtime and the BEAM reconstructs exactly the state the
+-- browser held.
+
+-- | Serialize a whole SimState to a JSON string for the handoff.
+encodeSim :: SimState -> String
+encodeSim = writeJSON <<< toWireSim
+
+-- | Parse a handoff JSON string back into a SimState. A corrupt gen-kind code
+-- | (a `fromWireSim` `Nothing`) becomes a decode error.
+decodeSim :: String -> Either MultipleErrors SimState
+decodeSim s = do
+  w <- readJSON s :: Either MultipleErrors WireSim
+  case fromWireSim w of
+    Just sim -> Right sim
+    Nothing -> Left (singleton (ForeignError "Reef.Protocol: bad gen kind code in SimState handoff"))

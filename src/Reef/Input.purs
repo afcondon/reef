@@ -33,14 +33,19 @@ module Reef.Input
   , w0
   , toWire
   , fromWire
+  , WireSim
+  , WireGenSource
+  , toWireSim
+  , fromWireSim
   ) where
 
 import Prelude
 
 import Data.Array (findIndex, (!!))
 import Data.Foldable (foldl)
-import Data.Int (toNumber)
+import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Traversable (traverse)
 import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, rollChords, seedMelody, setAmt, setRate, toggleGen)
 import Reef.Marbles (Seed)
 import Reef.Odonus
@@ -342,3 +347,50 @@ fromWire w = case w.tag of
   "RollChords" -> Just RollChords
   "SeedMelody" -> Just SeedMelody
   _ -> Nothing
+
+-- ── the SimState handoff wire mapping ─────────────────────────────────────────
+--
+-- The lockstep HANDOFF (plan P4d): the frontend sends its WHOLE SimState once so
+-- the rig's reef_voice picks up from exactly where the frontend is — same Odonus,
+-- same gen config, same Marbles pad, SAME SEED (without which the generative
+-- matrices would diverge). Like the Input protocol, the wire form is all
+-- integers/strings/booleans + the (already-codable) Odonus: the two `Number`s in
+-- SimState (spread/bias) travel as per-mille Ints and the integer-valued `seed`
+-- travels as an Int, so no bare `Number` crosses the wire (JS and BEAM format
+-- Numbers differently). `Reef.Protocol` wraps these into encode/decode strings.
+
+-- | A gen source on the wire: `kind` as its `genKinds` index (see `kindCode`).
+type WireGenSource = { kind :: Int, on :: Boolean, rate :: Int, amt :: Int }
+
+-- | The flat wire form of a whole `SimState`.
+type WireSim =
+  { gen :: Array WireGenSource
+  , spreadMille :: Int
+  , biasMille :: Int
+  , odo :: Odonus
+  , seedInt :: Int
+  }
+
+toWireSim :: SimState -> WireSim
+toWireSim s =
+  { gen: map (\g -> { kind: kindCode g.kind, on: g.on, rate: g.rate, amt: g.amt }) s.gen
+  , spreadMille: round (s.spread * 1000.0)
+  , biasMille: round (s.bias * 1000.0)
+  , odo: s.odo
+  , seedInt: round s.seed
+  }
+
+-- | `Nothing` if any gen-kind code is unresolvable (a corrupt handoff);
+-- | `Reef.Protocol.decodeSim` lifts that into a decode error.
+fromWireSim :: WireSim -> Maybe SimState
+fromWireSim w = do
+  gen <- traverse
+           (\g -> map (\k -> { kind: k, on: g.on, rate: g.rate, amt: g.amt }) (kindOf g.kind))
+           w.gen
+  pure
+    { gen
+    , spread: toNumber w.spreadMille / 1000.0
+    , bias: toNumber w.biasMille / 1000.0
+    , odo: w.odo
+    , seed: toNumber w.seedInt
+    }

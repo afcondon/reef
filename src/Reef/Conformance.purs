@@ -29,6 +29,7 @@ module Reef.Conformance
   , genRun, genSteps, sampleEvery
   , betaProbe
   , inputRun, inputSteps
+  , simRun, simSteps
   ) where
 
 import Prelude
@@ -43,7 +44,7 @@ import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt
 import Reef.Engine (stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput)
 import Reef.PitchSet (PitchSet(..))
-import Reef.Protocol (decodeInput, encodeInput)
+import Reef.Protocol (decodeInput, decodeSim, encodeInput)
 import Reef.Marbles (Seed, seedFrom, rollValue)
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -242,6 +243,34 @@ inputDigest i s =
   where
   genDig :: GenSource -> String
   genDig src = (if src.on then "1" else "0") <> ":" <> show src.rate <> ":" <> show src.amt
+
+-- ── 2c. the SimState handoff net (the P4d proof) ──────────────────────────────
+
+-- | How many steps the handoff run threads.
+simSteps :: Int
+simSteps = 400
+
+-- | A real handoff payload: the JSON `Reef.Protocol.encodeSim` produced in the JS
+-- | frontend for a SimState with 10 gen sources ON (GNotes off), a definite seed
+-- | (7) and pad. `simRun` DECODES this on whichever runtime it runs on, then steps
+-- | `stepTick` from the reconstructed state. Byte-identical node ↔ BEAM proves the
+-- | BEAM's `decodeSim` rebuilds exactly the state the browser encoded AND evolves it
+-- | identically — i.e. the lockstep handoff lands the rig on the frontend's state.
+handoffJson :: String
+handoffJson = """{"spreadMille":500,"seedInt":7,"odo":{"span":3,"scaleIvls":[0,2,3,5,7,8,10],"rootPc":0,"octaveShift":0,"heads":[{"transp":0,"speedIx":4,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":0,"offset":0,"mute":false,"len":16,"esteps":16,"direction":0,"cursor":0,"accumulator":0},{"transp":7,"speedIx":2,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":1,"offset":0,"mute":true,"len":16,"esteps":16,"direction":0,"cursor":0,"accumulator":0},{"transp":-12,"speedIx":6,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":3,"offset":0,"mute":true,"len":16,"esteps":16,"direction":1,"cursor":0,"accumulator":0},{"transp":3,"speedIx":3,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":2,"offset":0,"mute":true,"len":16,"esteps":16,"direction":2,"cursor":0,"accumulator":0}],"gatePct":90,"dist":"natural","degShift":0,"chord":{"picks":[15,10,12,13],"phase":0,"period":16,"on":false,"ix":0,"feed":[]},"cells":[{"vel":100,"skip":false,"ratchet":1,"note":0,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":1,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":2,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":3,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":4,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":5,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":6,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":7,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":8,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":9,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":10,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":11,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":12,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":13,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":14,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":15,"glide":false,"gate":true,"dur":1}]},"gen":[{"rate":96,"on":false,"kind":0,"amt":20},{"rate":96,"on":true,"kind":1,"amt":30},{"rate":96,"on":true,"kind":2,"amt":30},{"rate":96,"on":true,"kind":3,"amt":30},{"rate":72,"on":true,"kind":4,"amt":25},{"rate":72,"on":true,"kind":5,"amt":25},{"rate":96,"on":true,"kind":6,"amt":30},{"rate":96,"on":true,"kind":7,"amt":40},{"rate":96,"on":true,"kind":8,"amt":30},{"rate":96,"on":true,"kind":9,"amt":30},{"rate":96,"on":true,"kind":10,"amt":25}],"biasMille":500}"""
+
+-- | Decode the handoff, then step it. A decode failure surfaces as a single
+-- | screaming line (so the golden/cross-runtime catches it) rather than silently
+-- | passing. Digest is the same `digest` genRun uses.
+simRun :: String
+simRun = case decodeSim handoffJson of
+  Left errs -> "SIM-DECODE-FAIL: " <> show errs
+  Right sim0 -> intercalate "\n" (foldl advance { sim: sim0, out: [] } (range 1 simSteps)).out
+  where
+  advance acc i =
+    let r = stepTick acc.sim
+        out' = if i `mod` sampleEvery == 0 then snoc acc.out (digest i r.sim.odo r.sim.seed) else acc.out
+    in { sim: r.sim, out: out' }
 
 -- ── 3. the transcendental (pow / Beta) diagnostic ────────────────────────────
 
