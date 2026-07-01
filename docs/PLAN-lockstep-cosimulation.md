@@ -131,6 +131,35 @@ simply doesn't emit notes.
 - **P4 — Co-sim live.** `reef_voice` applies tick-tagged inputs + emits MIDI;
   Triggerfish runs the lockstep client. Verify: a knob turn lands identically on
   both at the same tick (recorded MIDI == frontend's visualised note).
+  Sub-phases (from the two-repo recon, 2026-07-01):
+  - **P4a — Unify the per-tick composite (DONE 2026-07-01).** The whole model tick
+    — `runGen → tickChord → stepEmit` — was inlined SEPARATELY in the frontend
+    (Grid.purs), `reef_voice`, and `Reef.Conformance`, and had already drifted (the
+    conformance omitted `tickChord`, so the chord-overlay path was silently unproven
+    cross-runtime). Promoted to `Reef.Engine.stepTick :: SimState -> {sim, fired}`
+    (`SimState` ≡ `Reef.Gen.GenInput` ≡ `Reef.Input.SimState`, one row). Conformance
+    now calls `stepTick`; the input digest gained the chord clock (`chON·ix:phase`).
+    genRun unchanged (chord never on); inputRun regenerated — the overlay now engages
+    at tick 130 (FollowChord), phase advancing, all byte-identical node↔BEAM (ALL
+    GREEN). The frontend Step loop and `reef_voice` will both call `stepTick` next, so
+    the whole tick can't drift.
+  - **P4b — Tick alignment.** `reef_voice` clock-locked to the same Link anchor the
+    frontend uses (subscribe to `tidal_clock`'s Window broadcast → `currentCycle`);
+    one shared tick identity so frontend `tick.index` and BEAM `currentCycle` name the
+    same instant.
+  - **P4c — Input broadcast + apply-at-tick.** Frontend: each gesture →
+    `encodeTagged {tick: now+buffer, input}` over the existing Binnacle socket (while
+    still applying locally); new WS verb decodes `decodeTagged`, buffers by tick,
+    `reef_voice` applies at the matching tick. DECISION HERE: velocity-humanise
+    currently threads the shared PRNG seed (Grid.purs:238), so it perturbs the
+    generative evolution — for lockstep either (A) move humanise off the shared seed
+    (cleaner; standalone texture shifts slightly) or (B) fold humanise+velHumanize
+    into the shared `stepTick`/`SimState` (preserves the exact sound; carries
+    expression in the portable model).
+  - **P4d — Handoff + MIDI authority.** Transfer the full `SimState` (gen+seed) once
+    so both start identical; mute frontend Web-MIDI when rig-attached.
+  - **P4e — Verify.** A scripted gesture sequence lands identically: diff the rig's
+    emitted notes against the frontend's visualised notes over N ticks.
 - **P5 — Resync.** Periodic authoritative snapshot; frontend reconciles (defeats
   any residual drift).
 - **P6 — Mode switch + handoff.** Standalone ↔ rig-attached; seed transfer; MIDI

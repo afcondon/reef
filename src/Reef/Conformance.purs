@@ -39,7 +39,8 @@ import Data.Foldable (foldl, intercalate)
 import Data.Int (round)
 import Data.Maybe (Maybe(..))
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
-import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt, runGen)
+import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
+import Reef.Engine (stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput)
 import Reef.PitchSet (PitchSet(..))
 import Reef.Protocol (decodeInput, encodeInput)
@@ -111,11 +112,10 @@ genRun =
   where
   advance acc i =
     let
-      g = runGen { gen: activeGen, spread: 0.5, bias: 0.5, odo: acc.odo, seed: acc.seed }
-      r = stepEmit g.odo
-      out' = if i `mod` sampleEvery == 0 then snoc acc.out (digest i r.odo g.seed) else acc.out
+      r = stepTick { gen: activeGen, spread: 0.5, bias: 0.5, odo: acc.odo, seed: acc.seed }
+      out' = if i `mod` sampleEvery == 0 then snoc acc.out (digest i r.sim.odo r.sim.seed) else acc.out
     in
-      { odo: r.odo, seed: g.seed, out: out' }
+      { odo: r.sim.odo, seed: r.sim.seed, out: out' }
 
 -- | A full-state digest line covering EVERY field any active gen source can
 -- | mutate, so a divergence in any of them is caught at the next sample:
@@ -217,9 +217,8 @@ inputRun =
     let
       due = filter (\t -> t.tick == i) inputScript
       s1 = foldl applyEncoded acc.st due
-      g = runGen { gen: s1.gen, spread: s1.spread, bias: s1.bias, odo: s1.odo, seed: s1.seed }
-      r = stepEmit g.odo
-      s2 = s1 { odo = r.odo, seed = g.seed }
+      r = stepTick s1
+      s2 = r.sim
       out' = if i `mod` sampleEvery == 0 then snoc acc.out (inputDigest i s2) else acc.out
     in
       { st: s2, out: out' }
@@ -234,6 +233,9 @@ inputDigest i s =
   pad4 i <> " | k" <> show s.odo.rootPc <> " [" <> intercalate "," (map show s.odo.scaleIvls) <> "]"
     <> " s" <> show (round s.seed)
     <> " sp" <> show (round (s.spread * 1000.0)) <> " bi" <> show (round (s.bias * 1000.0))
+    -- chord clock: on-flag, position, and phase — makes the tickChord step in the
+    -- shared stepTick composite observable (it advances only when the overlay is on).
+    <> " ch" <> (if s.odo.chord.on then "1" else "0") <> show s.odo.chord.ix <> ":" <> show s.odo.chord.phase
     <> " | " <> intercalate "," (map cellDig s.odo.cells)
     <> " | " <> intercalate "  " (mapWithIndex headDig s.odo.heads)
     <> " | " <> intercalate "," (map genDig s.gen)
