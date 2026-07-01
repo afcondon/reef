@@ -57,6 +57,7 @@ module Reef.Odonus
   , fanOffsets
   , staggerLengths
   , spreadOctaves
+  , spreadVoicings
   , nudgeOffsets
   , scaleOf
   , renderCell
@@ -670,13 +671,29 @@ fanOffsets n o = o { heads = mapWithIndex (\i hd -> hd { offset = clampI 0 15 (i
 staggerLengths :: Int -> Odonus -> Odonus
 staggerLengths n o = o { heads = mapWithIndex (\i hd -> hd { len = clampI 1 16 (16 - i * n) }) o.heads }
 
--- | SPREAD: fan the heads apart in register, transposing each by i·n scale-degrees
--- | (0, n, 2n, 3n) — a Reichian register-fan companion to FAN/STAGGER. transp is in
--- | pitch-set index units, so at n ≈ the scale's cardinality the four heads sit an
--- | octave apart; n = 0 collapses to unison register. Clamped to the per-head
--- | transpose range (±24) so a wide spread on a big set can't run away.
+-- | SPREAD (Marbles-style voicing morph): the knob walks a CURATED progression of
+-- | four-voice register spreads rather than a linear fan. Early steps are strictly
+-- | consonant — unison, then octaves, then fifths added, out to a symmetric ±octave
+-- | (the "noon" of the knob); later steps add less-consonant but still diatonic
+-- | colour (thirds, fourths, sixths). Values are per-head transposes in scale-degree
+-- | index units (octave ≈ the scale's cardinality; ±7 reads as an octave diatonically).
+-- | Hand-shaped and bounded, so the spread can't run away the way the linear fan did.
+spreadVoicings :: Array (Array Int)
+spreadVoicings =
+  [ [  0,  0,  0,  0 ]   -- unison
+  , [  0,  0,  0,  7 ]   -- one octave up
+  , [ -7,  0,  0,  7 ]   -- octaves out (±octave)
+  , [ -7,  0,  4,  7 ]   -- + a fifth
+  , [ -7, -4,  4,  7 ]   -- fifths + octaves, fully consonant (knob "noon")
+  , [ -7, -4,  4, 11 ]   -- stretch an upper voice to a twelfth
+  , [ -7, -3,  2,  9 ]   -- diatonic colour: fourth below, third, sixth
+  , [ -8, -3,  5, 10 ]   -- wider diatonic spread
+  ]
+
 spreadOctaves :: Int -> Odonus -> Odonus
-spreadOctaves n o = o { heads = mapWithIndex (\i hd -> hd { transp = clampI (-24) 24 (i * n) }) o.heads }
+spreadOctaves n o =
+  let v = fromMaybe [ 0, 0, 0, 0 ] (spreadVoicings !! clampI 0 (length spreadVoicings - 1) n)
+  in o { heads = mapWithIndex (\i hd -> hd { transp = clampI (-24) 24 (fromMaybe 0 (v !! i)) }) o.heads }
 
 -- | PHASE ±: rotate the whole canon — shift every head's offset by `d` steps.
 nudgeOffsets :: Int -> Odonus -> Odonus
