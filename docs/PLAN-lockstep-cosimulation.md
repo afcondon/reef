@@ -160,6 +160,40 @@ simply doesn't emit notes.
     so both start identical; mute frontend Web-MIDI when rig-attached.
   - **P4e — Verify.** A scripted gesture sequence lands identically: diff the rig's
     emitted notes against the frontend's visualised notes over N ticks.
+
+  **Status 2026-07-01 — everything but the live rig test is built + verified:**
+  - P4b DONE (purerl-tidal branch `lockstep-p4`): `reef_voice` clock-locked beat-grid.
+  - P4d DONE (reef `fca460c`, committed): SimState handoff codec `encodeSim`/`decodeSim`,
+    proven byte-identical node↔BEAM (`Reef.Conformance.simRun`); `reef_voice`
+    `start_sim_json` + WS `reef-sim` verb (offline decode+step fires the golden walk).
+  - P4c-frontend DONE (triggerfish branch `lockstep-p4`): `PushToRig` sends the whole
+    SimState via `reef-sim`; Option-2 (humanise off the shared seed) landed.
+  - **REMAINING = P4e, the live rig A/B** (needs link-spike + a real Link anchor +
+    Ableton/IAC; load the new beam on the rig). CAVEAT surfaced: the handoff is a
+    snapshot taken mid-motion, and `reef_voice` snaps to the current step skipping
+    history — so a phase OFFSET of the steps elapsed during the WS round-trip is
+    expected. The demo proves the rig plays the SAME generative sequence clock-locked
+    (the core lockstep result); phase-ZERO unison needs the P5 resync / a
+    handoff-at-a-known-future-tick (transport coordination). For a clean first test,
+    push while the pattern is briefly stopped, or accept a small constant offset.
+    Also: reef_voice steps at `stepBeats=0.25` (1/16), so the frontend must be at
+    STEP LENGTH `stepDiv=1` for the model steps to line up.
+
+  **P4 COMPLETE — LIVE-VERIFIED 2026-07-01 (tag `lockstep-cosim-2026-07-01`).** The
+  co-simulation holds through every change class, proven audibly on the rig:
+  - **P4e** — webapp voices (ch1-4) and the BEAM `reef_voice` (ch15) play in exact
+    unison, NO flam; and it came out phase-ZERO on localhost (handoff completes
+    within one 1/16 step + both schedule at absolute anchor-derived wall times).
+  - **Generative** decisions track with NO wire (shared seed): head selection etc.
+    change identically on both from the handed-off seed.
+  - **P4c-full hand edits** stay locked: a gesture is deferred to `soundingStep+k`,
+    enqueued locally AND broadcast `reef-input <encodeTagged>`; both runtimes apply
+    it before `stepTick` on the same model step. Mute/mask first, then fanned out to
+    the full discrete set + seed-rolls + knob-drags (synced on release).
+  - **STEP LENGTH** syncs via its own `reef-steplen <beats>` verb (a transport param,
+    not a SimState edit) — so the `stepDiv=1` restriction above is lifted.
+  Remaining: Marbles-pad + chord-source controls not yet on the input bus (re-Push
+  resyncs); P5/P6 below.
 - **P5 — Resync.** Periodic authoritative snapshot; frontend reconciles (defeats
   any residual drift).
 - **P6 — Mode switch + handoff.** Standalone ↔ rig-attached; seed transfer; MIDI
