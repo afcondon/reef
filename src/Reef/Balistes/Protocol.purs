@@ -8,12 +8,17 @@
 module Reef.Balistes.Protocol
   ( encodeBalSim
   , decodeBalSim
+  , encodeBTagged
+  , decodeBTagged
   ) where
 
 import Prelude
 
-import Data.Either (Either)
-import Foreign (MultipleErrors)
+import Data.Either (Either(..))
+import Data.List.NonEmpty (singleton)
+import Data.Maybe (Maybe(..))
+import Foreign (ForeignError(..), MultipleErrors)
+import Reef.Balistes.Input (BTagged, WireBInput, fromWire, toWire)
 import Reef.Balistes.Sim (BalSim)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -24,3 +29,18 @@ encodeBalSim = writeJSON
 -- | Decode a pushed handoff payload back into a `BalSim`.
 decodeBalSim :: String -> Either MultipleErrors BalSim
 decodeBalSim = readJSON
+
+-- | Serialize a tick-tagged Balistes input (`{ tick, input }`), flattening the
+-- | input to its `WireBInput` so the whole thing is one simple-json record — the
+-- | same discipline `Reef.Protocol.encodeTagged` uses for Odonus.
+encodeBTagged :: BTagged -> String
+encodeBTagged t = writeJSON { tick: t.tick, input: toWire t.input }
+
+-- | Parse a tick-tagged Balistes input back. An unknown tag → decode error rather
+-- | than a silent drop.
+decodeBTagged :: String -> Either MultipleErrors BTagged
+decodeBTagged s = do
+  r <- readJSON s :: Either MultipleErrors { tick :: Int, input :: WireBInput }
+  case fromWire r.input of
+    Just i -> Right { tick: r.tick, input: i }
+    Nothing -> Left (singleton (ForeignError ("Reef.Balistes.Protocol: unknown BInput tag " <> show r.input.tag)))

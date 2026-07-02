@@ -159,3 +159,21 @@ echo "== balistesSimRun (handoff codec + 128-step render): node vs erl =="
   > /tmp/reef-balsim-erl.txt
 diff /tmp/reef-balsim-node.txt /tmp/reef-balsim-erl.txt && echo "  ✅ balistesSimRun node == erl (codec + shared engine + render identical over 128 steps)"
 diff "$BAL_SIM_GOLDEN" /tmp/reef-balsim-node.txt && echo "  ✅ balistesSimRun matches frozen golden"
+
+# --- Balistes input-protocol net (Reef.Conformance.balistesInputRun) ----------
+# LIVE KNOB/GESTURE LOCKSTEP. A scripted tick-tagged Balistes session (every BInput
+# family incl. BReseed/BReset) round-tripped through Reef.Balistes.Protocol
+# (encodeBTagged/decodeBTagged), interleaved with stepBal + renderStep over 200
+# steps. Byte-identical here = the input protocol + its codec behave identically on
+# both runtimes, so the frontend can broadcast tick-tagged knob edits and the rig
+# applies them to the same model step. Uses the codec → BEAM needs jsx's ebin.
+BAL_INPUT_GOLDEN="$REEF/conformance/balistes-input-golden.txt"
+echo "== balistesInputRun (200-step tick-tagged input replay): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { balistesInputRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(balistesInputRun);' \
+  ) > /tmp/reef-balinput-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':balistesInputRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-balinput-erl.txt
+diff /tmp/reef-balinput-node.txt /tmp/reef-balinput-erl.txt && echo "  ✅ balistesInputRun node == erl (input protocol + codec identical over 200 steps)"
+diff "$BAL_INPUT_GOLDEN" /tmp/reef-balinput-node.txt && echo "  ✅ balistesInputRun matches frozen golden"

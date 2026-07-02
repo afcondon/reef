@@ -32,6 +32,7 @@ module Reef.Conformance
   , simRun, simSteps
   , balistesRun, balistesSteps
   , balistesSimRun, balistesSimSteps
+  , balistesInputRun, balistesInputSteps
   ) where
 
 import Prelude
@@ -43,7 +44,8 @@ import Data.Int (round)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
-import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim) as BSim
+import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged) as BSim
+import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (stepTick)
@@ -398,6 +400,71 @@ balistesSimRun = case BSim.decodeBalSim (BSim.encodeBalSim balSimSeed) of
 evDig :: Int -> Array { note :: Int, velocity :: Int, pushMs :: Int, durMs :: Number, ratchet :: Int } -> String
 evDig i evs =
   pad4 i <> " | " <> (if null evs then "-" else intercalate "  " (map one evs))
+  where
+  one e = show e.note <> "/" <> show e.velocity <> "/" <> show e.pushMs
+    <> "/" <> show (round e.durMs) <> "x" <> show e.ratchet
+
+-- ── 6. the Balistes input-protocol net (live knob/gesture lockstep) ───────────
+
+-- | How many steps the Balistes input run threads.
+balistesInputSteps :: Int
+balistesInputSteps = 200
+
+-- | A scripted tick-tagged Balistes session covering every `BInput` family — the
+-- | X/Y pad, all four knob kinds (density/randomness/open/push), a per-lane note, a
+-- | ratchet edit, and the two RNG-touching gestures (BReseed at a 32-step pattern
+-- | boundary, BReset). These are the gestures a frontend broadcasts; both runtimes
+-- | replay them in lockstep.
+balistesInputScript :: Array RBI.BTagged
+balistesInputScript =
+  [ { tick: 5, input: RBI.BSetX 200 }
+  , { tick: 5, input: RBI.BSetY 60 }
+  , { tick: 12, input: RBI.BSetDensity 0 220 }
+  , { tick: 20, input: RBI.BSetRandomness 180 }
+  , { tick: 20, input: RBI.BSetOpen 120 }
+  , { tick: 32, input: RBI.BReseed }
+  , { tick: 40, input: RBI.BSetPush 1 12 }
+  , { tick: 55, input: RBI.BSetNote 1 40 }
+  , { tick: 64, input: RBI.BSetRatchet 2 4 3 }
+  , { tick: 90, input: RBI.BReset }
+  , { tick: 120, input: RBI.BSetDensity 2 240 }
+  , { tick: 150, input: RBI.BSetY 200 }
+  ]
+
+-- | Apply one tick-tagged input THROUGH THE CODEC (encode then decode before apply),
+-- | so `encodeBTagged`/`decodeBTagged` (both reef functions, JS + BEAM) are on the
+-- | critical path — the cross-runtime diff proves the codec is byte-faithful and a
+-- | broken codec can't pass silently.
+applyBEncoded :: BSim.BalSim -> RBI.BTagged -> BSim.BalSim
+applyBEncoded st t = case BSim.decodeBTagged (BSim.encodeBTagged t) of
+  Right dt -> RBI.applyBInput dt.input st
+  Left _ -> st
+
+-- | The Balistes live-input net. At each step: apply any scheduled inputs (codec
+-- | round-tripped), then stepBal, then digest state + renderStep output. Byte-
+-- | identical node ↔ BEAM proves the input protocol AND its codec behave identically
+-- | on both runtimes — what lets the frontend broadcast tick-tagged knob edits and
+-- | have the rig apply them to the same model step.
+balistesInputRun :: String
+balistesInputRun =
+  intercalate "\n"
+    (foldl advance { bal: BSim.defaultBalSim, out: [] } (range 0 (balistesInputSteps - 1))).out
+  where
+  advance acc i =
+    let
+      due = filter (\t -> t.tick == i) balistesInputScript
+      bal1 = foldl applyBEncoded acc.bal due
+      playedStep = bal1.step
+      r = BSim.stepBal bal1
+      evs = BSim.renderStep bal1 playedStep r.fired
+    in
+      { bal: r.bal, out: snoc acc.out (balInputDig i bal1 evs) }
+
+balInputDig :: Int -> BSim.BalSim -> Array { note :: Int, velocity :: Int, pushMs :: Int, durMs :: Number, ratchet :: Int } -> String
+balInputDig i b evs =
+  pad4 i <> " x" <> pad3 b.x <> " y" <> pad3 b.y
+    <> " r" <> pad3 b.randomness <> " o" <> pad3 b.open
+    <> " | " <> (if null evs then "-" else intercalate "  " (map one evs))
   where
   one e = show e.note <> "/" <> show e.velocity <> "/" <> show e.pushMs
     <> "/" <> show (round e.durMs) <> "x" <> show e.ratchet
