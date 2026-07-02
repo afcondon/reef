@@ -564,7 +564,7 @@ vetulaPerf =
   , voices:
       [ { dest: VP.VToMidi, renderer: VP.VBlock, channel: 0, durs: [ 2, 2, 2, 2 ], phase: 0, muted: false }
       , { dest: VP.VToMidi, renderer: VP.VArp, channel: 1, durs: [ 2, 0, 1, 1 ], phase: 0, muted: false }
-      , { dest: VP.VToMidi, renderer: VP.VStrummed, channel: 2, durs: [ 0, 0, 0, 4 ], phase: 0, muted: false }
+      , { dest: VP.VToMidi, renderer: VP.VStrummed, channel: 2, durs: [ 1, 1, 1, 1 ], phase: 0, muted: false }
       , { dest: VP.VToOdonus, renderer: VP.VBlock, channel: 3, durs: [ 1, 1, 1, 1 ], phase: 0, muted: false }
       , { dest: VP.VToMidi, renderer: VP.VBlock, channel: 4, durs: [ 1, 1, 1, 1 ], phase: 8, muted: false }
       ]

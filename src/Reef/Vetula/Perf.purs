@@ -39,7 +39,7 @@ module Reef.Vetula.Perf
 
 import Prelude
 
-import Data.Array (find, findIndex, foldl, length, mapWithIndex, null, replicate, sort, take, (!!))
+import Data.Array (elem, filter, find, findIndex, foldl, length, mapWithIndex, null, replicate, sort, take, (!!))
 import Data.Foldable (sum)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -166,10 +166,11 @@ renderVoiceMidiAt chords v pulse
         if loopLen <= 0 then []
         else
           let pos = mod (pulse + v.phase) loopLen
-          in case find (\s -> pos >= s.start && pos < s.start + s.len) segs of
+          in case findIndex (\s -> pos >= s.start && pos < s.start + s.len) segs of
             Nothing -> []
-            Just seg ->
-              let notes = maybe [] (sort <<< _.notes) (chords !! seg.ix)
+            Just segIx ->
+              let seg = fromMaybe emptySeg (segs !! segIx)
+                  notes = maybe [] (sort <<< _.notes) (chords !! seg.ix)
               in case v.renderer of
                 VBlock ->
                   if pos == seg.start
@@ -180,7 +181,36 @@ renderVoiceMidiAt chords v pulse
                   else case notes !! mod (pos - seg.start) (length notes) of
                     Just nn -> [ { note: nn, velocity: 80, durPulses: 0.9 } ]
                     Nothing -> []
-                VStrummed -> []
+                VStrummed ->
+                  -- Only at a chord onset. The notes ENTERING here (in this chord but
+                  -- not the previous segment's) attack; each is gated for its
+                  -- sustain — the run of consecutive segments from here that still
+                  -- contain it — so common tones tie into one long note instead of
+                  -- re-triggering. Loop-relative (the first segment has no previous, so
+                  -- everything re-attacks each loop): stateless, a pure fn of the pulse.
+                  if pos /= seg.start then []
+                  else
+                    let prevNotes =
+                          if segIx <= 0 then []
+                          else maybe [] (sort <<< _.notes)
+                                 (chords !! (fromMaybe emptySeg (segs !! (segIx - 1))).ix)
+                        entering = filter (\nn -> not (elem nn prevNotes)) notes
+                    in map (\nn -> { note: nn, velocity: 84, durPulses: strumSustain chords segs segIx nn }) entering
+  where
+  emptySeg = { ix: 0, start: 0, len: 0 }
+
+-- | How long a strummed note sustains from segment `segIx`: the total pulses of the
+-- | consecutive run of segments (no loop wrap) that still contain it, trimmed a hair
+-- | so a re-attack at the loop boundary can't collide with the note-off.
+strumSustain :: Array VChord -> Array { ix :: Int, start :: Int, len :: Int } -> Int -> Int -> Number
+strumSustain chords segs segIx nn = toNumber (go segIx 0) * 0.98
+  where
+  go k acc = case segs !! k of
+    Nothing -> acc
+    Just s ->
+      if elem nn (maybe [] _.notes (chords !! s.ix))
+        then go (k + 1) (acc + s.len)
+        else acc
 
 -- | One MIDI note across the WHOLE performance, tagged with the ORDINAL of the → midi
 -- | voice that sounds it (0-based, counting every → midi voice in `voices` order,
