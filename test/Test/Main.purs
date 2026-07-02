@@ -9,7 +9,7 @@ import Prelude
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (run, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun)
+import Reef.Conformance (run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Odonus (defaultOdonus)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
@@ -20,6 +20,14 @@ main = do
   assertEqual' "Odonus stepEmit conformance (defaultOdonus, scale source, 32 steps)"
     { actual: run, expected: golden }
   log "Reef Odonus conformance golden: OK"
+  -- The chord-quantised render golden: a → odo Vetula feed turns the chord overlay
+  -- on, then 32 steps render the SOUNDING pitch — pinning that the chord path realizes
+  -- the cell index to a melodic pitch and snaps it to the nearest chord tone (sane
+  -- octaves). Coverage for the octave bug that shipped because no golden rendered a
+  -- chord-on pitch. cross-runtime.sh proves node == BEAM here too.
+  assertEqual' "Odonus chord-quantised render golden (FollowChord + pitch, 32 steps)"
+    { actual: chordRun, expected: chordGolden }
+  log "Reef Odonus chord-quantised render golden: OK"
   -- Protocol round-trip: encode -> decode -> re-encode must reproduce the
   -- original JSON, proving the wire codec is faithful for the full Odonus
   -- record. (Odonus has no Show, so we compare the canonical JSON form.)
@@ -102,6 +110,22 @@ main = do
   assertEqual' "Balistes fixed-rhythm golden (codec + renderFixed, 128 steps)"
     { actual: fixedRun, expected: fixedGolden }
   log "Reef Balistes fixed-rhythm golden: OK"
+  -- The Vetula performance-scheduler net (Vetula lockstep V1). A representative
+  -- performance (one progression fanned to voices with different per-chord dwell
+  -- schedules + skips + phase offsets) round-tripped through Reef.Vetula.Protocol,
+  -- then evaluated at each absolute pulse over 128 pulses: every voice's read-head
+  -- plus the → odo conductor's held cursor + the pitch-class set it feeds Odonus.
+  -- The cross-runtime script proves the BEAM produces the same bytes — so
+  -- reef_vetula_voice conducts the rig's Odonus in lockstep with the browser.
+  assertEqual' "Vetula performance-scheduler golden (codec + scheduler, 128 pulses)"
+    { actual: vetulaRun, expected: vetulaGolden }
+  log "Reef Vetula performance-scheduler golden: OK"
+  -- The Vetula MIDI-render net (V2a): the shared renderVoiceMidiAt (block + arp)
+  -- evaluated per pulse over the same performance. cross-runtime.sh proves node == BEAM,
+  -- so reef_vetula_voice emits the same notes the browser's stepVoice does.
+  assertEqual' "Vetula MIDI-render golden (block + arp, 128 pulses)"
+    { actual: vetulaMidiRun, expected: vetulaMidiGolden }
+  log "Reef Vetula MIDI-render golden: OK"
 
 -- | The frozen render of `Reef.Conformance.run`. Head 0 walks the default
 -- | PitchSet (C minor, cells = discrete indices) — a clean ascending two-octave
@@ -1078,3 +1102,310 @@ fixedGolden = """   0 | 36/110/0/55x1  40/70/0/55x1
  125 | -
  126 | 42/90/0/180x1
  127 | -"""
+
+-- | The frozen Vetula performance-scheduler golden (V1). `vetulaRun` round-trips a
+-- | representative performance through the codec then evaluates the shared
+-- | Reef.Vetula.Perf scheduler at each absolute pulse over 128 pulses. Pure integer
+-- | arithmetic (no seed/float/bits), proven byte-identical under node and the BEAM
+-- | (conformance/cross-runtime.sh) — the precondition for reef_vetula_voice to
+-- | conduct the rig's Odonus in lockstep with the browser.
+vetulaGolden :: String
+vetulaGolden = """   0 | 0 0 3 0 0 | odo0 [0,4,7]
+   1 | 0 0 3 0 0 | odo0 [0,4,7]
+   2 | 0 0 3 0 0 | odo0 [0,4,7]
+   3 | 0 0 3 0 0 | odo0 [0,4,7]
+   4 | 0 0 3 0 0 | odo0 [0,4,7]
+   5 | 0 0 3 0 0 | odo0 [0,4,7]
+   6 | 0 0 3 0 0 | odo0 [0,4,7]
+   7 | 0 0 3 0 0 | odo0 [0,4,7]
+   8 | 0 0 3 0 1 | odo0 [0,4,7]
+   9 | 0 0 3 0 1 | odo0 [0,4,7]
+  10 | 0 0 3 0 1 | odo0 [0,4,7]
+  11 | 0 0 3 0 1 | odo0 [0,4,7]
+  12 | 0 0 3 0 1 | odo0 [0,4,7]
+  13 | 0 0 3 0 1 | odo0 [0,4,7]
+  14 | 0 0 3 0 1 | odo0 [0,4,7]
+  15 | 0 0 3 0 1 | odo0 [0,4,7]
+  16 | 0 0 3 1 1 | odo1 [4,7,11]
+  17 | 0 0 3 1 1 | odo1 [4,7,11]
+  18 | 0 0 3 1 1 | odo1 [4,7,11]
+  19 | 0 0 3 1 1 | odo1 [4,7,11]
+  20 | 0 0 3 1 1 | odo1 [4,7,11]
+  21 | 0 0 3 1 1 | odo1 [4,7,11]
+  22 | 0 0 3 1 1 | odo1 [4,7,11]
+  23 | 0 0 3 1 1 | odo1 [4,7,11]
+  24 | 0 0 3 1 2 | odo1 [4,7,11]
+  25 | 0 0 3 1 2 | odo1 [4,7,11]
+  26 | 0 0 3 1 2 | odo1 [4,7,11]
+  27 | 0 0 3 1 2 | odo1 [4,7,11]
+  28 | 0 0 3 1 2 | odo1 [4,7,11]
+  29 | 0 0 3 1 2 | odo1 [4,7,11]
+  30 | 0 0 3 1 2 | odo1 [4,7,11]
+  31 | 0 0 3 1 2 | odo1 [4,7,11]
+  32 | 1 2 3 2 2 | odo2 [9,0,4]
+  33 | 1 2 3 2 2 | odo2 [9,0,4]
+  34 | 1 2 3 2 2 | odo2 [9,0,4]
+  35 | 1 2 3 2 2 | odo2 [9,0,4]
+  36 | 1 2 3 2 2 | odo2 [9,0,4]
+  37 | 1 2 3 2 2 | odo2 [9,0,4]
+  38 | 1 2 3 2 2 | odo2 [9,0,4]
+  39 | 1 2 3 2 2 | odo2 [9,0,4]
+  40 | 1 2 3 2 3 | odo2 [9,0,4]
+  41 | 1 2 3 2 3 | odo2 [9,0,4]
+  42 | 1 2 3 2 3 | odo2 [9,0,4]
+  43 | 1 2 3 2 3 | odo2 [9,0,4]
+  44 | 1 2 3 2 3 | odo2 [9,0,4]
+  45 | 1 2 3 2 3 | odo2 [9,0,4]
+  46 | 1 2 3 2 3 | odo2 [9,0,4]
+  47 | 1 2 3 2 3 | odo2 [9,0,4]
+  48 | 1 3 3 3 3 | odo3 [11,2,6]
+  49 | 1 3 3 3 3 | odo3 [11,2,6]
+  50 | 1 3 3 3 3 | odo3 [11,2,6]
+  51 | 1 3 3 3 3 | odo3 [11,2,6]
+  52 | 1 3 3 3 3 | odo3 [11,2,6]
+  53 | 1 3 3 3 3 | odo3 [11,2,6]
+  54 | 1 3 3 3 3 | odo3 [11,2,6]
+  55 | 1 3 3 3 3 | odo3 [11,2,6]
+  56 | 1 3 3 3 0 | odo3 [11,2,6]
+  57 | 1 3 3 3 0 | odo3 [11,2,6]
+  58 | 1 3 3 3 0 | odo3 [11,2,6]
+  59 | 1 3 3 3 0 | odo3 [11,2,6]
+  60 | 1 3 3 3 0 | odo3 [11,2,6]
+  61 | 1 3 3 3 0 | odo3 [11,2,6]
+  62 | 1 3 3 3 0 | odo3 [11,2,6]
+  63 | 1 3 3 3 0 | odo3 [11,2,6]
+  64 | 2 0 3 0 0 | odo0 [0,4,7]
+  65 | 2 0 3 0 0 | odo0 [0,4,7]
+  66 | 2 0 3 0 0 | odo0 [0,4,7]
+  67 | 2 0 3 0 0 | odo0 [0,4,7]
+  68 | 2 0 3 0 0 | odo0 [0,4,7]
+  69 | 2 0 3 0 0 | odo0 [0,4,7]
+  70 | 2 0 3 0 0 | odo0 [0,4,7]
+  71 | 2 0 3 0 0 | odo0 [0,4,7]
+  72 | 2 0 3 0 1 | odo0 [0,4,7]
+  73 | 2 0 3 0 1 | odo0 [0,4,7]
+  74 | 2 0 3 0 1 | odo0 [0,4,7]
+  75 | 2 0 3 0 1 | odo0 [0,4,7]
+  76 | 2 0 3 0 1 | odo0 [0,4,7]
+  77 | 2 0 3 0 1 | odo0 [0,4,7]
+  78 | 2 0 3 0 1 | odo0 [0,4,7]
+  79 | 2 0 3 0 1 | odo0 [0,4,7]
+  80 | 2 0 3 1 1 | odo1 [4,7,11]
+  81 | 2 0 3 1 1 | odo1 [4,7,11]
+  82 | 2 0 3 1 1 | odo1 [4,7,11]
+  83 | 2 0 3 1 1 | odo1 [4,7,11]
+  84 | 2 0 3 1 1 | odo1 [4,7,11]
+  85 | 2 0 3 1 1 | odo1 [4,7,11]
+  86 | 2 0 3 1 1 | odo1 [4,7,11]
+  87 | 2 0 3 1 1 | odo1 [4,7,11]
+  88 | 2 0 3 1 2 | odo1 [4,7,11]
+  89 | 2 0 3 1 2 | odo1 [4,7,11]
+  90 | 2 0 3 1 2 | odo1 [4,7,11]
+  91 | 2 0 3 1 2 | odo1 [4,7,11]
+  92 | 2 0 3 1 2 | odo1 [4,7,11]
+  93 | 2 0 3 1 2 | odo1 [4,7,11]
+  94 | 2 0 3 1 2 | odo1 [4,7,11]
+  95 | 2 0 3 1 2 | odo1 [4,7,11]
+  96 | 3 2 3 2 2 | odo2 [9,0,4]
+  97 | 3 2 3 2 2 | odo2 [9,0,4]
+  98 | 3 2 3 2 2 | odo2 [9,0,4]
+  99 | 3 2 3 2 2 | odo2 [9,0,4]
+ 100 | 3 2 3 2 2 | odo2 [9,0,4]
+ 101 | 3 2 3 2 2 | odo2 [9,0,4]
+ 102 | 3 2 3 2 2 | odo2 [9,0,4]
+ 103 | 3 2 3 2 2 | odo2 [9,0,4]
+ 104 | 3 2 3 2 3 | odo2 [9,0,4]
+ 105 | 3 2 3 2 3 | odo2 [9,0,4]
+ 106 | 3 2 3 2 3 | odo2 [9,0,4]
+ 107 | 3 2 3 2 3 | odo2 [9,0,4]
+ 108 | 3 2 3 2 3 | odo2 [9,0,4]
+ 109 | 3 2 3 2 3 | odo2 [9,0,4]
+ 110 | 3 2 3 2 3 | odo2 [9,0,4]
+ 111 | 3 2 3 2 3 | odo2 [9,0,4]
+ 112 | 3 3 3 3 3 | odo3 [11,2,6]
+ 113 | 3 3 3 3 3 | odo3 [11,2,6]
+ 114 | 3 3 3 3 3 | odo3 [11,2,6]
+ 115 | 3 3 3 3 3 | odo3 [11,2,6]
+ 116 | 3 3 3 3 3 | odo3 [11,2,6]
+ 117 | 3 3 3 3 3 | odo3 [11,2,6]
+ 118 | 3 3 3 3 3 | odo3 [11,2,6]
+ 119 | 3 3 3 3 3 | odo3 [11,2,6]
+ 120 | 3 3 3 3 0 | odo3 [11,2,6]
+ 121 | 3 3 3 3 0 | odo3 [11,2,6]
+ 122 | 3 3 3 3 0 | odo3 [11,2,6]
+ 123 | 3 3 3 3 0 | odo3 [11,2,6]
+ 124 | 3 3 3 3 0 | odo3 [11,2,6]
+ 125 | 3 3 3 3 0 | odo3 [11,2,6]
+ 126 | 3 3 3 3 0 | odo3 [11,2,6]
+ 127 | 3 3 3 3 0 | odo3 [11,2,6]"""
+
+-- | The frozen chord-quantised render golden. `chordRun` feeds a C-major triad via
+-- | mkFollowChord (chord overlay on) and renders 32 steps of sounding pitch. Sane
+-- | octaves (E3/G3/C4/E4), proven byte-identical node == BEAM (conformance/
+-- | cross-runtime.sh). Regression guard for the index-space chord-quantise fix.
+chordGolden :: String
+chordGolden = """  1 | h0 p52 d1 r1 v100
+  2 | h0 p52 d1 r1 v100
+  3 | h0 p52 d1 r1 v100
+  4 | h0 p55 d1 r1 v100
+  5 | h0 p55 d1 r1 v100
+  6 | h0 p60 d1 r1 v100
+  7 | h0 p60 d1 r1 v100
+  8 | h0 p64 d1 r1 v100
+  9 | h0 p64 d1 r1 v100
+ 10 | h0 p64 d1 r1 v100
+ 11 | h0 p67 d1 r1 v100
+ 12 | h0 p67 d1 r1 v100
+ 13 | h0 p72 d1 r1 v100
+ 14 | h0 p72 d1 r1 v100
+ 15 | h0 p76 d1 r1 v100
+ 16 | h0 p48 d1 r1 v100
+ 17 | h0 p52 d1 r1 v100
+ 18 | h0 p52 d1 r1 v100
+ 19 | h0 p52 d1 r1 v100
+ 20 | h0 p55 d1 r1 v100
+ 21 | h0 p55 d1 r1 v100
+ 22 | h0 p60 d1 r1 v100
+ 23 | h0 p60 d1 r1 v100
+ 24 | h0 p64 d1 r1 v100
+ 25 | h0 p64 d1 r1 v100
+ 26 | h0 p64 d1 r1 v100
+ 27 | h0 p67 d1 r1 v100
+ 28 | h0 p67 d1 r1 v100
+ 29 | h0 p72 d1 r1 v100
+ 30 | h0 p72 d1 r1 v100
+ 31 | h0 p76 d1 r1 v100
+ 32 | h0 p48 d1 r1 v100"""
+
+-- | The frozen Vetula MIDI-render golden (V2a). Block + arp gated notes per pulse,
+-- | proven byte-identical node == BEAM (conformance/cross-runtime.sh). Strummed voices
+-- | render nothing yet (V2b).
+vetulaMidiGolden :: String
+vetulaMidiGolden = """   0 | v0:36/82/3136,60/82/3136,64/82/3136,67/82/3136 | v1:36/80/90 | v2:- | v3:- | v4:-
+   1 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+   2 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+   3 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+   4 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+   5 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+   6 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+   7 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+   8 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:40/82/1568,64/82/1568,67/82/1568,71/82/1568
+   9 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  10 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  11 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  12 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  13 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  14 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  15 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  16 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  17 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  18 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  19 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  20 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  21 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  22 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  23 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  24 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:33/82/1568,57/82/1568,60/82/1568,64/82/1568
+  25 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  26 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  27 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  28 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  29 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  30 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  31 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  32 | v0:40/82/3136,64/82/3136,67/82/3136,71/82/3136 | v1:33/80/90 | v2:- | v3:- | v4:-
+  33 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+  34 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  35 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  36 | v0:- | v1:33/80/90 | v2:- | v3:- | v4:-
+  37 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+  38 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  39 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  40 | v0:- | v1:33/80/90 | v2:- | v3:- | v4:35/82/1568,59/82/1568,62/82/1568,66/82/1568
+  41 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+  42 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  43 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  44 | v0:- | v1:33/80/90 | v2:- | v3:- | v4:-
+  45 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+  46 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  47 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  48 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:-
+  49 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+  50 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+  51 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-
+  52 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:-
+  53 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+  54 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+  55 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-
+  56 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:36/82/1568,60/82/1568,64/82/1568,67/82/1568
+  57 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+  58 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+  59 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-
+  60 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:-
+  61 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+  62 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+  63 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-
+  64 | v0:33/82/3136,57/82/3136,60/82/3136,64/82/3136 | v1:36/80/90 | v2:- | v3:- | v4:-
+  65 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  66 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  67 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  68 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  69 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  70 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  71 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  72 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:40/82/1568,64/82/1568,67/82/1568,71/82/1568
+  73 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  74 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  75 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  76 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  77 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  78 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  79 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  80 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  81 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  82 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  83 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  84 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  85 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  86 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  87 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  88 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:33/82/1568,57/82/1568,60/82/1568,64/82/1568
+  89 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  90 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  91 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  92 | v0:- | v1:36/80/90 | v2:- | v3:- | v4:-
+  93 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  94 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+  95 | v0:- | v1:67/80/90 | v2:- | v3:- | v4:-
+  96 | v0:35/82/3136,59/82/3136,62/82/3136,66/82/3136 | v1:33/80/90 | v2:- | v3:- | v4:-
+  97 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+  98 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+  99 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+ 100 | v0:- | v1:33/80/90 | v2:- | v3:- | v4:-
+ 101 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+ 102 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+ 103 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+ 104 | v0:- | v1:33/80/90 | v2:- | v3:- | v4:35/82/1568,59/82/1568,62/82/1568,66/82/1568
+ 105 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+ 106 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+ 107 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+ 108 | v0:- | v1:33/80/90 | v2:- | v3:- | v4:-
+ 109 | v0:- | v1:57/80/90 | v2:- | v3:- | v4:-
+ 110 | v0:- | v1:60/80/90 | v2:- | v3:- | v4:-
+ 111 | v0:- | v1:64/80/90 | v2:- | v3:- | v4:-
+ 112 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:-
+ 113 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+ 114 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+ 115 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-
+ 116 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:-
+ 117 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+ 118 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+ 119 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-
+ 120 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:36/82/1568,60/82/1568,64/82/1568,67/82/1568
+ 121 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+ 122 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+ 123 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-
+ 124 | v0:- | v1:35/80/90 | v2:- | v3:- | v4:-
+ 125 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
+ 126 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
+ 127 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-"""

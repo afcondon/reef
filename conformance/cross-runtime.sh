@@ -30,6 +30,24 @@ diff /tmp/reef-node-out.txt /tmp/reef-erl-out.txt && echo "  ✅ node == erl"
 echo "== diff vs committed golden =="
 diff "$GOLDEN" /tmp/reef-node-out.txt && echo "  ✅ matches golden"
 
+# --- chord-quantised render net (Reef.Conformance.chordRun) -------------------
+# The chord overlay path renders pitches but shipped an octave bug because NO golden
+# exercised it (run is chord-off; inputRun digests cell indices). chordRun feeds a
+# C-major triad via mkFollowChord and renders 32 steps of SOUNDING pitch. Pure
+# (no codec), so plain -pa ebin. Byte-identical here = the chord-quantise fix
+# (realize the index to a melodic pitch, then snap to the nearest chord tone) is
+# identical on both runtimes.
+CHORD_GOLDEN="$REEF/conformance/chord-golden.txt"
+echo "== chordRun (32-step chord-quantised render): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { chordRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(chordRun);' \
+  ) > /tmp/reef-chord-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':chordRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-chord-erl.txt
+diff /tmp/reef-chord-node.txt /tmp/reef-chord-erl.txt && echo "  \u2705 chordRun node == erl (chord-quantise render identical over 32 steps)"
+diff "$CHORD_GOLDEN" /tmp/reef-chord-node.txt && echo "  \u2705 chordRun matches frozen golden"
+
 # --- PitchSet quantisation table (Reef.PitchSetGolden.tableRender) -----------
 # The agreed quantisation examples — literal offsets, flat-equal mapping, finite
 # vs periodic, octave vs period-19. Pure, so it must render identically on both
@@ -195,3 +213,40 @@ echo "== fixedRun (128-step fixed rhythm): node vs erl =="
   > /tmp/reef-fixed-erl.txt
 diff /tmp/reef-fixed-node.txt /tmp/reef-fixed-erl.txt && echo "  ✅ fixedRun node == erl (fixed-rhythm eval + codec identical over 128 steps)"
 diff "$FIXED_GOLDEN" /tmp/reef-fixed-node.txt && echo "  ✅ fixedRun matches frozen golden"
+
+# --- Vetula performance-scheduler net (Reef.Conformance.vetulaRun) ------------
+# VETULA LOCKSTEP V1. The shared Reef.Vetula.Perf scheduler — a saved chord
+# progression fanned to voices with different per-chord dwell schedules (bars per
+# chord, 0 = skip) + phase offsets — round-tripped through Reef.Vetula.Protocol
+# (encodePerf/decodePerf) then evaluated at each absolute pulse over 128 pulses:
+# every voice's read-head plus the → odo conductor's held cursor + the pitch-class
+# set it feeds Odonus. Pure integer arithmetic (no seed, no floats, no bits), so it
+# is deterministic by construction; byte-identical here = the whole shared scheduler
+# + its codec agree, which is what lets reef_vetula_voice conduct the rig's Odonus
+# in lockstep with the browser. Codec → the BEAM needs jsx's ebin.
+VETULA_GOLDEN="$REEF/conformance/vetula-golden.txt"
+echo "== vetulaRun (128-pulse performance scheduler): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { vetulaRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(vetulaRun);' \
+  ) > /tmp/reef-vetula-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':vetulaRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-vetula-erl.txt
+diff /tmp/reef-vetula-node.txt /tmp/reef-vetula-erl.txt && echo "  ✅ vetulaRun node == erl (performance scheduler + codec identical over 128 pulses)"
+diff "$VETULA_GOLDEN" /tmp/reef-vetula-node.txt && echo "  ✅ vetulaRun matches frozen golden"
+
+# --- Vetula MIDI-render net (Reef.Conformance.vetulaMidiRun) ------------------
+# VETULA LOCKSTEP V2a. The shared renderVoiceMidiAt (block + arp -> gated notes)
+# over 128 pulses for the same performance. Uses decodePerf (codec -> jsx), so the
+# BEAM needs jsx's ebin. Byte-identical here = reef_vetula_voice emits the same
+# MIDI the browser's stepVoice does -- the self-contained sync leg (no Odonus).
+VMIDI_GOLDEN="$REEF/conformance/vetula-midi-golden.txt"
+echo "== vetulaMidiRun (128-pulse block+arp MIDI render): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { vetulaMidiRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(vetulaMidiRun);' \
+  ) > /tmp/reef-vmidi-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':vetulaMidiRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-vmidi-erl.txt
+diff /tmp/reef-vmidi-node.txt /tmp/reef-vmidi-erl.txt && echo "  OK vetulaMidiRun node == erl (block+arp MIDI render identical over 128 pulses)"
+diff "$VMIDI_GOLDEN" /tmp/reef-vmidi-node.txt && echo "  OK vetulaMidiRun matches frozen golden"

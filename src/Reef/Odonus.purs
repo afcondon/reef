@@ -195,18 +195,24 @@ scaleTypeName o = recogniseScale o.scaleIvls
 -- | degrees. Global octave applies in both cases.
 renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
-    if o.chord.on then
-      quantiseToChordPCs (currentChordPCs o) (c.note + hd.transp) + 12 * o.octaveShift
-    else
-      -- Index-space realization (project_reef_quantisation_realize): the cell holds a
-      -- DISCRETE INDEX into the voice's PitchSet, bounded by span; per-voice (transp,
-      -- fine) + global (degShift fine, octaveShift coarse = ±period) offsets sum in,
-      -- then realize ONCE. Octaves emerge from the set's tiling, not a +12.
-      let ps = effectivePitchSet o
-          n = cardinality ps
-          baseIx = clampI 0 (max 1 (o.span * n) - 1) c.note
-          index = baseIx + hd.transp + o.degShift + o.octaveShift * n
-      in PS.realize ps index
+    -- Index-space realization (project_reef_quantisation_realize): the cell holds a
+    -- DISCRETE INDEX into the voice's PitchSet, bounded by span; per-voice (transp,
+    -- fine) + global (degShift fine, octaveShift coarse = ±period) offsets sum in,
+    -- then realize ONCE. Octaves emerge from the set's tiling, not a +12.
+    let ps = effectivePitchSet o
+        n = cardinality ps
+        baseIx = clampI 0 (max 1 (o.span * n) - 1) c.note
+        index = baseIx + hd.transp + o.degShift + o.octaveShift * n
+        pitch = PS.realize ps index
+    in
+      -- The chord overlay (a Vetula → odo feed / picked progression) QUANTISES that
+      -- realized melodic pitch to the nearest current chord tone, fanning across
+      -- octaves. It snaps the SOUNDING pitch (not the raw index), so octaves stay sane
+      -- and octaveShift still works — unlike the pre-index-space path, which treated
+      -- the cell index as a chromatic note and blew the octave up.
+      if o.chord.on
+        then quantiseToChordPCs (currentChordPCs o) pitch
+        else pitch
 
 -- | The PitchSet the cells realize through: explicit if set (a Vetula feed or a
 -- | pushed record), else derived from the scale fields (standalone). This is why

@@ -1,0 +1,208 @@
+-- | `Reef.Vetula.Perf` — the shared Vetula "Performance" scheduler: one saved chord
+-- | progression fanned to several VOICES, each reading the SAME chords on its own
+-- | clock (its own per-chord dwell schedule + phase offset), and each sounding them
+-- | a different way (block / arp / strum → MIDI) or conducting Odonus's quantiser
+-- | (→ odo). This is the exact scheduler the Triggerfish frontend runs (Vetula.App
+-- | `timeline`/`cursorAt`/`stepVoice`), lifted into reef so it compiles to BOTH the
+-- | JS frontend and the BEAM (`reef_vetula_perf@ps`) and co-simulates byte-for-byte.
+-- |
+-- | The whole thing is a PURE FUNCTION OF THE ABSOLUTE PULSE (the shared Link
+-- | 1/16-note index — `stepBeats 0.25`, the same grid Odonus and Balistes ride).
+-- | There is no seed and no accumulating engine state: `pos = (pulse + phase) mod
+-- | loopLen`, `timeline` turns the bars-per-chord `durs` (0 = skip) into cumulative
+-- | segments, and the segment covering `pos` names the chord. So — even more than
+-- | Balistes' fixed rhythm — a performance needs no handoff-phase machinery: push
+-- | the definition once and both runtimes agree forever, with no per-event wire.
+-- |
+-- | V1 lights up the `→ odo` path: a `VToOdonus` voice sounds no MIDI, it just
+-- | advances a read-head; `odoCursorAt`/`odoPcsAt` give the BEAM the pitch-class set
+-- | that voice is conducting so it can feed Odonus's chord overlay (a tick-tagged
+-- | `FollowChord`). The block/arp/strum → MIDI realisations (V2) reuse the same
+-- | `timeline`/`cursorAt` here.
+module Reef.Vetula.Perf
+  ( VRenderer(..)
+  , VDest(..)
+  , VChord
+  , VVoice
+  , Perf
+  , padDurs
+  , timeline
+  , cursorAt
+  , firstOdoIx
+  , odoCursorAt
+  , odoPcsAt
+  , VMidiNote
+  , renderVoiceMidiAt
+  , VMidiOut
+  , renderMidiAt
+  ) where
+
+import Prelude
+
+import Data.Array (find, findIndex, foldl, length, mapWithIndex, null, replicate, sort, take, (!!))
+import Data.Foldable (sum)
+import Data.Int (toNumber)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Tuple (Tuple(..), snd)
+
+-- | How a voice sounds the chord it is currently on. Block = the whole chord held
+-- | for the segment; Arp = one chord note per pulse, cycling; Strummed = re-trigger
+-- | only the notes that changed (common tones ring on). (V1's odo path ignores this;
+-- | it's carried so the V2 MIDI voices share one model + wire.)
+data VRenderer = VBlock | VArp | VStrummed
+
+derive instance eqVRenderer :: Eq VRenderer
+
+-- | Where a voice's chord goes. `VToMidi` sounds it on the voice's MIDI channel per
+-- | its renderer; `VToOdonus` sends NO MIDI and instead conducts Odonus's quantiser
+-- | (the `channel` field is reused as the Odonus id).
+data VDest = VToMidi | VToOdonus
+
+derive instance eqVDest :: Eq VDest
+
+-- | One progression chord in the serialisable subset both runtimes need: `pcs` (the
+-- | pitch classes 0..11, what the → odo quantiser follows) and `notes` (the concrete
+-- | ascending MIDI of `playNotes` = `[bassPc+36] <> voicing`, what the V2 MIDI voices
+-- | sound). Name/voicing-graph metadata stay frontend-side.
+type VChord =
+  { pcs :: Array Int
+  , notes :: Array Int
+  }
+
+-- | A performance voice: its own read-head into the shared progression. `durs` is
+-- | bars-per-chord (one entry per progression chord; 0 = skip that chord), `phase`
+-- | a pulse offset so identical columns can phase apart. `cursor`/`held` are runtime
+-- | state derived on each runtime, not pushed — so a `VVoice` is the pushed shape.
+type VVoice =
+  { dest :: VDest
+  , renderer :: VRenderer
+  , channel :: Int
+  , durs :: Array Int
+  , phase :: Int
+  , muted :: Boolean
+  }
+
+-- | A whole performance: the shared progression + the voices reading it.
+type Perf =
+  { chords :: Array VChord
+  , voices :: Array VVoice
+  }
+
+-- | Fit a voice's duration column to the current chord count (pad new chords with
+-- | one bar, drop trailing extras) — keeps the clock robust if the progression
+-- | length and the stored column ever disagree. Identical to the frontend.
+padDurs :: Int -> Array Int -> Array Int
+padDurs n ds = take n (ds <> replicate n 1)
+
+-- | A voice's timeline: one segment per NON-skipped chord, in chord order, each at
+-- | its cumulative pulse offset. 1 bar = 16 pulses (16th notes). Skipped chords (0
+-- | bars) contribute nothing, so a voice plays only the chords it dwells on. Pure
+-- | integer arithmetic — trivially identical across runtimes.
+timeline :: Array Int -> Array { ix :: Int, start :: Int, len :: Int }
+timeline ds = snd (foldl step (Tuple 0 []) (mapWithIndex Tuple ds))
+  where
+  step (Tuple off segs) (Tuple i d) =
+    if d <= 0 then Tuple off segs
+    else Tuple (off + d * 16) (segs <> [ { ix: i, start: off, len: d * 16 } ])
+
+-- | The chord index a voice's read-head is on at this pulse (Nothing if its loop is
+-- | empty or it is resting between dwell segments). The exact frontend function.
+cursorAt :: Int -> VVoice -> Int -> Maybe Int
+cursorAt nChords v pulse =
+  let ds = padDurs nChords v.durs
+      segs = timeline ds
+      loopLen = 16 * sum ds
+  in if loopLen <= 0 then Nothing
+     else let pos = mod (pulse + v.phase) loopLen
+          in _.ix <$> find (\seg -> pos >= seg.start && pos < seg.start + seg.len) segs
+
+-- | Index of the first `→ odo` voice, if any. (V1 conducts one Odonus; multi-Odonus
+-- | routing by `channel`-as-id is a later concern.)
+firstOdoIx :: Perf -> Maybe Int
+firstOdoIx perf = findIndex (\v -> v.dest == VToOdonus) perf.voices
+
+-- | The chord index the first → odo voice conducts at this pulse, HOLDING the given
+-- | previous cursor across rests (matching the frontend's `fromMaybe v.cursor`). The
+-- | BEAM threads its own `prevCursor` and re-feeds Odonus when this changes.
+odoCursorAt :: Perf -> Int -> Int -> Int
+odoCursorAt perf pulse prevCursor =
+  case firstOdoIx perf of
+    Nothing -> prevCursor
+    Just ix -> case perf.voices !! ix of
+      Nothing -> prevCursor
+      Just v -> fromMaybe prevCursor (cursorAt (length perf.chords) v pulse)
+
+-- | The pitch-class set of the progression chord at `cursor` (empty if out of range)
+-- | — what a → odo voice feeds Odonus's chord overlay.
+odoPcsAt :: Perf -> Int -> Array Int
+odoPcsAt perf cursor = maybe [] _.pcs (perf.chords !! cursor)
+
+-- | One MIDI note a → midi voice sounds at a pulse: absolute note, velocity, and the
+-- | gate length in PULSES (the runtime multiplies by the current step-ms, so this
+-- | stays tempo-agnostic). All renderers are gated (a note-with-duration), which is
+-- | exactly what both `Midi.scheduleNote` (browser) and `scheduleNoteAt` (rig) speak —
+-- | so the same decision emits byte-identically on both.
+type VMidiNote =
+  { note :: Int
+  , velocity :: Int
+  , durPulses :: Number
+  }
+
+-- | Render one pulse of one → midi voice to concrete notes — the SHARED decision the
+-- | browser (Vetula.App stepVoice) and the rig (reef_vetula_voice) both use. Block
+-- | attacks the whole chord on the segment onset for the segment's length; Arp plays
+-- | one chord note per pulse, cycling. (Strummed is V2b — its sustain/tie needs a
+-- | computed gate; here it stays silent so block/arp land first.) A muted voice, a
+-- | → odo voice, or a resting pulse produces nothing.
+renderVoiceMidiAt :: Array VChord -> VVoice -> Int -> Array VMidiNote
+renderVoiceMidiAt chords v pulse
+  | v.muted = []
+  | v.dest /= VToMidi = []
+  | otherwise =
+      let ds = padDurs (length chords) v.durs
+          segs = timeline ds
+          loopLen = 16 * sum ds
+      in
+        if loopLen <= 0 then []
+        else
+          let pos = mod (pulse + v.phase) loopLen
+          in case find (\s -> pos >= s.start && pos < s.start + s.len) segs of
+            Nothing -> []
+            Just seg ->
+              let notes = maybe [] (sort <<< _.notes) (chords !! seg.ix)
+              in case v.renderer of
+                VBlock ->
+                  if pos == seg.start
+                    then map (\nn -> { note: nn, velocity: 82, durPulses: toNumber seg.len * 0.98 }) notes
+                    else []
+                VArp ->
+                  if null notes then []
+                  else case notes !! mod (pos - seg.start) (length notes) of
+                    Just nn -> [ { note: nn, velocity: 80, durPulses: 0.9 } ]
+                    Nothing -> []
+                VStrummed -> []
+
+-- | One MIDI note across the WHOLE performance, tagged with the ORDINAL of the → midi
+-- | voice that sounds it (0-based, counting every → midi voice in `voices` order,
+-- | muted or not, so a mute never shifts channel assignments). The rig maps that
+-- | ordinal to its own channel list; the browser voice keeps its own `channel`.
+type VMidiOut =
+  { voiceOrd :: Int
+  , note :: Int
+  , velocity :: Int
+  , durPulses :: Number
+  }
+
+-- | Every → midi note the performance sounds at this pulse, flattened across voices
+-- | and tagged with each voice's ordinal — the single call the rig's reef_vetula_voice
+-- | makes per pulse to drive its MIDI emit. Pure; a → odo voice contributes nothing
+-- | but does NOT consume an ordinal (only → midi voices are numbered).
+renderMidiAt :: Perf -> Int -> Array VMidiOut
+renderMidiAt perf pulse = (foldl step { ord: 0, out: [] } perf.voices).out
+  where
+  step acc v =
+    if v.dest /= VToMidi then acc
+    else
+      let tagged = map (\e -> { voiceOrd: acc.ord, note: e.note, velocity: e.velocity, durPulses: e.durPulses })
+                     (renderVoiceMidiAt perf.chords v pulse)
+      in { ord: acc.ord + 1, out: acc.out <> tagged }

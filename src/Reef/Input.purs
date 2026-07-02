@@ -28,6 +28,7 @@ module Reef.Input
   , SimState
   , applyInput
   , applyInputs
+  , mkFollowChord
   , Tagged
   , WireInput
   , w0
@@ -142,6 +143,15 @@ data Input
 -- | this tick → identical evolution. The frontend tags with `currentTick + buffer`
 -- | (a small lookahead so both sides receive it first); see the plan, P4.
 type Tagged = { tick :: Int, input :: Input }
+
+-- | Build the `FollowChord` input a → odo Vetula voice feeds Odonus's chord overlay
+-- | (a single pitch-class set turning the overlay on). A tiny constructor helper so
+-- | the BEAM `reef_vetula_voice` can mint the input to send `reef_voice` without
+-- | knowing the ADT's Erlang representation — it just calls
+-- | `reef_input@ps:mkFollowChord(Pcs)` with a reef `Array Int` and hands the result
+-- | to `{apply_input, Tick, Input}`.
+mkFollowChord :: Array Int -> Input
+mkFollowChord pcs = FollowChord (Just pcs)
 
 -- ── the interpreter ──────────────────────────────────────────────────────────
 

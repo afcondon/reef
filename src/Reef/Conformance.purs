@@ -34,15 +34,18 @@ module Reef.Conformance
   , balistesSimRun, balistesSimSteps
   , balistesInputRun, balistesInputSteps
   , fixedRun, fixedRunSteps
+  , vetulaRun, vetulaRunSteps
+  , vetulaMidiRun
+  , chordRun
   ) where
 
 import Prelude
 
-import Data.Array (filter, null, range, snoc, mapWithIndex)
+import Data.Array (filter, length, null, range, snoc, mapWithIndex)
 import Data.Either (Either(..))
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
 import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed) as BSim
@@ -51,10 +54,12 @@ import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (stepTick)
-import Reef.Input (Input(..), SimState, Tagged, applyInput)
+import Reef.Input (Input(..), SimState, Tagged, applyInput, mkFollowChord)
 import Reef.PitchSet (PitchSet(..))
 import Reef.Protocol (decodeInput, decodeSim, encodeInput)
 import Reef.Marbles (Seed, seedFrom, rollValue)
+import Reef.Vetula.Perf (Perf, VDest(..), VRenderer(..), cursorAt, odoCursorAt, odoPcsAt, renderVoiceMidiAt) as VP
+import Reef.Vetula.Protocol (decodePerf, encodePerf) as VP
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -87,6 +92,26 @@ renderFired f =
     <> " r" <> show f.ratchet
     <> " v" <> show f.vel
     <> (if f.glide then " ~" else "")
+
+-- | The chord-quantised render golden — the coverage gap that let a wrong-octave
+-- | bug through (the chord overlay path renders pitches, but no golden exercised it:
+-- | `run` is chord-off, `inputRun` digests cell INDICES not sounding pitches). A → odo
+-- | Vetula feed is simulated with `mkFollowChord` (turning the chord overlay on), then
+-- | 32 steps are rendered showing the SOUNDING pitch. This pins that the chord path
+-- | realizes the cell index to a melodic pitch and snaps it to the nearest chord tone
+-- | (sane octaves), and — via cross-runtime.sh — that node and the BEAM agree on it.
+chordRun :: String
+chordRun =
+  let
+    s0 = applyInput (mkFollowChord [ 0, 4, 7 ])
+      { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1 }
+    final = foldl advance { st: s0, out: [] } (range 1 steps)
+  in
+    intercalate "\n" final.out
+  where
+  advance acc i =
+    let r = stepTick acc.st
+    in { st: r.sim, out: snoc acc.out (renderStep i r.fired) }
 
 -- ── 2. the long generative determinism net ───────────────────────────────────
 
@@ -512,6 +537,84 @@ fixedRun :: String
 fixedRun = case BSim.decodeFixed (BSim.encodeFixed fixedTestPattern) of
   Left errs -> "FIXED-DECODE-FAIL: " <> show errs
   Right p -> intercalate "\n" (map (\i -> evDig i (RFix.renderFixed p i)) (range 0 (fixedRunSteps - 1)))
+
+-- ── 8. the Vetula performance-scheduler net (Vetula lockstep V1) ──────────────
+
+-- | How many absolute pulses (1/16 notes) the Vetula run threads. 128 = 8 bars,
+-- | past the longest voice loop (v0 dwells 2 bars × 4 chords = 8 bars = 128
+-- | pulses), so every voice wraps and every rest/skip shows.
+vetulaRunSteps :: Int
+vetulaRunSteps = 128
+
+-- | A representative performance mirroring the Performance-tab screenshot: a 4-chord
+-- | progression (C E A B) fanned to voices with DIFFERENT per-chord dwell schedules,
+-- | skips, renderers and destinations — block every chord 2 bars, arp skipping E,
+-- | strum only the last chord (4 bars), the → odo conductor one bar each, and a
+-- | phase-offset block to drive the `(pulse + phase)` wrap. The pcs are
+-- | representative (the scheduler is pcs-agnostic); notes carry `playNotes`-shaped
+-- | values so the V2 MIDI path has data to grow into.
+vetulaPerf :: VP.Perf
+vetulaPerf =
+  { chords:
+      [ { pcs: [ 0, 4, 7 ], notes: [ 36, 60, 64, 67 ] }
+      , { pcs: [ 4, 7, 11 ], notes: [ 40, 64, 67, 71 ] }
+      , { pcs: [ 9, 0, 4 ], notes: [ 33, 57, 60, 64 ] }
+      , { pcs: [ 11, 2, 6 ], notes: [ 35, 59, 62, 66 ] }
+      ]
+  , voices:
+      [ { dest: VP.VToMidi, renderer: VP.VBlock, channel: 0, durs: [ 2, 2, 2, 2 ], phase: 0, muted: false }
+      , { dest: VP.VToMidi, renderer: VP.VArp, channel: 1, durs: [ 2, 0, 1, 1 ], phase: 0, muted: false }
+      , { dest: VP.VToMidi, renderer: VP.VStrummed, channel: 2, durs: [ 0, 0, 0, 4 ], phase: 0, muted: false }
+      , { dest: VP.VToOdonus, renderer: VP.VBlock, channel: 3, durs: [ 1, 1, 1, 1 ], phase: 0, muted: false }
+      , { dest: VP.VToMidi, renderer: VP.VBlock, channel: 4, durs: [ 1, 1, 1, 1 ], phase: 8, muted: false }
+      ]
+  }
+
+-- | The Vetula V1 net. The performance is round-tripped THROUGH the codec (encodePerf
+-- | then decodePerf — both reef functions, JS + BEAM) then, at each absolute pulse,
+-- | we record every voice's read-head (`cursorAt`, `-` = resting/skipped) plus the
+-- | → odo conductor's HELD cursor and the pitch-class set it feeds Odonus
+-- | (`odoCursorAt`/`odoPcsAt`, threading the held cursor across rests exactly as the
+-- | frontend's `fromMaybe v.cursor`). Byte-identical node ↔ BEAM proves the whole
+-- | shared scheduler + its codec agree, which is what lets `reef_vetula_voice`
+-- | conduct the rig's Odonus in lockstep with the browser. A decode failure screams.
+vetulaRun :: String
+vetulaRun = case VP.decodePerf (VP.encodePerf vetulaPerf) of
+  Left errs -> "VETULA-DECODE-FAIL: " <> show errs
+  Right perf ->
+    let nCh = length perf.chords
+        final = foldl (advance perf nCh) { cursor: -1, out: [] } (range 0 (vetulaRunSteps - 1))
+    in intercalate "\n" final.out
+  where
+  advance perf nCh acc pulse =
+    let cur = VP.odoCursorAt perf pulse acc.cursor
+        pcs = VP.odoPcsAt perf cur
+        cursors = map (\v -> maybe "-" show (VP.cursorAt nCh v pulse)) perf.voices
+        line = pad4 pulse <> " | " <> intercalate " " cursors
+          <> " | odo" <> show cur <> " [" <> intercalate "," (map show pcs) <> "]"
+    in { cursor: cur, out: snoc acc.out line }
+
+-- ── 9. the Vetula MIDI-render net (Vetula lockstep V2a) ───────────────────────
+
+-- | The V2a net: the shared `renderVoiceMidiAt` (block + arp → gated notes) evaluated
+-- | at each absolute pulse over 128 pulses for the same performance `vetulaRun` uses.
+-- | For each → midi voice we record the notes it sounds this pulse (note/vel/gate in
+-- | pulses). Byte-identical node ↔ BEAM proves the MIDI-render decision agrees on both
+-- | runtimes — so reef_vetula_voice emits the same notes the browser's stepVoice does,
+-- | the self-contained sync leg (no Odonus) validated before wiring the emit. A decode
+-- | failure screams. (Strummed voices render nothing yet — V2b.)
+vetulaMidiRun :: String
+vetulaMidiRun = case VP.decodePerf (VP.encodePerf vetulaPerf) of
+  Left errs -> "VETULA-MIDI-DECODE-FAIL: " <> show errs
+  Right perf ->
+    intercalate "\n" (map (line perf) (range 0 (vetulaRunSteps - 1)))
+  where
+  line perf pulse =
+    pad4 pulse <> " | "
+      <> intercalate " | " (mapWithIndex (\vi v -> voiceCol vi (VP.renderVoiceMidiAt perf.chords v pulse)) perf.voices)
+  voiceCol vi evs =
+    "v" <> show vi <> ":" <> (if null evs then "-" else intercalate "," (map one evs))
+  one e = show e.note <> "/" <> show e.velocity <> "/" <> show (round (e.durPulses * 100.0))
 
 -- ── shared ───────────────────────────────────────────────────────────────────
 
