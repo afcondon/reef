@@ -120,3 +120,42 @@ diff /tmp/reef-simrun-node.txt /tmp/reef-simrun-erl.txt && echo "  ✅ simRun no
 diff "$SIM_GOLDEN" /tmp/reef-simrun-node.txt && echo "  ✅ simRun matches frozen golden"
 
 echo "ALL GREEN — Odonus engine + PitchSet table + generative net + pow probe + input protocol + SimState handoff identical on JS + Erlang, match goldens."
+
+# --- Balistes engine determinism net (Reef.Conformance.balistesRun) ----------
+# PHASE 0 of the Balistes lockstep. The shared `Reef.Balistes.Engine` (Grids core)
+# over 256 steps: X/Y swept across the whole drum-map grid (bilinear interp +
+# tables + u8Mix), perturbations resampled every 32 steps threading one RNG seed
+# through `Reef.Bits.xorshift32` (the FFI 32-bit primitive), and the trigger/accent
+# rule. Byte-identical here = `balistes_voice` can run onto reef_balistes_engine@ps
+# and co-simulate the frontend, retiring the two hand-ports (Triggerfish.Balistes.
+# Engine + balistes_engine.erl) that could silently disagree on the RNG. Pure
+# engine — no simple-json/jsx, so plain `-pa ebin`.
+BAL_GOLDEN="$REEF/conformance/balistes-golden.txt"
+echo "== balistesRun (256-step Grids engine): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { balistesRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(balistesRun);' \
+  ) > /tmp/reef-balistes-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':balistesRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-balistes-erl.txt
+diff /tmp/reef-balistes-node.txt /tmp/reef-balistes-erl.txt && echo "  ✅ balistesRun node == erl (Grids engine + xorshift32 RNG identical over 256 steps)"
+diff "$BAL_GOLDEN" /tmp/reef-balistes-node.txt && echo "  ✅ balistesRun matches frozen golden"
+
+# --- Balistes handoff + shared-render net (Reef.Conformance.balistesSimRun) ---
+# P1 of the Balistes lockstep. A full BalSim (engine state + render overlay)
+# round-tripped through Reef.Balistes.Protocol (encodeBalSim/decodeBalSim), then
+# 128 steps of the shared stepBal digested by what renderStep (open-hat / note /
+# Dilla-push / ratchet / accent) emits. Byte-identical here = the WHOLE shared
+# Balistes path (codec + engine + render) is identical on both runtimes, so
+# reef_balistes_voice co-simulates the frontend from a pushed handoff. Uses the
+# codec, so — like inputRun/simRun — the BEAM needs jsx's ebin on its code path.
+BAL_SIM_GOLDEN="$REEF/conformance/balistes-sim-golden.txt"
+echo "== balistesSimRun (handoff codec + 128-step render): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { balistesSimRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(balistesSimRun);' \
+  ) > /tmp/reef-balsim-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':balistesSimRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-balsim-erl.txt
+diff /tmp/reef-balsim-node.txt /tmp/reef-balsim-erl.txt && echo "  ✅ balistesSimRun node == erl (codec + shared engine + render identical over 128 steps)"
+diff "$BAL_SIM_GOLDEN" /tmp/reef-balsim-node.txt && echo "  ✅ balistesSimRun matches frozen golden"

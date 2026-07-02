@@ -30,15 +30,20 @@ module Reef.Conformance
   , betaProbe
   , inputRun, inputSteps
   , simRun, simSteps
+  , balistesRun, balistesSteps
+  , balistesSimRun, balistesSimSteps
   ) where
 
 import Prelude
 
-import Data.Array (filter, range, snoc, mapWithIndex)
+import Data.Array (filter, null, range, snoc, mapWithIndex)
 import Data.Either (Either(..))
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round)
 import Data.Maybe (Maybe(..))
+import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
+import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
+import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim) as BSim
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (stepTick)
@@ -299,6 +304,103 @@ betaProbe = intercalate "\n" (mapWithIndex probeLine settings)
       | otherwise =
           let r = rollValue cfg cands seed
           in go (k - 1) r.seed (snoc acc r.value)
+
+-- ── 4. the Balistes engine determinism net (Phase 0 of the Balistes lockstep) ─
+
+-- | How many 16th-note steps the Balistes run threads.
+balistesSteps :: Int
+balistesSteps = 256
+
+-- | The Balistes cross-runtime net. `Reef.Balistes.Engine` is the newly-shared
+-- | Grids core, replacing the two hand-ports (`Triggerfish.Balistes.Engine` +
+-- | `balistes_engine.erl`) that could silently disagree on the perturbation RNG.
+-- | This run drives all three of the engine's cross-runtime hazards at once:
+-- |   • `readDrumMap` bilinear interpolation — X sweeps 0..255 and Y at a coprime
+-- |     rate, so every one of the 5×5 drum-map nodes and its fractional weights is
+-- |     hit (exercises `Reef.Balistes.Tables` + `u8Mix`);
+-- |   • `freshPerturbations` — resampled at each 32-step pattern start, threading a
+-- |     single RNG seed through `Reef.Bits.xorshift32` (the FFI 32-bit primitive
+-- |     that is the whole reason this consolidation was needed);
+-- |   • `evaluateStep` — the density threshold + accent rule.
+-- | Every emitted value is a small Int (perturbation bytes 0..255, trigger indices,
+-- | accent flags), so it formats identically on both runtimes; any divergence in
+-- | interpolation, RNG, or the trigger rule surfaces at the offending step. Must be
+-- | byte-identical node ↔ BEAM — that identity is what will let `balistes_voice`
+-- | run onto `reef_balistes_engine@ps` and co-simulate the frontend.
+balistesRun :: String
+balistesRun =
+  let
+    final = foldl advance { rng: 1, perts: [ 0, 0, 0 ], out: [] } (range 0 (balistesSteps - 1))
+  in
+    intercalate "\n" final.out
+  where
+  advance acc i =
+    let
+      x = (i * 5) `mod` 256
+      y = (i * 3) `mod` 256
+      step = i `mod` 32
+      randomness = (i * 7) `mod` 256
+      densities = [ 128, 96 + (i `mod` 64), 160 ]
+      resample = step == 0
+      fp = Bal.freshPerturbations randomness acc.rng
+      perts = if resample then fp.perts else acc.perts
+      rng' = if resample then fp.rng else acc.rng
+      fired = Bal.evaluateStep step x y densities perts
+    in
+      { rng: rng', perts, out: snoc acc.out (balDig i x y perts fired) }
+
+balDig :: Int -> Int -> Int -> Array Int -> Array Bal.Trigger -> String
+balDig i x y perts fired =
+  pad4 i <> " x" <> pad3 x <> " y" <> pad3 y
+    <> " p" <> intercalate "," (map show perts)
+    <> " | " <> (if null fired then "-" else intercalate " " (map glyph fired))
+  where
+  glyph t = show t.inst <> (if t.accent then "!" else "")
+
+-- ── 5. the Balistes handoff + shared-render net (P1 of the Balistes lockstep) ─
+
+-- | How many steps the Balistes handoff run threads.
+balistesSimSteps :: Int
+balistesSimSteps = 128
+
+-- | A non-default handoff state that exercises every render decision: high
+-- | densities (lots of hits), high randomness (perturbations active), a raised
+-- | OPEN dial (HH hats convert to open), a Dilla push (per-lane ms offsets) and
+-- | custom notes. This is the state a frontend would push on Push-to-rig.
+balSimSeed :: BSim.BalSim
+balSimSeed = BSim.defaultBalSim
+  { x = 200, y = 60, densBd = 210, densSd = 180, densHh = 200
+  , randomness = 180, open = 120, push = [ 0, 12, -8, -8 ], notes = [ 36, 40, 42, 46 ] }
+
+-- | The P1 net for Balistes. `balSimSeed` is round-tripped THROUGH the codec
+-- | (encodeBalSim then decodeBalSim — both reef functions, so both compile to JS and
+-- | to the BEAM's `jsx`), then over 128 steps we thread `stepBal` (the shared engine
+-- | tick, incl. the perturbation RNG via Reef.Bits.xorshift32) and digest what
+-- | `renderStep` (the shared open-hat / note / Dilla-push / ratchet / accent decision)
+-- | emits at each played step. Byte-identical node ↔ BEAM proves the WHOLE shared
+-- | Balistes path — codec + engine + render — behaves identically on both runtimes,
+-- | which is exactly what lets `reef_balistes_voice` co-simulate the frontend from a
+-- | pushed handoff. A decode failure screams rather than passing silently.
+balistesSimRun :: String
+balistesSimRun = case BSim.decodeBalSim (BSim.encodeBalSim balSimSeed) of
+  Left errs -> "BAL-SIM-DECODE-FAIL: " <> show errs
+  Right sim0 ->
+    intercalate "\n" (foldl advance { bal: sim0, out: [] } (range 0 (balistesSimSteps - 1))).out
+  where
+  advance acc i =
+    let
+      playedStep = acc.bal.step
+      r = BSim.stepBal acc.bal
+      evs = BSim.renderStep acc.bal playedStep r.fired
+    in
+      { bal: r.bal, out: snoc acc.out (evDig i evs) }
+
+evDig :: Int -> Array { note :: Int, velocity :: Int, pushMs :: Int, durMs :: Number, ratchet :: Int } -> String
+evDig i evs =
+  pad4 i <> " | " <> (if null evs then "-" else intercalate "  " (map one evs))
+  where
+  one e = show e.note <> "/" <> show e.velocity <> "/" <> show e.pushMs
+    <> "/" <> show (round e.durMs) <> "x" <> show e.ratchet
 
 -- ── shared ───────────────────────────────────────────────────────────────────
 
