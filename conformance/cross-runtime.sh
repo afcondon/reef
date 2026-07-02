@@ -177,3 +177,21 @@ echo "== balistesInputRun (200-step tick-tagged input replay): node vs erl =="
   > /tmp/reef-balinput-erl.txt
 diff /tmp/reef-balinput-node.txt /tmp/reef-balinput-erl.txt && echo "  ✅ balistesInputRun node == erl (input protocol + codec identical over 200 steps)"
 diff "$BAL_INPUT_GOLDEN" /tmp/reef-balinput-node.txt && echo "  ✅ balistesInputRun matches frozen golden"
+
+# --- Balistes fixed-rhythm net (Reef.Conformance.fixedRun) --------------------
+# The AFixed lockstep. A hand-written fixed rhythm (conditions, probabilities,
+# ratchets) round-tripped through Reef.Balistes.Protocol (encodeFixed/decodeFixed)
+# and rendered by the shared renderFixed over 8 loops. Byte-identical here = the
+# fixed-rhythm eval (incl. the cellHash multiplications, which rely on NO 32-bit
+# wrap — both runtimes give full precision < 2^53) + its codec behave identically,
+# so reef_balistes_voice plays a pushed fixed rhythm in lockstep. Codec → jsx ebin.
+FIXED_GOLDEN="$REEF/conformance/fixed-golden.txt"
+echo "== fixedRun (128-step fixed rhythm): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { fixedRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(fixedRun);' \
+  ) > /tmp/reef-fixed-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':fixedRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-fixed-erl.txt
+diff /tmp/reef-fixed-node.txt /tmp/reef-fixed-erl.txt && echo "  ✅ fixedRun node == erl (fixed-rhythm eval + codec identical over 128 steps)"
+diff "$FIXED_GOLDEN" /tmp/reef-fixed-node.txt && echo "  ✅ fixedRun matches frozen golden"

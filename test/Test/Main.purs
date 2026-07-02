@@ -9,7 +9,7 @@ import Prelude
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (run, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun)
+import Reef.Conformance (run, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun)
 import Reef.Odonus (defaultOdonus)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
@@ -94,6 +94,14 @@ main = do
   assertEqual' "Balistes input-protocol golden (codec + apply, 200 steps)"
     { actual: balistesInputRun, expected: balistesInputGolden }
   log "Reef Balistes input-protocol golden: OK"
+  -- The Balistes fixed-rhythm net. A representative hand-written pattern (conditions,
+  -- probabilities, ratchets) round-tripped through the codec and rendered by the
+  -- shared renderFixed over 8 loops. The cross-runtime script proves the BEAM
+  -- produces the same bytes, so reef_balistes_voice plays a pushed fixed rhythm in
+  -- lockstep — the AFixed mode, not just Grids.
+  assertEqual' "Balistes fixed-rhythm golden (codec + renderFixed, 128 steps)"
+    { actual: fixedRun, expected: fixedGolden }
+  log "Reef Balistes fixed-rhythm golden: OK"
 
 -- | The frozen render of `Reef.Conformance.run`. Head 0 walks the default
 -- | PitchSet (C minor, cells = discrete indices) — a clean ascending two-octave
@@ -938,3 +946,135 @@ balistesInputGolden = """   0 x128 y128 r  0 o 70 | 36/120/0/30x1
  197 x200 y200 r180 o120 | 36/78/0/30x1  42/78/0/30x1
  198 x200 y200 r180 o120 | 36/78/0/30x1  40/78/12/30x1  46/120/0/200x1
  199 x200 y200 r180 o120 | 36/78/0/30x1  42/78/0/30x1"""
+
+-- | The frozen render of `Reef.Conformance.fixedRun` — a fixed rhythm through the
+-- | codec + renderFixed over 8 loops. Identical node ↔ BEAM.
+fixedGolden :: String
+fixedGolden = """   0 | 36/110/0/55x1  40/70/0/55x1
+   1 | -
+   2 | 40/70/0/55x1
+   3 | -
+   4 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+   5 | -
+   6 | 40/70/0/55x1
+   7 | -
+   8 | 36/110/0/55x1  40/70/0/55x1
+   9 | -
+  10 | 40/70/0/55x1
+  11 | -
+  12 | 36/110/0/55x1  37/100/0/55x3  40/70/0/55x1
+  13 | -
+  14 | 40/70/0/55x1
+  15 | -
+  16 | 36/110/0/55x1  40/70/0/55x1
+  17 | -
+  18 | 40/70/0/55x1
+  19 | -
+  20 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+  21 | -
+  22 | 40/70/0/55x1
+  23 | -
+  24 | 36/110/0/55x1  40/70/0/55x1
+  25 | -
+  26 | 40/70/0/55x1
+  27 | -
+  28 | 36/110/0/55x1  37/100/0/55x3  40/70/0/55x1
+  29 | -
+  30 | 40/70/0/55x1  42/90/0/180x1
+  31 | -
+  32 | 36/110/0/55x1  40/70/0/55x1
+  33 | -
+  34 | 40/70/0/55x1
+  35 | -
+  36 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+  37 | -
+  38 | 40/70/0/55x1
+  39 | -
+  40 | 36/110/0/55x1  40/70/0/55x1
+  41 | -
+  42 | 40/70/0/55x1
+  43 | -
+  44 | 36/110/0/55x1  37/100/0/55x3  40/70/0/55x1
+  45 | -
+  46 | 40/70/0/55x1
+  47 | -
+  48 | 36/110/0/55x1  40/70/0/55x1
+  49 | -
+  50 | 40/70/0/55x1
+  51 | -
+  52 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+  53 | -
+  54 | 40/70/0/55x1
+  55 | -
+  56 | 36/110/0/55x1  40/70/0/55x1
+  57 | -
+  58 | 40/70/0/55x1
+  59 | -
+  60 | 36/110/0/55x1  37/100/0/55x3  40/70/0/55x1
+  61 | -
+  62 | 40/70/0/55x1  42/90/0/180x1
+  63 | -
+  64 | 36/110/0/55x1  40/70/0/55x1
+  65 | -
+  66 | 40/70/0/55x1
+  67 | -
+  68 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+  69 | -
+  70 | 40/70/0/55x1
+  71 | -
+  72 | 36/110/0/55x1  40/70/0/55x1
+  73 | -
+  74 | 40/70/0/55x1
+  75 | -
+  76 | 36/110/0/55x1  37/100/0/55x3  40/70/0/55x1
+  77 | -
+  78 | 40/70/0/55x1
+  79 | -
+  80 | 36/110/0/55x1  40/70/0/55x1
+  81 | -
+  82 | 40/70/0/55x1
+  83 | -
+  84 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+  85 | -
+  86 | 40/70/0/55x1
+  87 | -
+  88 | 36/110/0/55x1  40/70/0/55x1
+  89 | -
+  90 | 40/70/0/55x1
+  91 | -
+  92 | 36/110/0/55x1  37/100/0/55x3  40/70/0/55x1
+  93 | -
+  94 | 40/70/0/55x1  42/90/0/180x1
+  95 | -
+  96 | 36/110/0/55x1  40/70/0/55x1
+  97 | -
+  98 | 40/70/0/55x1
+  99 | -
+ 100 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+ 101 | -
+ 102 | 40/70/0/55x1
+ 103 | -
+ 104 | 36/110/0/55x1  40/70/0/55x1
+ 105 | -
+ 106 | 40/70/0/55x1
+ 107 | -
+ 108 | 36/110/0/55x1  37/100/0/55x3  40/70/0/55x1
+ 109 | -
+ 110 | -
+ 111 | -
+ 112 | 36/110/0/55x1  40/70/0/55x1
+ 113 | -
+ 114 | 40/70/0/55x1
+ 115 | -
+ 116 | 36/110/0/55x1  37/100/0/55x1  40/70/0/55x1
+ 117 | -
+ 118 | 40/70/0/55x1
+ 119 | -
+ 120 | 36/110/0/55x1  40/70/0/55x1
+ 121 | -
+ 122 | 40/70/0/55x1
+ 123 | -
+ 124 | 36/110/0/55x1  37/100/0/55x3
+ 125 | -
+ 126 | 42/90/0/180x1
+ 127 | -"""

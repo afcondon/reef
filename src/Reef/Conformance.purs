@@ -33,6 +33,7 @@ module Reef.Conformance
   , balistesRun, balistesSteps
   , balistesSimRun, balistesSimSteps
   , balistesInputRun, balistesInputSteps
+  , fixedRun, fixedRunSteps
   ) where
 
 import Prelude
@@ -44,8 +45,9 @@ import Data.Int (round)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
-import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged) as BSim
+import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed) as BSim
 import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
+import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (stepTick)
@@ -468,6 +470,48 @@ balInputDig i b evs =
   where
   one e = show e.note <> "/" <> show e.velocity <> "/" <> show e.pushMs
     <> "/" <> show (round e.durMs) <> "x" <> show e.ratchet
+
+-- ── 7. the fixed-rhythm net (Balistes AFixed lockstep) ───────────────────────
+
+-- | How many absolute steps the fixed-rhythm run threads (8 loops of 16 steps, so
+-- | the per-loop trig condition and probability variation both show).
+fixedRunSteps :: Int
+fixedRunSteps = 128
+
+-- | A representative fixed rhythm exercising every eval hazard: BD quarters, SD
+-- | backbeats (one with a ratchet), CH eighths at probability 80 (drives the
+-- | deterministic cellHash — the multiplication path that must agree across
+-- | runtimes), and an OH that fires only every 2nd loop (condX/condY). Notes are the
+-- | GM-ish per-lane defaults; grid built programmatically to stay compact.
+fixedTestPattern :: RFix.FixedPattern
+fixedTestPattern =
+  { steps: 16
+  , notes: map (\l -> 36 + l) (range 0 15)
+  , grid: map laneRow (range 0 15)
+  }
+  where
+  laneRow lane = map (cellFor lane) (range 0 15)
+  cellFor lane step = case lane of
+    0 -> if step `mod` 4 == 0 then hit 110 1 else RFix.emptyCell
+    1 ->
+      if step == 4 then hit 100 1
+      else if step == 12 then hit 100 3
+      else RFix.emptyCell
+    4 -> if step `mod` 2 == 0 then RFix.emptyCell { vel = 70, prob = 80 } else RFix.emptyCell
+    6 -> if step == 14 then RFix.emptyCell { vel = 90, condX = 2, condY = 2 } else RFix.emptyCell
+    _ -> RFix.emptyCell
+  hit v r = RFix.emptyCell { vel = v, ratchet = r }
+
+-- | The fixed-rhythm net. The pattern is round-tripped THROUGH the codec (encodeFixed
+-- | then decodeFixed — both reef functions, JS + BEAM) then rendered at each absolute
+-- | step by the shared `renderFixed`. Byte-identical node ↔ BEAM proves the fixed-
+-- | rhythm eval (incl. the cellHash multiplications + the trig conditions) and its
+-- | codec behave identically — so `reef_balistes_voice` can play a pushed fixed
+-- | rhythm in lockstep. A decode failure screams rather than passing silently.
+fixedRun :: String
+fixedRun = case BSim.decodeFixed (BSim.encodeFixed fixedTestPattern) of
+  Left errs -> "FIXED-DECODE-FAIL: " <> show errs
+  Right p -> intercalate "\n" (map (\i -> evDig i (RFix.renderFixed p i)) (range 0 (fixedRunSteps - 1)))
 
 -- ── shared ───────────────────────────────────────────────────────────────────
 

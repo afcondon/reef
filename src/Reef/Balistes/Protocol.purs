@@ -10,6 +10,8 @@ module Reef.Balistes.Protocol
   , decodeBalSim
   , encodeBTagged
   , decodeBTagged
+  , encodeFixed
+  , decodeFixed
   ) where
 
 import Prelude
@@ -20,6 +22,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (ForeignError(..), MultipleErrors)
 import Reef.Balistes.Input (BTagged, WireBInput, fromWire, toWire)
 import Reef.Balistes.Sim (BalSim)
+import Reef.Balistes.Fixed (FixedPattern)
 import Simple.JSON (readJSON, writeJSON)
 
 -- | Encode the full Balistes simulation state for the handoff push.
@@ -44,3 +47,13 @@ decodeBTagged s = do
   case fromWire r.input of
     Just i -> Right { tick: r.tick, input: i }
     Nothing -> Left (singleton (ForeignError ("Reef.Balistes.Protocol: unknown BInput tag " <> show r.input.tag)))
+
+-- | The fixed-rhythm handoff: the whole `FixedPattern` (already wire-flat — cells
+-- | carry condX/condY, not a `TrigCond` — so simple-json's generic instance covers
+-- | it). The frontend projects its rich pattern onto this and pushes it; the BEAM
+-- | decodes and evals `renderFixed` per step.
+encodeFixed :: FixedPattern -> String
+encodeFixed = writeJSON
+
+decodeFixed :: String -> Either MultipleErrors FixedPattern
+decodeFixed = readJSON
