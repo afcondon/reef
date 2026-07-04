@@ -266,9 +266,15 @@ renderNoteClockMidiAt chords v chordClock noteClock pulse
                Just seg ->
                  let pos = mod (pulse + v.phase) noteClock.loopLen
                  in if pos /= seg.start then []  -- fire once, on the note's onset
-                    else case notes !! mod seg.ix (length notes) of
-                      Just nn -> [ { note: nn, velocity: 80, durPulses: toNumber seg.len * 0.9 } ]
-                      Nothing -> []
+                    else
+                      -- Euclidean-normalised index: positive wraps (0..n-1), NEGATIVE
+                      -- counts from the top (-1 = highest note, size-independent), so a
+                      -- melody line stays on top across chords of different sizes.
+                      let len = length notes
+                          j = mod (mod seg.ix len + len) len
+                      in case notes !! j of
+                        Just nn -> [ { note: nn, velocity: 80, durPulses: toNumber seg.len * 0.9 } ]
+                        Nothing -> []
 
 -- | How long a strummed note sustains from segment `segIx`: the total pulses of the
 -- | consecutive run of segments (no loop wrap) that still contain it, trimmed a hair
