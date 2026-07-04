@@ -27,12 +27,17 @@ module Reef.Vetula.Perf
   , Perf
   , padDurs
   , timeline
+  , Seg
+  , PerfClock
+  , clockOfDurs
   , cursorAt
+  , cursorAtClock
   , firstOdoIx
   , odoCursorAt
   , odoPcsAt
   , VMidiNote
   , renderVoiceMidiAt
+  , renderClockMidiAt
   , VMidiOut
   , renderMidiAt
   ) where
@@ -98,23 +103,47 @@ padDurs n ds = take n (ds <> replicate n 1)
 -- | its cumulative pulse offset. 1 bar = 16 pulses (16th notes). Skipped chords (0
 -- | bars) contribute nothing, so a voice plays only the chords it dwells on. Pure
 -- | integer arithmetic — trivially identical across runtimes.
-timeline :: Array Int -> Array { ix :: Int, start :: Int, len :: Int }
+timeline :: Array Int -> Array Seg
 timeline ds = snd (foldl step (Tuple 0 []) (mapWithIndex Tuple ds))
   where
   step (Tuple off segs) (Tuple i d) =
     if d <= 0 then Tuple off segs
     else Tuple (off + d * 16) (segs <> [ { ix: i, start: off, len: d * 16 } ])
 
+-- | One dwell segment of a voice's read-head: it sits on chord `ix` for `len`
+-- | pulses starting at pulse `start` (within the loop). This is the ONLY thing
+-- | the realiser needs — where the segments come from (a `durs` array, today, or
+-- | a queried Tidal pattern, tomorrow) is not its concern. 16 pulses = 1 bar.
+type Seg = { ix :: Int, start :: Int, len :: Int }
+
+-- | A voice's clock: the loop's segments + its total length in pulses. Everything
+-- | the scheduler does is a pure function of `(pulse + phase) mod loopLen` against
+-- | these segments. `clockOfDurs` reproduces the historical bars-per-chord clock;
+-- | a pattern-driven clock (built frontend-side from the Tidal engine, and — once
+-- | the rig catches up — on the BEAM) is just a different way to fill the SAME
+-- | shape, so the realiser below stays byte-identical across both sources.
+type PerfClock = { segs :: Array Seg, loopLen :: Int }
+
+-- | The historical clock: bars-per-chord `durs` (padded to the chord count) turned
+-- | into cumulative segments, loop = 16 * total bars. `cursorAt`/`renderVoiceMidiAt`
+-- | are exactly `*Clock (clockOfDurs …)`, so nothing about the durs path changes.
+clockOfDurs :: Int -> Array Int -> PerfClock
+clockOfDurs nChords durs =
+  let ds = padDurs nChords durs
+  in { segs: timeline ds, loopLen: 16 * sum ds }
+
 -- | The chord index a voice's read-head is on at this pulse (Nothing if its loop is
 -- | empty or it is resting between dwell segments). The exact frontend function.
 cursorAt :: Int -> VVoice -> Int -> Maybe Int
-cursorAt nChords v pulse =
-  let ds = padDurs nChords v.durs
-      segs = timeline ds
-      loopLen = 16 * sum ds
-  in if loopLen <= 0 then Nothing
-     else let pos = mod (pulse + v.phase) loopLen
-          in _.ix <$> find (\seg -> pos >= seg.start && pos < seg.start + seg.len) segs
+cursorAt nChords v pulse = cursorAtClock (clockOfDurs nChords v.durs) v.phase pulse
+
+-- | The chord index a read-head is on at this pulse, given any clock + phase. The
+-- | clock-source-agnostic core of `cursorAt` — a pattern clock queries here too.
+cursorAtClock :: PerfClock -> Int -> Int -> Maybe Int
+cursorAtClock clock phase pulse =
+  if clock.loopLen <= 0 then Nothing
+  else let pos = mod (pulse + phase) clock.loopLen
+       in _.ix <$> find (\seg -> pos >= seg.start && pos < seg.start + seg.len) clock.segs
 
 -- | Index of the first `→ odo` voice, if any. (V1 conducts one Odonus; multi-Odonus
 -- | routing by `channel`-as-id is a later concern.)
@@ -155,13 +184,21 @@ type VMidiNote =
 -- | computed gate; here it stays silent so block/arp land first.) A muted voice, a
 -- | → odo voice, or a resting pulse produces nothing.
 renderVoiceMidiAt :: Array VChord -> VVoice -> Int -> Array VMidiNote
-renderVoiceMidiAt chords v pulse
+renderVoiceMidiAt chords v pulse =
+  renderClockMidiAt chords v (clockOfDurs (length chords) v.durs) pulse
+
+-- | The clock-source-agnostic core of `renderVoiceMidiAt`: render one pulse of a
+-- | → midi voice against ANY clock (durs-derived today, Tidal-pattern-derived once
+-- | the frontend/BEAM feed one). Block/arp/strum are unchanged — they only ever
+-- | read `clock.segs`, so the same pulse produces the same notes regardless of how
+-- | the segments were computed.
+renderClockMidiAt :: Array VChord -> VVoice -> PerfClock -> Int -> Array VMidiNote
+renderClockMidiAt chords v clock pulse
   | v.muted = []
   | v.dest /= VToMidi = []
   | otherwise =
-      let ds = padDurs (length chords) v.durs
-          segs = timeline ds
-          loopLen = 16 * sum ds
+      let segs = clock.segs
+          loopLen = clock.loopLen
       in
         if loopLen <= 0 then []
         else
