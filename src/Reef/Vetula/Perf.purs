@@ -32,6 +32,8 @@ module Reef.Vetula.Perf
   , clockOfDurs
   , cursorAt
   , cursorAtClock
+  , segAtClock
+  , renderNoteClockMidiAt
   , firstOdoIx
   , odoCursorAt
   , odoPcsAt
@@ -137,13 +139,18 @@ clockOfDurs nChords durs =
 cursorAt :: Int -> VVoice -> Int -> Maybe Int
 cursorAt nChords v pulse = cursorAtClock (clockOfDurs nChords v.durs) v.phase pulse
 
+-- | The segment covering this pulse (with its onset + length), given any clock +
+-- | phase. `Nothing` if the loop is empty or the read-head is resting in a gap.
+segAtClock :: PerfClock -> Int -> Int -> Maybe Seg
+segAtClock clock phase pulse =
+  if clock.loopLen <= 0 then Nothing
+  else let pos = mod (pulse + phase) clock.loopLen
+       in find (\seg -> pos >= seg.start && pos < seg.start + seg.len) clock.segs
+
 -- | The chord index a read-head is on at this pulse, given any clock + phase. The
 -- | clock-source-agnostic core of `cursorAt` — a pattern clock queries here too.
 cursorAtClock :: PerfClock -> Int -> Int -> Maybe Int
-cursorAtClock clock phase pulse =
-  if clock.loopLen <= 0 then Nothing
-  else let pos = mod (pulse + phase) clock.loopLen
-       in _.ix <$> find (\seg -> pos >= seg.start && pos < seg.start + seg.len) clock.segs
+cursorAtClock clock phase pulse = _.ix <$> segAtClock clock phase pulse
 
 -- | Index of the first `→ odo` voice, if any. (V1 conducts one Odonus; multi-Odonus
 -- | routing by `channel`-as-id is a later concern.)
@@ -235,6 +242,33 @@ renderClockMidiAt chords v clock pulse
                     in map (\nn -> { note: nn, velocity: 84, durPulses: strumSustain chords segs segIx nn }) entering
   where
   emptySeg = { ix: 0, start: 0, len: 0 }
+
+-- | Axis-B rendering: a NOTE-index pattern sequences the notes of whichever chord the
+-- | read-head is on. `chordClock` says which chord (its notes are the alphabet, low→
+-- | high); `noteClock` is a second pattern whose segment values are note indices INTO
+-- | that alphabet (wrapping, so a 4-note chord cycles 0..3). At a note-segment onset we
+-- | sound one note, gated for the segment's length — so `0 1 2 3` arps, `3` holds the
+-- | top voice, `[0 1 2 3]*4` is a fast arp. Monophonic for now (one note per pulse);
+-- | polyphonic stacks + non-trivial alphabets are the articulator layer. Muted / → odo
+-- | / resting produces nothing, same as the renderer path.
+renderNoteClockMidiAt :: Array VChord -> VVoice -> PerfClock -> PerfClock -> Int -> Array VMidiNote
+renderNoteClockMidiAt chords v chordClock noteClock pulse
+  | v.muted = []
+  | v.dest /= VToMidi = []
+  | otherwise =
+      case cursorAtClock chordClock v.phase pulse of
+        Nothing -> []
+        Just cix ->
+          let notes = maybe [] (sort <<< _.notes) (chords !! cix)
+          in if null notes then []
+             else case segAtClock noteClock v.phase pulse of
+               Nothing -> []
+               Just seg ->
+                 let pos = mod (pulse + v.phase) noteClock.loopLen
+                 in if pos /= seg.start then []  -- fire once, on the note's onset
+                    else case notes !! mod seg.ix (length notes) of
+                      Just nn -> [ { note: nn, velocity: 80, durPulses: toNumber seg.len * 0.9 } ]
+                      Nothing -> []
 
 -- | How long a strummed note sustains from segment `segIx`: the total pulses of the
 -- | consecutive run of segments (no loop wrap) that still contain it, trimmed a hair
