@@ -34,6 +34,7 @@ module Reef.Vetula.Perf
   , cursorAtClock
   , segAtClock
   , renderNoteClockMidiAt
+  , renderAlphaClockMidiAt
   , firstOdoIx
   , odoCursorAt
   , odoPcsAt
@@ -252,14 +253,24 @@ renderClockMidiAt chords v clock pulse
 -- | polyphonic stacks + non-trivial alphabets are the articulator layer. Muted / → odo
 -- | / resting produces nothing, same as the renderer path.
 renderNoteClockMidiAt :: Array VChord -> VVoice -> PerfClock -> PerfClock -> Int -> Array VMidiNote
-renderNoteClockMidiAt chords v chordClock noteClock pulse
+renderNoteClockMidiAt chords = renderAlphaClockMidiAt (map (sort <<< _.notes) chords)
+
+-- | The articulator-aware core of `renderNoteClockMidiAt`: the note-pattern indexes a
+-- | precomputed **alphabet per chord** (`Reef.Vetula.Articulate.articulate`) rather than
+-- | always the chord's own notes. `renderNoteClockMidiAt` is exactly this with the block
+-- | alphabet (`map (sort <<< _.notes) chords`), so that path is byte-identical; other
+-- | articulators (voice-led lines, …) just hand a different alphabet in. The whole
+-- | timing/onset/wrap logic below is shared, so every articulator sounds through the one
+-- | seam. Muted / → odo / resting produces nothing, same as before.
+renderAlphaClockMidiAt :: Array (Array Int) -> VVoice -> PerfClock -> PerfClock -> Int -> Array VMidiNote
+renderAlphaClockMidiAt alphabets v chordClock noteClock pulse
   | v.muted = []
   | v.dest /= VToMidi = []
   | otherwise =
       case cursorAtClock chordClock v.phase pulse of
         Nothing -> []
         Just cix ->
-          let notes = maybe [] (sort <<< _.notes) (chords !! cix)
+          let notes = fromMaybe [] (alphabets !! cix)
           in if null notes then []
              else case segAtClock noteClock v.phase pulse of
                Nothing -> []
