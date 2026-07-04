@@ -41,6 +41,7 @@ module Reef.Vetula.Perf
   , VMidiNote
   , renderVoiceMidiAt
   , renderClockMidiAt
+  , renderAlphaBlockMidiAt
   , VMidiOut
   , renderMidiAt
   ) where
@@ -201,7 +202,21 @@ renderVoiceMidiAt chords v pulse =
 -- | read `clock.segs`, so the same pulse produces the same notes regardless of how
 -- | the segments were computed.
 renderClockMidiAt :: Array VChord -> VVoice -> PerfClock -> Int -> Array VMidiNote
-renderClockMidiAt chords v clock pulse
+renderClockMidiAt chords = renderAlphaBlockMidiAt (map (sort <<< _.notes) chords)
+
+-- | The articulator-aware core of `renderClockMidiAt`: block / arp / strum sound a
+-- | precomputed **alphabet per chord** (`Reef.Vetula.Articulate.articulate`) rather than
+-- | always the chord's own notes, so the articulator reaches the renderer path too — a
+-- | plain block or strum voice can sound a voice-led line, not just a `♪`-patterned one.
+-- | `renderClockMidiAt` is exactly this with the block alphabet (`map (sort <<< _.notes)
+-- | chords`), so that path is byte-identical.
+-- |
+-- | Strum falls out **principled** here: over a voice-led alphabet, common tones keep the
+-- | SAME MIDI number chord-to-chord, so the `entering` test (in this chord, not the
+-- | previous) already tags them as held — they tie via `strumSustain` while genuinely new
+-- | notes re-attack. The voice-leading IS the held/entering distinction; no lifetime flag.
+renderAlphaBlockMidiAt :: Array (Array Int) -> VVoice -> PerfClock -> Int -> Array VMidiNote
+renderAlphaBlockMidiAt alphabets v clock pulse
   | v.muted = []
   | v.dest /= VToMidi = []
   | otherwise =
@@ -215,7 +230,7 @@ renderClockMidiAt chords v clock pulse
             Nothing -> []
             Just segIx ->
               let seg = fromMaybe emptySeg (segs !! segIx)
-                  notes = maybe [] (sort <<< _.notes) (chords !! seg.ix)
+                  notes = fromMaybe [] (alphabets !! seg.ix)
               in case v.renderer of
                 VBlock ->
                   if pos == seg.start
@@ -237,10 +252,10 @@ renderClockMidiAt chords v clock pulse
                   else
                     let prevNotes =
                           if segIx <= 0 then []
-                          else maybe [] (sort <<< _.notes)
-                                 (chords !! (fromMaybe emptySeg (segs !! (segIx - 1))).ix)
+                          else fromMaybe []
+                                 (alphabets !! (fromMaybe emptySeg (segs !! (segIx - 1))).ix)
                         entering = filter (\nn -> not (elem nn prevNotes)) notes
-                    in map (\nn -> { note: nn, velocity: 84, durPulses: strumSustain chords segs segIx nn }) entering
+                    in map (\nn -> { note: nn, velocity: 84, durPulses: strumSustain alphabets segs segIx nn }) entering
   where
   emptySeg = { ix: 0, start: 0, len: 0 }
 
@@ -288,15 +303,17 @@ renderAlphaClockMidiAt alphabets v chordClock noteClock pulse
                         Nothing -> []
 
 -- | How long a strummed note sustains from segment `segIx`: the total pulses of the
--- | consecutive run of segments (no loop wrap) that still contain it, trimmed a hair
--- | so a re-attack at the loop boundary can't collide with the note-off.
-strumSustain :: Array VChord -> Array { ix :: Int, start :: Int, len :: Int } -> Int -> Int -> Number
-strumSustain chords segs segIx nn = toNumber (go segIx 0) * 0.98
+-- | consecutive run of segments (no loop wrap) whose alphabet still contains it, trimmed
+-- | a hair so a re-attack at the loop boundary can't collide with the note-off. Reads the
+-- | same per-chord alphabets the renderer sounds, so voice-led common tones (identical
+-- | MIDI across chords) sustain correctly.
+strumSustain :: Array (Array Int) -> Array Seg -> Int -> Int -> Number
+strumSustain alphabets segs segIx nn = toNumber (go segIx 0) * 0.98
   where
   go k acc = case segs !! k of
     Nothing -> acc
     Just s ->
-      if elem nn (maybe [] _.notes (chords !! s.ix))
+      if elem nn (fromMaybe [] (alphabets !! s.ix))
         then go (k + 1) (acc + s.len)
         else acc
 
