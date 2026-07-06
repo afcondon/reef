@@ -250,3 +250,20 @@ echo "== vetulaMidiRun (128-pulse block+arp MIDI render): node vs erl =="
   > /tmp/reef-vmidi-erl.txt
 diff /tmp/reef-vmidi-node.txt /tmp/reef-vmidi-erl.txt && echo "  OK vetulaMidiRun node == erl (block+arp MIDI render identical over 128 pulses)"
 diff "$VMIDI_GOLDEN" /tmp/reef-vmidi-node.txt && echo "  OK vetulaMidiRun matches frozen golden"
+
+# --- Stellatus ring re-sequencer (Reef.Conformance.stellatusRun) --------------
+# STELLATUS BEAM WIRING A. The shared Reef.Stellatus.Engine walk (grid-locked arc
+# walk + weighted jumps) + events (per-step /dirt/play bag, glitch-folded speed)
+# over the fixed loop, 96 absolute steps. Uses decodeScene (codec -> jsx), so the
+# BEAM needs jsx's ebin. Byte-identical here = reef_stellatus_voice emits exactly
+# what the browser visualizer walks (the whole cross-runtime wire is one push).
+STELLATUS_GOLDEN="$REEF/conformance/stellatus-golden.txt"
+echo "== stellatusRun (96-step ring walk + glitch + jumps): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { stellatusRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(stellatusRun);' \
+  ) > /tmp/reef-stellatus-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':stellatusRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-stellatus-erl.txt
+diff /tmp/reef-stellatus-node.txt /tmp/reef-stellatus-erl.txt && echo "  OK stellatusRun node == erl (walk + glitch + jumps identical over 96 steps)"
+diff "$STELLATUS_GOLDEN" /tmp/reef-stellatus-node.txt && echo "  OK stellatusRun matches frozen golden"

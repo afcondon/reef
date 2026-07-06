@@ -37,11 +37,12 @@ module Reef.Conformance
   , vetulaRun, vetulaRunSteps
   , vetulaMidiRun
   , chordRun
+  , stellatusRun, stellatusRunSteps
   ) where
 
 import Prelude
 
-import Data.Array (filter, length, null, range, snoc, mapWithIndex)
+import Data.Array (filter, length, null, range, snoc, mapWithIndex, (!!))
 import Data.Either (Either(..))
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round)
@@ -60,6 +61,8 @@ import Reef.Protocol (decodeInput, decodeSim, encodeInput)
 import Reef.Marbles (Seed, seedFrom, rollValue)
 import Reef.Vetula.Perf (Perf, VDest(..), VRenderer(..), cursorAt, odoCursorAt, odoPcsAt, renderVoiceMidiAt) as VP
 import Reef.Vetula.Protocol (decodePerf, encodePerf) as VP
+import Reef.Stellatus.Engine (Scene, walk, walkLen, events) as SE
+import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -615,6 +618,70 @@ vetulaMidiRun = case VP.decodePerf (VP.encodePerf vetulaPerf) of
   voiceCol vi evs =
     "v" <> show vi <> ":" <> (if null evs then "-" else intercalate "," (map one evs))
   one e = show e.note <> "/" <> show e.velocity <> "/" <> show (round (e.durPulses * 100.0))
+
+-- ── 10. the Stellatus ring re-sequencer (Stellatus BEAM wiring A) ─────────────
+
+-- | The Stellatus net: the shared `walk` (grid-locked arc walk + weighted jumps)
+-- | and `events` (per-step `/dirt/play` bag with glitch-folded speed) computed
+-- | over the fixed loop, indexed by `step `mod` walkLen` across 96 absolute steps.
+-- | The scene mirrors Triggerfish's default PLAYER text (bd/sn/hh*2/cp/sn, the
+-- | `# speed "1 1 2 1 0.5"` sampled per arc, `# sometimes rev` + `# rarely
+-- | (# speed 2)`, the jump matrix). Round-tripped through the codec first (a
+-- | decode failure screams). Byte-identical node ↔ BEAM proves reef_stellatus_voice
+-- | emits exactly what the browser visualizer walks. Floats printed as ×100 ints
+-- | so `show Number` can't diverge. Speed is signed (reverse = negative).
+stellatusRunSteps :: Int
+stellatusRunSteps = 96
+
+stellatusScene :: SE.Scene
+stellatusScene =
+  { slots:
+      [ slot "bd" 0.0 0.2 "808bd" 3 0.0 1.0 1.0 1.0
+      , slot "sn" 0.2 0.2 "sn" 4 0.0 1.0 1.0 0.9
+      , slot "hh" 0.4 0.1 "hh27" 6 0.5 1.0 2.0 0.8
+      , slot "hh" 0.5 0.1 "hh27" 6 0.5 1.0 2.0 0.8
+      , slot "cp" 0.6 0.2 "cp" 1 0.0 1.0 1.0 1.0
+      , slot "sn" 0.8 0.2 "sn" 4 0.0 1.0 0.5 0.85
+      ]
+  , glitch:
+      [ { prob: 0.5, kind: 0, amount: 0.0 } -- sometimes rev
+      , { prob: 0.25, kind: 1, amount: 2.0 } -- rarely (# speed 2)
+      ]
+  , jumps:
+      { prob: 0.22
+      , table:
+          [ { from: "bd", targets: [ { name: "sn", weight: 0.6 }, { name: "hh", weight: 0.4 } ] }
+          , { from: "sn", targets: [ { name: "cp", weight: 0.5 }, { name: "bd", weight: 0.5 } ] }
+          , { from: "hh", targets: [ { name: "hh", weight: 0.7 }, { name: "sn", weight: 0.3 } ] }
+          , { from: "cp", targets: [ { name: "bd", weight: 1.0 } ] }
+          ]
+      }
+  , seed: 3
+  }
+  where
+  slot nm on sp s n bg en spd gn =
+    { name: nm, onset: on, span: sp, s, n, begin: bg, end: en, speed: spd, gain: gn }
+
+stellatusRun :: String
+stellatusRun = case SP.decodeScene (SP.encodeScene stellatusScene) of
+  Left errs -> "STELLATUS-DECODE-FAIL: " <> show errs
+  Right scene ->
+    let evs = SE.events scene
+        wk = SE.walk scene
+        len = SE.walkLen (length scene.slots)
+    in intercalate "\n" (map (line evs wk len) (range 0 (stellatusRunSteps - 1)))
+  where
+  line evs wk len step =
+    let li = step `mod` len
+        from = maybe "-" show (join (map _.from (wk !! li)))
+    in pad4 step <> " | li" <> pad3 li <> " from" <> from <> " | " <> evCol (evs !! li)
+  evCol = case _ of
+    Nothing -> "-"
+    Just e ->
+      e.s <> ":" <> show e.n
+        <> " sp" <> show (round (e.speed * 100.0))
+        <> " b" <> show (round (e.begin * 100.0)) <> " e" <> show (round (e.end * 100.0))
+        <> " g" <> show (round (e.gain * 100.0))
 
 -- ── shared ───────────────────────────────────────────────────────────────────
 
