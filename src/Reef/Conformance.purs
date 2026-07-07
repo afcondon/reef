@@ -636,11 +636,17 @@ stellatusRunSteps = 96
 stellatusScene :: SE.Scene
 stellatusScene =
   { slots:
+      -- a couple of slots carry the optional tranche so the golden proves it
+      -- crosses the wire byte-identically (cut/legato/accelerate/pan on the snare,
+      -- crush/coarse on the clap, cutoff/resonance on a hat).
       [ slot "bd" 0.0 0.2 "808bd" 3 0.0 1.0 1.0 1.0
-      , slot "sn" 0.2 0.2 "sn" 4 0.0 1.0 1.0 0.9
-      , slot "hh" 0.4 0.1 "hh27" 6 0.5 1.0 2.0 0.8
+      , (slot "sn" 0.2 0.2 "sn" 4 0.0 1.0 1.0 0.9)
+          { cut = 1.0, legato = 0.5, accelerate = 0.3, pan = 0.2 }
+      , (slot "hh" 0.4 0.1 "hh27" 6 0.5 1.0 2.0 0.8)
+          { cutoff = 1200.0, resonance = 0.4, pan = 0.8 }
       , slot "hh" 0.5 0.1 "hh27" 6 0.5 1.0 2.0 0.8
-      , slot "cp" 0.6 0.2 "cp" 1 0.0 1.0 1.0 1.0
+      , (slot "cp" 0.6 0.2 "cp" 1 0.0 1.0 1.0 1.0)
+          { crush = 4.0, coarse = 8.0 }
       , slot "sn" 0.8 0.2 "sn" 4 0.0 1.0 0.5 0.85
       ]
   , glitch:
@@ -660,7 +666,9 @@ stellatusScene =
   }
   where
   slot nm on sp s n bg en spd gn =
-    { name: nm, onset: on, span: sp, s, n, begin: bg, end: en, speed: spd, gain: gn }
+    { name: nm, onset: on, span: sp, s, n, begin: bg, end: en, speed: spd, gain: gn
+    , cut: 0.0, legato: 0.0, accelerate: 0.0, pan: -1.0
+    , crush: 0.0, coarse: 0.0, cutoff: 0.0, resonance: 0.0 }
 
 stellatusRun :: String
 stellatusRun = case SP.decodeScene (SP.encodeScene stellatusScene) of
@@ -682,6 +690,12 @@ stellatusRun = case SP.decodeScene (SP.encodeScene stellatusScene) of
         <> " sp" <> show (round (e.speed * 100.0))
         <> " b" <> show (round (e.begin * 100.0)) <> " e" <> show (round (e.end * 100.0))
         <> " g" <> show (round (e.gain * 100.0))
+        -- optional tranche: only printed when set, so unset slots keep short lines.
+        <> opt "cut" e.cut <> opt "leg" e.legato <> opt "acc" e.accelerate
+        <> (if e.pan >= 0.0 then " pan" <> show (round (e.pan * 100.0)) else "")
+        <> opt "cru" e.crush <> opt "coa" e.coarse
+        <> opt "cf" e.cutoff <> opt "res" e.resonance
+  opt label v = if v /= 0.0 then " " <> label <> show (round (v * 100.0)) else ""
 
 -- ── shared ───────────────────────────────────────────────────────────────────
 

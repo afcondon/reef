@@ -41,8 +41,15 @@ import Reef.Marbles (Seed, nextRand, seedFrom)
 
 -- | One arc of the ring, fully resolved by the frontend: its ring placement
 -- | (`onset`/`span`, for the visualizer's identity/colour) and its SuperDirt
--- | payload (`s`/`n` sample, `begin`/`end` window, base `speed`, `gain`). All
--- | primitives, so the whole `Scene` is wire-ready with no enum projection.
+-- | payload (`s`/`n` sample, `begin`/`end` window, base `speed`, `gain`, plus the
+-- | slice-surgery tranche below). All primitives, so the whole `Scene` is
+-- | wire-ready with no enum projection.
+-- |
+-- | The optional tranche uses concrete off-sentinels (NOT Maybe — the wire stays
+-- | ADT-free so simple-json/jsx round-trip identically on both runtimes): `pan`
+-- | off = -1.0 (valid pan is 0..1), everything else off = 0.0. The BEAM voice
+-- | gates each on its sentinel, so a scene that sets none of them emits exactly
+-- | the proven base `/dirt/play` bag.
 type Slot =
   { name :: String
   , onset :: Number
@@ -53,6 +60,14 @@ type Slot =
   , end :: Number
   , speed :: Number
   , gain :: Number
+  , cut :: Number         -- choke group; 0 = none
+  , legato :: Number      -- sustain as a multiple of step; 0 = natural length
+  , accelerate :: Number  -- speed ramp across the slice; 0 = none
+  , pan :: Number         -- stereo position 0..1; -1 = unset (centre)
+  , crush :: Number       -- bitcrush depth; 0 = off
+  , coarse :: Number      -- sample-rate reduction; 0 = off (1 = no-op)
+  , cutoff :: Number      -- low-pass frequency in Hz; 0 = off
+  , resonance :: Number   -- low-pass resonance 0..1; 0 = off
   }
 
 -- | A stochastic per-hit warp. `kind` 0 = reverse (flip speed sign), 1 = speed
@@ -79,9 +94,12 @@ type Scene =
 -- | after glitch.
 type Emit = { slot :: Int, from :: Maybe Int, speed :: Number }
 
--- | A SuperDirt `/dirt/play` param bag. `orbit`/`cps` are added by the voice.
+-- | A SuperDirt `/dirt/play` param bag. `orbit`/`cps` are added by the voice; the
+-- | optional tranche carries its off-sentinels through and the voice gates them.
 type DirtEvent =
-  { s :: String, n :: Int, begin :: Number, end :: Number, speed :: Number, gain :: Number }
+  { s :: String, n :: Int, begin :: Number, end :: Number, speed :: Number, gain :: Number
+  , cut :: Number, legato :: Number, accelerate :: Number, pan :: Number
+  , crush :: Number, coarse :: Number, cutoff :: Number, resonance :: Number }
 
 -- | Loop length: four passes of the ring, clamped to a sane window. Fixed so the
 -- | BEAM indexes by `step `mod` walkLen`.
@@ -146,8 +164,14 @@ glitchFold acc rule =
 -- | `s` (the voice skips it) so `events` stays index-aligned with `walk`.
 dirtOf :: Scene -> Emit -> DirtEvent
 dirtOf scene e = case scene.slots !! e.slot of
-  Just sl -> { s: sl.s, n: sl.n, begin: sl.begin, end: sl.end, speed: e.speed, gain: sl.gain }
-  Nothing -> { s: "", n: 0, begin: 0.0, end: 1.0, speed: 1.0, gain: 0.0 }
+  Just sl ->
+    { s: sl.s, n: sl.n, begin: sl.begin, end: sl.end, speed: e.speed, gain: sl.gain
+    , cut: sl.cut, legato: sl.legato, accelerate: sl.accelerate, pan: sl.pan
+    , crush: sl.crush, coarse: sl.coarse, cutoff: sl.cutoff, resonance: sl.resonance }
+  Nothing ->
+    { s: "", n: 0, begin: 0.0, end: 1.0, speed: 1.0, gain: 0.0
+    , cut: 0.0, legato: 0.0, accelerate: 0.0, pan: -1.0
+    , crush: 0.0, coarse: 0.0, cutoff: 0.0, resonance: 0.0 }
 
 -- | The whole loop as `/dirt/play` bags — what the BEAM voice indexes per tick.
 events :: Scene -> Array DirtEvent
