@@ -9,10 +9,7 @@ module Reef.Odonus
   , Head
   , Odonus
   , ChordSeq
-  , numChordTable
-  , chordNameAt
   , currentChordPCs
-  , setChordPicks
   , setChordFeed
   , followChord
   , tickChord
@@ -66,7 +63,7 @@ module Reef.Odonus
   , setPitchSet
   , clearPitchSet
   , cellIndexMax
-  , cellPitch
+  , cellLabel
   , cycleRoot
   , cycleScaleType
   , numRandScales
@@ -90,8 +87,7 @@ import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
-import Reef.PitchSet (realize, realizeEqual) as PS
-import Harmonia.Chord (Chord(..), Mode(Ionian), mcmullenYellow, mcmullenYellowNames, realize)
+import Reef.PitchSet (realizeEqual) as PS
 
 type Cell =
   { note :: Int
@@ -151,9 +147,8 @@ type Head =
 -- | its own clock: `phase` counts model steps and rolls `ix` every `period`.
 type ChordSeq =
   { on :: Boolean
-  , picks :: Array Int      -- four indices into the McMullen Yellow table
-  , feed :: Array (Array Int) -- external progression as explicit PC sets (0-11);
-                              -- when non-empty it OVERRIDES picks (the Vetula feed)
+  , feed :: Array (Array Int) -- the progression as explicit PC sets (0-11), the
+                              -- Vetula feed; empty when the overlay is off
   , ix :: Int               -- current position in the progression
   , phase :: Int            -- model steps since the chord last advanced
   , period :: Int           -- steps per chord (its own clock, related to main)
@@ -245,43 +240,29 @@ clearPitchSet o = o { pitchSet = Nothing }
 cellIndexMax :: Odonus -> Int
 cellIndexMax o = max 1 (o.span * cardinality (effectivePitchSet o)) - 1
 
--- | The MIDI pitch a cell index realizes to in this voice's set (ignoring per-head
--- | transpose / octave) — for the UI to label a cell with its sounding note, which
--- | re-colours live as the set changes.
-cellPitch :: Odonus -> Int -> Int
-cellPitch o ix = PS.realize (effectivePitchSet o) (clampI 0 (cellIndexMax o) ix)
+-- | The MIDI pitch a cell's KNOB currently labels: the two-stage pipeline WITHOUT
+-- | the per-head offset or global octave (`voiceLabel`) — equal-map the knob over
+-- | the scale to its melodic home, then colour it by the active chord if one is
+-- | firing. Re-colours live as the harmony moves (the Ciani "same pattern,
+-- | recoloured" made visible). The note ABSENT downstream offsets.
+cellLabel :: Odonus -> Int -> Int
+cellLabel o knob =
+  let h = PS.realizeEqual (effectivePitchSet o) o.span knobMax (clampI 0 knobMax knob)
+  in if o.chord.on then quantiseToChordPCs (currentChordPCs o) h else h
 
--- | How many chords the table offers, and a chord's display name.
-numChordTable :: Int
-numChordTable = length mcmullenYellow
-
-chordNameAt :: Int -> String
-chordNameAt ix = fromMaybe "?" (mcmullenYellowNames !! ix)
-
--- | The pitch classes (0..11) of the chord at the progression's current
--- | position. A non-empty `feed` (e.g. a Vetula progression) wins — its PC sets
--- | are absolute and used verbatim; otherwise the picked McMullen chord is
--- | realised against the current root in Ionian (so it transposes with the key).
+-- | The pitch classes (0..11) of the chord at the feed's current position. The
+-- | feed (a Vetula progression) is absolute and used verbatim; an empty feed
+-- | means no colour (the overlay is off).
 currentChordPCs :: Odonus -> Array Int
-currentChordPCs o
-  | not (null o.chord.feed) = fromMaybe [] (o.chord.feed !! o.chord.ix)
-  | otherwise =
-      case mcmullenYellow !! fromMaybe 0 (o.chord.picks !! o.chord.ix) of
-        Just dc -> case realize { tonic: o.rootPc, mode: Ionian } dc of Chord pcs -> pcs
-        Nothing -> []
+currentChordPCs o = fromMaybe [] (o.chord.feed !! o.chord.ix)
 
--- | How long the active progression is (the feed when present, else the picks).
+-- | How long the active progression (the Vetula feed) is.
 chordSeqLen :: ChordSeq -> Int
-chordSeqLen c = if null c.feed then length c.picks else length c.feed
-
--- | Replace the four-chord progression (the chord randomiser's output). Clears
--- | any external feed, handing control back to the McMullen table.
-setChordPicks :: Array Int -> Odonus -> Odonus
-setChordPicks ps o = o { chord = o.chord { picks = ps, feed = [], ix = 0, phase = 0 } }
+chordSeqLen c = length c.feed
 
 -- | Drive the quantiser from an external progression of explicit PC sets (the
 -- | Vetula feed): adopt it, restart at its head, and switch the overlay on so
--- | it's audible immediately. An empty feed clears it back to the McMullen path.
+-- | it's audible immediately. An empty feed clears it and turns the overlay off.
 setChordFeed :: Array (Array Int) -> Odonus -> Odonus
 setChordFeed pcs o =
   o { chord = o.chord { feed = pcs, ix = 0, phase = 0, on = not (null pcs) || o.chord.on } }
@@ -374,10 +355,10 @@ defaultCells =
   mapWithIndex (\i _ -> { note: (i * knobMax) / 15, skip: false, gate: true, glide: false, dur: 1, ratchet: 1, vel: 100 })
     (replicate 16 unit)
 
--- | The prototype progression: ii7 – V7 – Imaj7 – vi9, a ii–V–I–vi from the
--- | McMullen Yellow table (indices 15, 10, 12, 13).
+-- | The chord overlay starts off, with an empty feed (a Vetula progression fills
+-- | it). `period` is the feed's own advance clock (steps per chord).
 defaultChord :: ChordSeq
-defaultChord = { on: false, picks: [ 15, 10, 12, 13 ], feed: [], ix: 0, phase: 0, period: 16 }
+defaultChord = { on: false, feed: [], ix: 0, phase: 0, period: 16 }
 
 defaultOdonus :: Odonus
 defaultOdonus =

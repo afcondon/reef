@@ -47,13 +47,13 @@ import Data.Foldable (foldl)
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Traversable (traverse)
-import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, rollChords, seedMelody, setAmt, setRate, toggleGen)
+import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, seedMelody, setAmt, setRate, toggleGen)
 import Reef.Marbles (Seed)
 import Reef.Odonus
-  ( Odonus, numChordTable
+  ( Odonus
   , clearPitchSet, cyclePattern, cycleRoot, cycleScaleType, fanOffsets, followChord
   , nudgeOffsets, setAllNotes, setCellDur, setCellRatchet, setCellVel, setChordFeed
-  , setChordPeriod, setChordPicks, setDegShift, setGatePct, setHeadDir, setHeadEuclidSteps
+  , setChordPeriod, setDegShift, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleChord, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
@@ -115,8 +115,7 @@ data Input
   | SetGatePct Int
   | SetPitchSet PitchSet
   | ClearPitchSet
-  -- chord overlay
-  | SetChordPicks (Array Int)
+  -- chord overlay (the Vetula feed)
   | SetChordFeed (Array (Array Int))
   | FollowChord (Maybe (Array Int))
   | ToggleChord
@@ -136,7 +135,6 @@ data Input
   | SetGenBias Int
   -- one-shot rolls (thread the shared seed)
   | RollAllNotes
-  | RollChords
   | SeedMelody
 
 -- | A tick-tagged input: apply it on tick `tick`. Both runtimes apply at exactly
@@ -197,7 +195,6 @@ applyInput = case _ of
   SetGatePct n -> onOdo (setGatePct n)
   SetPitchSet ps -> onOdo (setPitchSet ps)
   ClearPitchSet -> onOdo clearPitchSet
-  SetChordPicks ps -> onOdo (setChordPicks ps)
   SetChordFeed pcs -> onOdo (setChordFeed pcs)
   FollowChord mpcs -> onOdo (followChord mpcs)
   ToggleChord -> onOdo toggleChord
@@ -215,9 +212,6 @@ applyInput = case _ of
   RollAllNotes -> \s ->
     let r = rollAllNotes s.spread s.bias s.odo s.seed
     in s { odo = r.odo, seed = r.seed }
-  RollChords -> \s ->
-    let r = rollChords numChordTable s.seed
-    in s { odo = setChordPicks r.picks s.odo, seed = r.seed }
   SeedMelody -> \s ->
     let r = seedMelody [] s.odo s.seed
     in s { odo = r.odo, seed = r.seed }
@@ -285,7 +279,6 @@ toWire = case _ of
   SetGatePct n -> w0 { tag = "SetGatePct", a = n }
   SetPitchSet ps -> w0 { tag = "SetPitchSet", ps = Just ps }
   ClearPitchSet -> w0 { tag = "ClearPitchSet" }
-  SetChordPicks ps -> w0 { tag = "SetChordPicks", ns = ps }
   SetChordFeed pcs -> w0 { tag = "SetChordFeed", pcs = pcs }
   FollowChord mpcs -> w0 { tag = "FollowChord", pcs = case mpcs of
                                                          Just pcs -> [ pcs ]
@@ -303,7 +296,6 @@ toWire = case _ of
   SetGenSpread m -> w0 { tag = "SetGenSpread", a = m }
   SetGenBias m -> w0 { tag = "SetGenBias", a = m }
   RollAllNotes -> w0 { tag = "RollAllNotes" }
-  RollChords -> w0 { tag = "RollChords" }
   SeedMelody -> w0 { tag = "SeedMelody" }
 
 -- | Reconstruct an `Input` from the wire record. `Nothing` on an unknown tag (or
@@ -342,7 +334,6 @@ fromWire w = case w.tag of
   "SetGatePct" -> Just (SetGatePct w.a)
   "SetPitchSet" -> map SetPitchSet w.ps
   "ClearPitchSet" -> Just ClearPitchSet
-  "SetChordPicks" -> Just (SetChordPicks w.ns)
   "SetChordFeed" -> Just (SetChordFeed w.pcs)
   "FollowChord" -> Just (FollowChord (w.pcs !! 0))
   "ToggleChord" -> Just ToggleChord
@@ -358,7 +349,6 @@ fromWire w = case w.tag of
   "SetGenSpread" -> Just (SetGenSpread w.a)
   "SetGenBias" -> Just (SetGenBias w.a)
   "RollAllNotes" -> Just RollAllNotes
-  "RollChords" -> Just RollChords
   "SeedMelody" -> Just SeedMelody
   _ -> Nothing
 

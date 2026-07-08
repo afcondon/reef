@@ -32,7 +32,6 @@ module Reef.Gen
   , GenInput
   , runGen
   , rollAllNotes
-  , rollChords
   , seedMelody
   ) where
 
@@ -263,17 +262,6 @@ rollAllNotes
 rollAllNotes spread bias odo seed =
   let m = Marbles.mutateInts { spread, bias, amount: 1.0 } (range 0 M.knobMax) (map _.note odo.cells) seed
   in { odo: M.setNotes m.values odo, seed: m.seed }
-
--- | Draw four random chord indices from a table of `tableSize` — a fresh
--- | four-chord progression for the KEY·CHORDS quantiser.
-rollChords :: Int -> Marbles.Seed -> { picks :: Array Int, seed :: Marbles.Seed }
-rollChords tableSize = go 4 []
-  where
-  go n acc seed
-    | n <= 0 = { picks: acc, seed }
-    | otherwise =
-        let { n: ix, seed: seed' } = Marbles.nextInt tableSize seed
-        in go (n - 1) (acc <> [ ix ]) seed'
 
 -- | Seed a plausible melody: 16 random knob values across the voice's range. The
 -- | pipeline equal-maps each knob onto the scale, so every draw is in-harmony by

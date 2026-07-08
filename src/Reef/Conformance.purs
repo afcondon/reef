@@ -192,7 +192,7 @@ inputSteps = 400
 -- | A scripted lockstep session: a tick-tagged stream of user actions covering
 -- | every `Input` family — cell/head setters, the quantizer, the chord overlay,
 -- | the Reichian macros, gen-source config + the Marbles pad, and the three
--- | seed-threading rolls (RollAllNotes / RollChords / SeedMelody). Several land on
+-- | seed-threading rolls (RollAllNotes / SeedMelody). Several land on
 -- | the same tick (a batch). Enabling GNotes at tick 30 also folds the one
 -- | transcendental (`pow`, via the Beta) into the long run. These are the inputs
 -- | a frontend would broadcast; here both runtimes replay them in lockstep.
@@ -212,7 +212,6 @@ inputScript =
   , { tick: 75, input: CyclePattern 0 }
   , { tick: 90, input: SetChordFeed [ [ 0, 4, 7 ], [ 2, 5, 9 ] ] }
   , { tick: 90, input: ToggleChord }
-  , { tick: 110, input: RollChords }
   , { tick: 130, input: FollowChord (Just [ 0, 3, 7 ]) }
   , { tick: 150, input: ClearPitchSet }
   , { tick: 150, input: SeedMelody }
