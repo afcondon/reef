@@ -61,6 +61,7 @@ module Reef.Odonus
   , nudgeOffsets
   , scaleOf
   , renderCell
+  , knobMax
   , effectivePitchSet
   , setPitchSet
   , clearPitchSet
@@ -87,9 +88,9 @@ import Data.Array (catMaybes, elem, filter, findIndex, mapWithIndex, null, repli
 import Data.Foldable (foldl)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Reef.Scale (Scale, Distribution(..), applyDistribution, mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, shiftDegrees, spreadIvls)
+import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
-import Reef.PitchSet (realize) as PS
+import Reef.PitchSet (realize, realizeEqual) as PS
 import Harmonia.Chord (Chord(..), Mode(Ionian), mcmullenYellow, mcmullenYellowNames, realize)
 
 type Cell =
@@ -180,39 +181,46 @@ scaleOf o = mkScaleFromIvls o.rootPc o.scaleIvls
 scaleTypeName :: Odonus -> String
 scaleTypeName o = recogniseScale o.scaleIvls
 
--- | Render a cell's stored integer to its final MIDI pitch for a given head.
--- | One snap to a SINGLE pitch source (the reframe): the chromatic knob-values
--- | (cell + per-head transpose) map to ONE pitch-set.
+-- | Render a cell's stored knob to its final MIDI pitch for a given head — the
+-- | two-stage pipeline of `Harmonia.Voice` / `docs/PLAN-odonus-pitch-pipeline.md`,
+-- | built from reef's own primitives so it stays conformance-identical node↔BEAM.
 -- |
--- | When an external source drives — a chord progression or a followed Vetula
--- | voice (`chord.on`) — the chromatic value snaps DIRECTLY to the nearest tone
--- | of the current chord across octaves. No scale pre-snap and no scalar
--- | transpose (both are scale-degree notions, meaningless off-scale), so a Vetula
--- | voice's borrowed / out-of-scale tones and key changes are reached AS-IS.
+-- |   q1 (EQUAL, over the SCALE): the raw knob `cell.note` (0..`knobMax`) maps by
+-- |   equal spacing across `span` periods of the scale to a scale tone at real
+-- |   register — the `home` note. This is the STABLE MELODIC SHAPE: the scale is
+-- |   ALWAYS the index source, so a chord change never rewrites the melody.
 -- |
--- | Otherwise the scale is the lens: the cell is read through the distribution,
--- | head-transposed and re-snapped to the scale, then shifted by whole scale
--- | degrees. Global octave applies in both cases.
+-- |   + per-head CHROMATIC offset (`transp`, ±semitones), fired into the constraint.
+-- |
+-- |   q2 (NEAREST): snap to the active set — the current chord if the overlay is on
+-- |   (a Vetula feed / picked progression), else the scale itself (a no-op on an
+-- |   untransposed home, by the fixed-point law). The chord COLOURS the melody at
+-- |   the end; because nearest is local, the register follows the melody, never
+-- |   jumps to the chord's own octave.
+-- |
+-- |   + global octave shift (`octaveShift`·12 semitones), moving every voice
+-- |   together — applied AFTER the snap, so it is a literal octave, not re-snapped.
+-- |
+-- | A spread of per-head chromatic offsets makes voices land on different chord
+-- | tones (voice-spread, axis 3) with no special-casing. Scalar transpose
+-- | (`degShift`) is retired from the pipeline (key transposition lives upstream).
 renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
-    -- Index-space realization (project_reef_quantisation_realize): the cell holds a
-    -- DISCRETE INDEX into the voice's PitchSet, bounded by span; per-voice (transp,
-    -- fine) + global (degShift fine, octaveShift coarse = ±period) offsets sum in,
-    -- then realize ONCE. Octaves emerge from the set's tiling, not a +12.
-    let ps = effectivePitchSet o
-        n = cardinality ps
-        baseIx = clampI 0 (max 1 (o.span * n) - 1) c.note
-        index = baseIx + hd.transp + o.degShift + o.octaveShift * n
-        pitch = PS.realize ps index
-    in
-      -- The chord overlay (a Vetula → odo feed / picked progression) QUANTISES that
-      -- realized melodic pitch to the nearest current chord tone, fanning across
-      -- octaves. It snaps the SOUNDING pitch (not the raw index), so octaves stay sane
-      -- and octaveShift still works — unlike the pre-index-space path, which treated
-      -- the cell index as a chromatic note and blew the octave up.
-      if o.chord.on
-        then quantiseToChordPCs (currentChordPCs o) pitch
-        else pitch
+    let scaleSet = effectivePitchSet o
+        home = PS.realizeEqual scaleSet o.span knobMax c.note
+        target = home + hd.transp
+        snapped =
+          if o.chord.on
+            then quantiseToChordPCs (currentChordPCs o) target
+            else quantiseToScale (scaleOf o) target
+    in snapped + o.octaveShift * 12
+
+-- | The raw NOTE-knob ceiling. Cells hold a value in `0..knobMax`, shown on the
+-- | knob face; the label shows what it currently quantises to. Fixed (independent
+-- | of the set's cardinality), so the knob range never collapses when a small
+-- | chord fires — the register the knob sweeps is `span` periods of the scale.
+knobMax :: Int
+knobMax = 255
 
 -- | The PitchSet the cells realize through: explicit if set (a Vetula feed or a
 -- | pushed record), else derived from the scale fields (standalone). This is why
@@ -359,9 +367,11 @@ defaultHeads =
   , mkHead 3 2 3 true 2        -- IV:  Columns, 0.75× pend +3
   ]
 
+-- | Cells hold raw knob values now (0..`knobMax`), so the default spreads the 16
+-- | steps evenly across the register (a rising line) rather than 0..15.
 defaultCells :: Array Cell
 defaultCells =
-  mapWithIndex (\i _ -> { note: i, skip: false, gate: true, glide: false, dur: 1, ratchet: 1, vel: 100 })
+  mapWithIndex (\i _ -> { note: (i * knobMax) / 15, skip: false, gate: true, glide: false, dur: 1, ratchet: 1, vel: 100 })
     (replicate 16 unit)
 
 -- | The prototype progression: ii7 – V7 – Imaj7 – vi9, a ii–V–I–vi from the

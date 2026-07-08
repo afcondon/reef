@@ -218,8 +218,9 @@ rerollNotes n bias spread odo seed
   | n <= 0 = { odo, seed }
   | otherwise =
       let { n: i, seed: s1 } = Marbles.nextInt 16 seed
-          -- cells are indices into the voice's PitchSet now (0 .. span·N−1).
-          r = Marbles.rollValue { bias, spread } (range 0 (M.cellIndexMax odo)) s1
+          -- cells hold raw knob values now (0 .. knobMax); the pipeline equal-maps
+          -- them over the scale, so every draw is a musical melodic shape.
+          r = Marbles.rollValue { bias, spread } (range 0 M.knobMax) s1
       in rerollNotes (n - 1) bias spread (M.setNote i r.value odo) r.seed
 
 -- | Flip `n` random head bits, never landing on all-voices-off: an empty mask
@@ -260,7 +261,7 @@ rollAllNotes
   :: Number -> Number -> M.Odonus -> Marbles.Seed
   -> { odo :: M.Odonus, seed :: Marbles.Seed }
 rollAllNotes spread bias odo seed =
-  let m = Marbles.mutateInts { spread, bias, amount: 1.0 } (range 0 (M.cellIndexMax odo)) (map _.note odo.cells) seed
+  let m = Marbles.mutateInts { spread, bias, amount: 1.0 } (range 0 M.knobMax) (map _.note odo.cells) seed
   in { odo: M.setNotes m.values odo, seed: m.seed }
 
 -- | Draw four random chord indices from a table of `tableSize` — a fresh
@@ -274,13 +275,14 @@ rollChords tableSize = go 4 []
         let { n: ix, seed: seed' } = Marbles.nextInt tableSize seed
         in go (n - 1) (acc <> [ ix ]) seed'
 
--- | Seed a plausible melody: 16 random cell indices across the voice's set. In
--- | index space every index is in-harmony by construction (the set IS the
--- | harmony), so the old pitch-class filter is gone — the line reads as musical
--- | because the set does. `pcs` is no longer needed (kept for call-site stability).
+-- | Seed a plausible melody: 16 random knob values across the voice's range. The
+-- | pipeline equal-maps each knob onto the scale, so every draw is in-harmony by
+-- | construction (the scale IS the harmony) — the old pitch-class filter is gone,
+-- | the line reads as musical because the scale does. `pcs` is no longer needed
+-- | (kept for call-site stability).
 seedMelody :: Array Int -> M.Odonus -> Marbles.Seed -> { odo :: M.Odonus, seed :: Marbles.Seed }
 seedMelody _ odo seed0 =
-  let hi = M.cellIndexMax odo
+  let hi = M.knobMax
       pick acc _ =
         let { n: i, seed } = Marbles.nextInt (hi + 1) acc.seed
         in { values: acc.values <> [ i ], seed }
