@@ -44,6 +44,7 @@ module Reef.Vetula.Perf
   , renderAlphaBlockMidiAt
   , VMidiOut
   , renderMidiAt
+  , midiChannels
   ) where
 
 import Prelude
@@ -341,3 +342,11 @@ renderMidiAt perf pulse = (foldl step { ord: 0, out: [] } perf.voices).out
       let tagged = map (\e -> { voiceOrd: acc.ord, note: e.note, velocity: e.velocity, durPulses: e.durPulses })
                      (renderVoiceMidiAt perf.chords v pulse)
       in { ord: acc.ord + 1, out: acc.out <> tagged }
+
+-- | The pushed MIDI channel of each → midi voice, in the SAME order `renderMidiAt`
+-- | assigns `voiceOrd` (VToMidi voices in `voices` order, muted or not). The rig indexes
+-- | this by `voiceOrd` to place each note on the channel the browser chose — so both
+-- | runtimes honour one routing map instead of a rig-local channel list. Pure, and NOT
+-- | in the conformance digest (channel is routing, not note-generation).
+midiChannels :: Perf -> Array Int
+midiChannels perf = map _.channel (filter (\v -> v.dest == VToMidi) perf.voices)
