@@ -128,6 +128,11 @@ type Head =
                          -- runtimes and serialises identically in state snapshots (a
                          -- Number diverges in JSON formatting JS vs BEAM — cf the seed).
   , pendStep :: Int
+  , etick :: Int    -- Euclidean phase: a free-running per-base-tick counter (0..esteps-1).
+                    -- The Euclidean rhythm CLOCKS the advance — the melody steps to the
+                    -- next cell only on a pulse of E(pulses, esteps), so no cell is
+                    -- skipped; `etick` is what samples the rhythm each tick, distinct
+                    -- from `seqPos` (which now only moves on a pulse).
   , speedIx :: Int
   , direction :: Int
   , transp :: Int
@@ -334,7 +339,7 @@ replicate16 = replicate 16
 
 mkHead :: Int -> Int -> Int -> Boolean -> Int -> Head
 mkHead speedIx direction transp mute patternIx =
-  { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1
+  { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
   , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16 }
 
 -- | Head I runs (Rows, 1.0×); II–IV start muted with distinct patterns + fugue
@@ -414,26 +419,56 @@ stepSeq order cells len dir st = case dir of
     in
       { pos: nextSeq order cells len st.pos ns, pend: ns }
 
-advanceSeqN :: Array Int -> Array Cell -> Int -> Dir -> Int -> { pos :: Int, pend :: Int } -> { pos :: Int, pend :: Int }
-advanceSeqN order cells len dir n st
+-- | Run `n` base ticks. The Euclidean rhythm CLOCKS the melodic advance: on each
+-- | tick that lands on a pulse of E(pulses, esteps) the head steps to its next
+-- | (skip-aware, direction-aware) cell; a rest tick holds. `et` advances every
+-- | tick — it samples the rhythm — while `pos` only moves on a pulse, so no cell
+-- | is skipped past silently.
+advanceEuclid
+  :: Array Int -> Array Cell -> Int -> Dir -> Int -> Int -> Int
+  -> { pos :: Int, pend :: Int, et :: Int } -> { pos :: Int, pend :: Int, et :: Int }
+advanceEuclid order cells len dir pulses es n st
   | n <= 0 = st
-  | otherwise = advanceSeqN order cells len dir (n - 1) (stepSeq order cells len dir st)
+  | otherwise =
+      let stepped = if euclidHit pulses es st.et
+                      then stepSeq order cells len dir { pos: st.pos, pend: st.pend }
+                      else { pos: st.pos, pend: st.pend }
+      in advanceEuclid order cells len dir pulses es (n - 1)
+           { pos: stepped.pos, pend: stepped.pend, et: (st.et + 1) `mod` es }
 
 advanceHead :: Array Cell -> Head -> Head
 advanceHead cells h =
   let
     order = orderOf h.patternIx
     len = clampI 1 16 h.len
-    -- Exact integer phase: accumulate 1/8-step units, whole steps are the integer
-    -- quotient, the carry is the remainder. (Both ≥ 0, so div/mod are unsigned.)
+    es = clampI 1 16 h.esteps
+    -- Exact integer phase: accumulate 1/8-step units, whole base ticks are the
+    -- integer quotient, the carry is the remainder. (Both ≥ 0 ⇒ unsigned div/mod.)
     newAcc = h.accumulator + speedNumOf h
-    steps = newAcc `div` stepDenom
+    ticks = newAcc `div` stepDenom
     remain = newAcc `mod` stepDenom
-    r = advanceSeqN order cells len (decodeDir h.direction) steps { pos: h.seqPos, pend: h.pendStep }
+    r = advanceEuclid order cells len (decodeDir h.direction) h.pulses es ticks
+          { pos: h.seqPos, pend: h.pendStep, et: h.etick }
   in
     h { seqPos = r.pos
       , cursor = gridAt order (modPos (r.pos + h.offset) len)
-      , accumulator = remain, pendStep = r.pend }
+      , accumulator = remain, pendStep = r.pend, etick = r.et }
+
+-- | Did this head land on a Euclidean pulse during this model step? Recomputes the
+-- | same `ticks` window `advanceHead` runs, over the PRE-step `etick`/`accumulator`
+-- | — true iff any of those base ticks is a pulse (so the head advanced + should
+-- | sound). Speed < 1 with no whole tick ⇒ no pulse ⇒ the head holds.
+pulsedThisStep :: Head -> Boolean
+pulsedThisStep h =
+  let es = clampI 1 16 h.esteps
+      ticks = (h.accumulator + speedNumOf h) `div` stepDenom
+  in anyPulse h.pulses es h.etick ticks
+
+anyPulse :: Int -> Int -> Int -> Int -> Boolean
+anyPulse pulses es et n
+  | n <= 0 = false
+  | euclidHit pulses es et = true
+  | otherwise = anyPulse pulses es ((et + 1) `mod` es) (n - 1)
 
 step :: Odonus -> Odonus
 step o = o { heads = map (advanceHead o.cells) o.heads }
@@ -447,22 +482,20 @@ cursorsOf o = map _.cursor o.heads
 type Fired =
   { headIdx :: Int, pitch :: Int, glide :: Boolean, dur :: Int, ratchet :: Int, vel :: Int }
 
--- | Advance one tick and report what fired: an unmuted head that MOVED onto a
--- | gated, non-skipped cell emits its note. (A head that didn't advance this
--- | tick — speed < 1 — holds, it doesn't retrigger.)
+-- | Advance one tick and report what fired: an unmuted head that landed on a
+-- | Euclidean PULSE this tick sounds the cell it advanced onto. The Euclidean
+-- | rhythm clocks the advance (see `advanceEuclid`), so every pulse both moves the
+-- | melody one cell and sounds it — no cell is skipped past silently. A head whose
+-- | tick was a rest (or whose speed < 1 gave no whole tick) holds and stays quiet.
 stepEmit :: Odonus -> { odo :: Odonus, fired :: Array Fired }
 stepEmit o =
   let
-    oldCursors = map _.cursor o.heads
+    oldHeads = o.heads
     o2 = step o
     firedFor idx hd =
-      let moved = hd.cursor /= fromMaybe (-1) (oldCursors !! idx)
-          -- This voice's own Euclidean clock: only steps that land on a pulse of
-          -- E(pulses, esteps) trigger. esteps is independent of len, so the
-          -- Euclidean period can phase against the loop. pulses ≥ esteps ⇒ every step.
-          pulse = euclidHit hd.pulses (clampI 1 16 hd.esteps) hd.seqPos
+      let pulsed = maybe false pulsedThisStep (oldHeads !! idx)
       in case o2.cells !! hd.cursor of
-        Just c | moved && pulse && not hd.mute && c.gate && not c.skip ->
+        Just c | pulsed && not hd.mute && c.gate && not c.skip ->
           Just { headIdx: idx, pitch: renderCell o2 hd c, glide: c.glide
                , dur: c.dur, ratchet: c.ratchet, vel: c.vel }
         _ -> Nothing
