@@ -61,7 +61,7 @@ data GenKind
   | GLen        -- drift one cell's note length ±1
   | GRatchet    -- occasionally ratchet a step (biased toward few rolls), like GLen
   | GHeads      -- walk the active-playhead combination (one bit on the 4-cube)
-  | GTransp     -- nudge one head's scalar transpose
+  | GTransp     -- nudge one head's chromatic interval (per-head ±semitones, voice-spread) — NOT the global scale-degree DEGREE (`degShift`)
   | GPattern    -- advance one head's access pattern
   | GSpeed      -- nudge one head's speed
   | GKey        -- shift key by a fifth, change mode, or toggle a scale note
