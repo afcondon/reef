@@ -22,6 +22,7 @@ module Reef.PitchSet
   , realize
   , equalIndex
   , realizeEqual
+  , realizeEqualShift
   , scaleToPitchSet
   ) where
 
@@ -30,7 +31,6 @@ import Prelude
 import Data.Array (length, (!!))
 import Data.Int (floor, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Ord (clamp)
 import Reef.Scale (Scale(..))
 import Simple.JSON (class ReadForeign, class WriteForeign, readImpl, writeImpl)
 
@@ -79,8 +79,15 @@ equalIndex slots inMax v =
 -- | The whole front mapping: input value -> index (flat-equal over
 -- | `spanPeriods` periods) -> realized MIDI pitch.
 realizeEqual :: PitchSet -> Int -> Int -> Int -> Int
-realizeEqual ps spanPeriods inMax v =
-  realize ps (equalIndex (spanPeriods * cardinality ps) inMax v)
+realizeEqual ps spanPeriods inMax v = realizeEqualShift ps spanPeriods inMax 0 v
+
+-- | `realizeEqual` with a scale-DEGREE transpose: `degShift` indices are added to
+-- | the equal-mapped index before realizing, so the whole melody moves by that
+-- | many set-degrees (a scalar transpose in the set's own space, not chromatic).
+-- | `degShift = 0` is exactly `realizeEqual` — so it's a no-op at the default.
+realizeEqualShift :: PitchSet -> Int -> Int -> Int -> Int -> Int
+realizeEqualShift ps spanPeriods inMax degShift v =
+  realize ps (equalIndex (spanPeriods * cardinality ps) inMax v + degShift)
 
 -- | A `Reef.Scale` is the degenerate octave-periodic PitchSet — proving the
 -- | generalisation: its intervals are the offsets, its period the tiling.

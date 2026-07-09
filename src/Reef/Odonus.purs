@@ -87,7 +87,7 @@ import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
-import Reef.PitchSet (realizeEqual) as PS
+import Reef.PitchSet (realizeEqualShift) as PS
 
 type Cell =
   { note :: Int
@@ -203,11 +203,15 @@ scaleTypeName o = recogniseScale o.scaleIvls
 -- |
 -- | A spread of per-head chromatic offsets makes voices land on different chord
 -- | tones (voice-spread, axis 3) with no special-casing. Scalar transpose
--- | (`degShift`) is retired from the pipeline (key transposition lives upstream).
+-- | (`degShift`) shifts the equal-mapped INDEX before realizing — the whole
+-- | melody moves by that many scale-degrees, in index space, so it stays a
+-- | scalar (in-set) transpose ahead of the chord snap. `degShift = 0` is a
+-- | no-op, so the untransposed pipeline (and the conformance goldens) are
+-- | byte-identical.
 renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
     let scaleSet = effectivePitchSet o
-        home = PS.realizeEqual scaleSet o.span knobMax c.note
+        home = PS.realizeEqualShift scaleSet o.span knobMax o.degShift c.note
         target = home + hd.transp
         snapped =
           if o.chord.on
@@ -256,7 +260,7 @@ cellIndexMax o = max 1 (o.span * cardinality (effectivePitchSet o)) - 1
 cellLabel :: Odonus -> Int -> Int
 cellLabel o knob =
   let
-    h = PS.realizeEqual (effectivePitchSet o) o.span knobMax (clampI 0 knobMax knob)
+    h = PS.realizeEqualShift (effectivePitchSet o) o.span knobMax o.degShift (clampI 0 knobMax knob)
     coloured = if o.chord.on then quantiseToChordPCs (currentChordPCs o) h else h
   in coloured + o.octaveShift * 12
 
