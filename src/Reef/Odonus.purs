@@ -591,13 +591,19 @@ nudgeHeadPulses h d = editHead h \hd -> hd { pulses = clampI 0 16 (hd.pulses + d
 
 -- | Set a head's Euclidean step-count (STEPS) — the n in E(pulses, n). Independent
 -- | of the loop length, so the Euclidean rhythm can phase against the pattern.
+-- | Pulses are clamped down to the new step-count so k never exceeds n: shrinking
+-- | n to below k must lower k with it, or the display (which shows `min k n`) and
+-- | the model drift apart and a later k− has to burn off the hidden surplus first.
 setHeadEuclidSteps :: Int -> Int -> Odonus -> Odonus
-setHeadEuclidSteps h v = editHead h \hd -> hd { esteps = clampI 1 16 v }
+setHeadEuclidSteps h v = editHead h \hd ->
+  let n = clampI 1 16 v in hd { esteps = n, pulses = min hd.pulses n }
 
 -- | Nudge a head's Euclidean step-count by a signed delta (clamped 1..16).
 -- | RELATIVE, like `nudgeHeadPulses`, so click bursts accumulate under buffering.
+-- | Same k ≤ n clamp as `setHeadEuclidSteps` — n− carries k down with it.
 nudgeHeadEuclidSteps :: Int -> Int -> Odonus -> Odonus
-nudgeHeadEuclidSteps h d = editHead h \hd -> hd { esteps = clampI 1 16 (hd.esteps + d) }
+nudgeHeadEuclidSteps h d = editHead h \hd ->
+  let n = clampI 1 16 (hd.esteps + d) in hd { esteps = n, pulses = min hd.pulses n }
 
 -- | Is step `i` a pulse of the even Euclidean rhythm E(pulses, steps)? 0 pulses
 -- | is silent; pulses ≥ steps is every step; otherwise pulses spread evenly.
