@@ -65,11 +65,14 @@ data GenKind
   | GPattern    -- advance one head's access pattern
   | GSpeed      -- nudge one head's speed
   | GKey        -- shift key by a fifth, change mode, or toggle a scale note
+  | GVel        -- drift one cell's base velocity ±  (accent movement)
 
 derive instance eqGenKind :: Eq GenKind
 
+-- Appended so the wire codes (kindCode = genKinds index) of the existing kinds
+-- stay stable when GVel joins.
 genKinds :: Array GenKind
-genKinds = [ GNotes, GGate, GSkip, GGlide, GLen, GRatchet, GHeads, GTransp, GPattern, GSpeed, GKey ]
+genKinds = [ GNotes, GGate, GSkip, GGlide, GLen, GRatchet, GHeads, GTransp, GPattern, GSpeed, GKey, GVel ]
 
 -- | One source's stored config: enabled, a rate index 0..`rateMax` (→ firing
 -- | period via `periodOf`), and an `amt` 0..100 giving the mutation DEPTH —
@@ -84,6 +87,7 @@ genDefaultRate :: GenKind -> Int
 genDefaultRate = case _ of
   GLen -> 72
   GRatchet -> 72
+  GVel -> 72
   _ -> 96
 
 -- | A source's initial mutation depth (0..100). Chosen so a single source,
@@ -208,6 +212,14 @@ applyGen kind spread bias amt odo seed =
               in { odo: M.setRandScale ix odo, seed: s2 }
          else let { n: dir, seed: s2 } = Marbles.nextInt 2 s1
               in { odo: M.setRoot (odo.rootPc + (if dir == 0 then 7 else 5)) odo, seed: s2 }
+    -- Drift one cell's base velocity ± a depth-scaled amount (accent movement).
+    -- Exact integer arithmetic, mirroring GLen — so it is part of the golden.
+    GVel ->
+      let mag = 1 + round (amt01 * 30.0)   -- ±1..±31
+          { n: i, seed: s1 } = Marbles.nextInt 16 seed
+          { n: d, seed: s2 } = Marbles.nextInt 2 s1
+          cur = maybe 100 _.vel (odo.cells !! i)
+      in { odo: M.setCellVel i (cur + (if d == 0 then -mag else mag)) odo, seed: s2 }
 
 -- | Reroll `n` random cells from the Beta distribution, threading the seed.
 rerollNotes
