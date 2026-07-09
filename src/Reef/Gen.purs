@@ -112,7 +112,20 @@ rateMax = 200
 periodOf :: Int -> Int
 periodOf r =
   let rr = if r < 0 then 0 else if r > rateMax then rateMax else r
-  in max 1 (round (pow 16384.0 (toNumber rr / toNumber rateMax)))
+      raw = max 1 (round (pow 16384.0 (toNumber rr / toNumber rateMax)))
+  in quantizePeriod raw
+
+-- | Snap a firing period to a 4-step grid above the fast end (periods 1..4 stay
+-- | exact, for fine chaos control). The geometric rate would otherwise land on
+-- | arbitrary numbers (…11, 16, 23…); snapping to multiples of 4 lets the control
+-- | settle on round, commensurate values (4·8·12·16…) that share a step grid — so
+-- | the several sources' random changes coincide more often, and you can actually
+-- | land on a precise period. Display and firing both read `periodOf`, so they stay
+-- | consistent (firing stays probabilistic: 1/period per step, not a hard grid).
+quantizePeriod :: Int -> Int
+quantizePeriod p
+  | p <= 4 = p
+  | otherwise = 4 * max 1 (round (toNumber p / 4.0))
 
 -- | Flip a source's enable.
 toggleGen :: GenKind -> Array GenSource -> Array GenSource
