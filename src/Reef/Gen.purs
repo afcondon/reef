@@ -147,12 +147,18 @@ type GenInput =
   , bias :: Number
   , odo :: M.Odonus
   , seed :: Marbles.Seed
+  , frozen :: Boolean   -- when true, runGen is a no-op (generation paused)
   }
 
 -- | Run every enabled source once over this step, threading the seed. Each
 -- | source fires with probability 1/period; a firing applies one notch.
 runGen :: GenInput -> { odo :: M.Odonus, seed :: Marbles.Seed }
-runGen inp = foldl stepSrc { odo: inp.odo, seed: inp.seed } inp.gen
+runGen inp
+  -- Frozen: generation paused. Return the state (and seed) untouched — the config
+  -- is preserved, and because BOTH runtimes freeze on the same synced step, the
+  -- seed stays in lockstep (it simply doesn't advance while frozen).
+  | inp.frozen = { odo: inp.odo, seed: inp.seed }
+  | otherwise = foldl stepSrc { odo: inp.odo, seed: inp.seed } inp.gen
   where
   stepSrc acc src =
     if not src.on then acc

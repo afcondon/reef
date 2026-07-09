@@ -43,7 +43,7 @@ type SimState = GenInput
 stepTick :: SimState -> { sim :: SimState, fired :: Array Fired }
 stepTick s =
   let
-    g = runGen { gen: s.gen, spread: s.spread, bias: s.bias, odo: s.odo, seed: s.seed }
+    g = runGen { gen: s.gen, spread: s.spread, bias: s.bias, odo: s.odo, seed: s.seed, frozen: s.frozen }
     o1 = if g.odo.chord.on then tickChord g.odo else g.odo
     r = stepEmit o1
   in

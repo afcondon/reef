@@ -74,6 +74,7 @@ type SimState =
   , spread :: Number
   , bias :: Number
   , seed :: Seed
+  , frozen :: Boolean   -- generation paused (runGen is a no-op); config untouched
   }
 
 -- ── the input surface ────────────────────────────────────────────────────────
@@ -136,6 +137,7 @@ data Input
   -- Marbles pad (per-mille on the wire → Number in state)
   | SetGenSpread Int
   | SetGenBias Int
+  | SetFrozen Boolean          -- pause / resume ALL generation (config preserved)
   -- one-shot rolls (thread the shared seed)
   | RollAllNotes
   | SeedMelody
@@ -214,6 +216,7 @@ applyInput = case _ of
   SetAmt k v -> onGen (setAmt k v)
   SetGenSpread m -> \s -> s { spread = toNumber m / 1000.0 }
   SetGenBias m -> \s -> s { bias = toNumber m / 1000.0 }
+  SetFrozen b -> \s -> s { frozen = b }
   RollAllNotes -> \s ->
     let r = rollAllNotes s.spread s.bias s.odo s.seed
     in s { odo = r.odo, seed = r.seed }
@@ -302,6 +305,7 @@ toWire = case _ of
   SetAmt k v -> w0 { tag = "SetAmt", a = kindCode k, b = v }
   SetGenSpread m -> w0 { tag = "SetGenSpread", a = m }
   SetGenBias m -> w0 { tag = "SetGenBias", a = m }
+  SetFrozen b -> w0 { tag = "SetFrozen", a = if b then 1 else 0 }
   RollAllNotes -> w0 { tag = "RollAllNotes" }
   SeedMelody -> w0 { tag = "SeedMelody" }
 
@@ -357,6 +361,7 @@ fromWire w = case w.tag of
   "SetAmt" -> map (\k -> SetAmt k w.b) (kindOf w.a)
   "SetGenSpread" -> Just (SetGenSpread w.a)
   "SetGenBias" -> Just (SetGenBias w.a)
+  "SetFrozen" -> Just (SetFrozen (w.a /= 0))
   "RollAllNotes" -> Just RollAllNotes
   "SeedMelody" -> Just SeedMelody
   _ -> Nothing
@@ -382,6 +387,7 @@ type WireSim =
   , biasMille :: Int
   , odo :: Odonus
   , seedInt :: Int
+  , frozen :: Boolean
   }
 
 toWireSim :: SimState -> WireSim
@@ -391,6 +397,7 @@ toWireSim s =
   , biasMille: round (s.bias * 1000.0)
   , odo: s.odo
   , seedInt: round s.seed
+  , frozen: s.frozen
   }
 
 -- | `Nothing` if any gen-kind code is unresolvable (a corrupt handoff);
@@ -406,4 +413,5 @@ fromWireSim w = do
     , bias: toNumber w.biasMille / 1000.0
     , odo: w.odo
     , seed: toNumber w.seedInt
+    , frozen: w.frozen
     }
