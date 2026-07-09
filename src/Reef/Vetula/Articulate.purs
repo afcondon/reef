@@ -23,6 +23,12 @@
 -- |                    the newcomers in and `♪ 0` picks just the lowest new note. (A
 -- |                    chord all of whose notes are held has an empty alphabet — silence,
 -- |                    which is musically honest: nothing new to articulate.)
+-- |   * `AShell`     — just the lowest `shellSize` notes of the chord (`take n . sort`).
+-- |                    A deliberately THIN pad: the bottom of the voicing (bass + a couple
+-- |                    of low voices) instead of the full extended stack, so the colour
+-- |                    tones are left UNSTATED — a chord-follow voice (Odonus) can then
+-- |                    reveal them without the pad pre-empting the surprise. The quantiser
+-- |                    feed still carries the full chord, so only what SOUNDS is thinned.
 -- |
 -- | `featureVoice` (solo one line) is already reachable as `AVoiceLead` + `♪ 0`/`♪ -1`,
 -- | so it needs no constructor. `walkingBass`/`counterMelody` (time-varying *within* a
@@ -43,7 +49,7 @@ module Reef.Vetula.Articulate
 
 import Prelude
 
-import Data.Array (filter, length, mapWithIndex, nub, range, scanl, sort, uncons, updateAt, (!!))
+import Data.Array (filter, length, mapWithIndex, nub, range, scanl, sort, take, uncons, updateAt, (!!))
 import Data.Foldable (elem, foldl, maximum, minimumBy)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Harmonia.Chord (Chord(..))
@@ -54,9 +60,14 @@ import Reef.Vetula.Perf (VChord)
 -- | (`ABlock`), a fixed-N voice-led line carried through the loop (`AVoiceLead`), or just
 -- | the notes entering each chord (`AEntering`). Carried on the frontend voice (SOLO);
 -- | reef only needs the alphabet it produces, so `VVoice`/the wire shape are untouched.
-data VArticulator = ABlock | AVoiceLead | AEntering
+data VArticulator = ABlock | AVoiceLead | AEntering | AShell
 
 derive instance eqVArticulator :: Eq VArticulator
+
+-- | How many of the lowest notes `AShell` keeps — a low shell, fuller than a bare
+-- | root (`♪ 0`) but far thinner than the whole voicing.
+shellSize :: Int
+shellSize = 3
 
 -- | The alphabet (ordered low→high notes) each chord presents, one array per progression
 -- | chord in order. See the module note for each articulator.
@@ -70,6 +81,7 @@ articulate AEntering chords =
           Just prev -> sort (filter (\n -> not (elem n prev)) notes)
           Nothing -> notes)   -- first chord (i = 0): everything enters
        vl
+articulate AShell chords = map (take shellSize <<< sort <<< _.notes) chords
 
 -- | Short UI label for the articulator button.
 articLabel :: VArticulator -> String
@@ -77,13 +89,15 @@ articLabel = case _ of
   ABlock -> "block"
   AVoiceLead -> "voice-led"
   AEntering -> "entering"
+  AShell -> "shell"
 
 -- | Cycle to the next articulator (the UI's one-button vocabulary).
 nextArtic :: VArticulator -> VArticulator
 nextArtic = case _ of
   ABlock -> AVoiceLead
   AVoiceLead -> AEntering
-  AEntering -> ABlock
+  AEntering -> AShell
+  AShell -> ABlock
 
 -- ---------------------------------------------------------------------------
 -- Voice-leading, forced to a fixed voice count
