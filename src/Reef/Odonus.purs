@@ -245,15 +245,20 @@ clearPitchSet o = o { pitchSet = Nothing }
 cellIndexMax :: Odonus -> Int
 cellIndexMax o = max 1 (o.span * cardinality (effectivePitchSet o)) - 1
 
--- | The MIDI pitch a cell's KNOB currently labels: the two-stage pipeline WITHOUT
--- | the per-head offset or global octave (`voiceLabel`) — equal-map the knob over
--- | the scale to its melodic home, then colour it by the active chord if one is
--- | firing. Re-colours live as the harmony moves (the Ciani "same pattern,
--- | recoloured" made visible). The note ABSENT downstream offsets.
+-- | The MIDI pitch a cell's KNOB currently labels: equal-map the knob over the
+-- | scale to its melodic home, colour it by the active chord if one is firing,
+-- | then add the GLOBAL octave shift so the label tracks the register you hear.
+-- | Re-colours live as the harmony moves (the Ciani "same pattern, recoloured"
+-- | made visible). Still ABSENT the per-head chromatic offset (`transp`), which
+-- | differs per head and so can't be shown on a single shared cell — the label is
+-- | the shared melodic home, in the played octave. Display-only (not `renderCell`,
+-- | so outside the conformance surface).
 cellLabel :: Odonus -> Int -> Int
 cellLabel o knob =
-  let h = PS.realizeEqual (effectivePitchSet o) o.span knobMax (clampI 0 knobMax knob)
-  in if o.chord.on then quantiseToChordPCs (currentChordPCs o) h else h
+  let
+    h = PS.realizeEqual (effectivePitchSet o) o.span knobMax (clampI 0 knobMax knob)
+    coloured = if o.chord.on then quantiseToChordPCs (currentChordPCs o) h else h
+  in coloured + o.octaveShift * 12
 
 -- | The pitch classes (0..11) of the chord at the feed's current position. The
 -- | feed (a Vetula progression) is absolute and used verbatim; an empty feed
