@@ -52,7 +52,8 @@ import Reef.Marbles (Seed)
 import Reef.Odonus
   ( Odonus
   , clearPitchSet, cyclePattern, cycleRoot, cycleScaleType, fanOffsets, followChord
-  , nudgeOffsets, setAllNotes, setCellDur, setCellRatchet, setCellVel, setChordFeed
+  , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
+  , setAllNotes, setCellDur, setCellRatchet, setCellVel, setChordFeed
   , setChordPeriod, setDegShift, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
@@ -99,6 +100,8 @@ data Input
   | SetHeadLen Int Int
   | SetHeadPulses Int Int
   | SetHeadEuclidSteps Int Int
+  | NudgeHeadPulses Int Int        -- head, signed delta (relative — accumulates under buffering)
+  | NudgeHeadEuclidSteps Int Int   -- head, signed delta
   | ToggleHeadMute Int
   | SetHeadMask Int
   | CyclePattern Int
@@ -180,6 +183,8 @@ applyInput = case _ of
   SetHeadLen h v -> onOdo (setHeadLen h v)
   SetHeadPulses h v -> onOdo (setHeadPulses h v)
   SetHeadEuclidSteps h v -> onOdo (setHeadEuclidSteps h v)
+  NudgeHeadPulses h d -> onOdo (nudgeHeadPulses h d)
+  NudgeHeadEuclidSteps h d -> onOdo (nudgeHeadEuclidSteps h d)
   ToggleHeadMute h -> onOdo (toggleHeadMute h)
   SetHeadMask m -> onOdo (setHeadMask m)
   CyclePattern h -> onOdo (cyclePattern h)
@@ -264,6 +269,8 @@ toWire = case _ of
   SetHeadLen h v -> w0 { tag = "SetHeadLen", a = h, b = v }
   SetHeadPulses h v -> w0 { tag = "SetHeadPulses", a = h, b = v }
   SetHeadEuclidSteps h v -> w0 { tag = "SetHeadEuclidSteps", a = h, b = v }
+  NudgeHeadPulses h d -> w0 { tag = "NudgeHeadPulses", a = h, b = d }
+  NudgeHeadEuclidSteps h d -> w0 { tag = "NudgeHeadEuclidSteps", a = h, b = d }
   ToggleHeadMute h -> w0 { tag = "ToggleHeadMute", a = h }
   SetHeadMask m -> w0 { tag = "SetHeadMask", a = m }
   CyclePattern h -> w0 { tag = "CyclePattern", a = h }
@@ -319,6 +326,8 @@ fromWire w = case w.tag of
   "SetHeadLen" -> Just (SetHeadLen w.a w.b)
   "SetHeadPulses" -> Just (SetHeadPulses w.a w.b)
   "SetHeadEuclidSteps" -> Just (SetHeadEuclidSteps w.a w.b)
+  "NudgeHeadPulses" -> Just (NudgeHeadPulses w.a w.b)
+  "NudgeHeadEuclidSteps" -> Just (NudgeHeadEuclidSteps w.a w.b)
   "ToggleHeadMute" -> Just (ToggleHeadMute w.a)
   "SetHeadMask" -> Just (SetHeadMask w.a)
   "CyclePattern" -> Just (CyclePattern w.a)

@@ -42,6 +42,8 @@ module Reef.Odonus
   , setHeadLen
   , setHeadPulses
   , setHeadEuclidSteps
+  , nudgeHeadPulses
+  , nudgeHeadEuclidSteps
   , setCellRatchet
   , setCellVel
   , euclidHit
@@ -581,10 +583,21 @@ setHeadLen h v = editHead h \hd -> hd { len = clampI 1 16 v }
 setHeadPulses :: Int -> Int -> Odonus -> Odonus
 setHeadPulses h v = editHead h \hd -> hd { pulses = clampI 0 16 v }
 
+-- | Nudge a head's pulse count by a signed delta (clamped 0..16). RELATIVE so a
+-- | burst of clicks accumulates even while the edit is buffered for the rig — an
+-- | absolute `current±1` would re-read the same stale value on every click.
+nudgeHeadPulses :: Int -> Int -> Odonus -> Odonus
+nudgeHeadPulses h d = editHead h \hd -> hd { pulses = clampI 0 16 (hd.pulses + d) }
+
 -- | Set a head's Euclidean step-count (STEPS) — the n in E(pulses, n). Independent
 -- | of the loop length, so the Euclidean rhythm can phase against the pattern.
 setHeadEuclidSteps :: Int -> Int -> Odonus -> Odonus
 setHeadEuclidSteps h v = editHead h \hd -> hd { esteps = clampI 1 16 v }
+
+-- | Nudge a head's Euclidean step-count by a signed delta (clamped 1..16).
+-- | RELATIVE, like `nudgeHeadPulses`, so click bursts accumulate under buffering.
+nudgeHeadEuclidSteps :: Int -> Int -> Odonus -> Odonus
+nudgeHeadEuclidSteps h d = editHead h \hd -> hd { esteps = clampI 1 16 (hd.esteps + d) }
 
 -- | Is step `i` a pulse of the even Euclidean rhythm E(pulses, steps)? 0 pulses
 -- | is silent; pulses ≥ steps is every step; otherwise pulses spread evenly.
