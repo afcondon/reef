@@ -74,17 +74,54 @@ instance readForeignDistribution :: ReadForeign Distribution where
 -- | can pick root × type independently).
 type ScaleType = { name :: String, intervals :: Array Int }
 
--- | The selectable scale shapes. Period is 12 (octave) for all of these.
+-- | The selectable scale shapes — the pool the pickers (Odonus KEY, later Vetula)
+-- | draw from. Period is 12 (octave) for all of these. Grouped by family in the
+-- | UI; intervals are semitone offsets from the root, computed by rotating each
+-- | parent's step pattern (so the modes are exact). Names are stable identities
+-- | (round-trip + recogniseScale + the pickers' option `value`); the display
+-- | labels live in the view. Existing names kept for back-compat.
 scaleTypes :: Array ScaleType
 scaleTypes =
-  [ { name: "major",        intervals: [ 0, 2, 4, 5, 7, 9, 11 ] }
-  , { name: "minor",        intervals: [ 0, 2, 3, 5, 7, 8, 10 ] }
-  , { name: "dorian",       intervals: [ 0, 2, 3, 5, 7, 9, 10 ] }
-  , { name: "mixolydian",   intervals: [ 0, 2, 4, 5, 7, 9, 10 ] }
-  , { name: "harmonicMinor", intervals: [ 0, 2, 3, 5, 7, 8, 11 ] }
+  -- Major (Ionian) modes
+  [ { name: "major",         intervals: [ 0, 2, 4, 5, 7, 9, 11 ] }        -- Ionian
+  , { name: "dorian",        intervals: [ 0, 2, 3, 5, 7, 9, 10 ] }
+  , { name: "phrygian",      intervals: [ 0, 1, 3, 5, 7, 8, 10 ] }
+  , { name: "lydian",        intervals: [ 0, 2, 4, 6, 7, 9, 11 ] }
+  , { name: "mixolydian",    intervals: [ 0, 2, 4, 5, 7, 9, 10 ] }
+  , { name: "minor",         intervals: [ 0, 2, 3, 5, 7, 8, 10 ] }        -- Aeolian
+  , { name: "locrian",       intervals: [ 0, 1, 3, 5, 6, 8, 10 ] }
+  -- Melodic minor modes
+  , { name: "melodicMinor",     intervals: [ 0, 2, 3, 5, 7, 9, 11 ] }
+  , { name: "dorianFlat2",      intervals: [ 0, 1, 3, 5, 7, 9, 10 ] }
+  , { name: "lydianAugmented",  intervals: [ 0, 2, 4, 6, 8, 9, 11 ] }
+  , { name: "lydianDominant",   intervals: [ 0, 2, 4, 6, 7, 9, 10 ] }     -- acoustic
+  , { name: "melodicMajor",     intervals: [ 0, 2, 4, 5, 7, 8, 10 ] }     -- mixolydian b6
+  , { name: "halfDiminished",   intervals: [ 0, 2, 3, 5, 6, 8, 10 ] }     -- locrian ♮2
+  , { name: "altered",          intervals: [ 0, 1, 3, 4, 6, 8, 10 ] }     -- superlocrian
+  -- Harmonic minor modes
+  , { name: "harmonicMinor",     intervals: [ 0, 2, 3, 5, 7, 8, 11 ] }
+  , { name: "locrianNat6",       intervals: [ 0, 1, 3, 5, 6, 9, 10 ] }
+  , { name: "ionianAugmented",   intervals: [ 0, 2, 4, 5, 8, 9, 11 ] }
+  , { name: "ukrainianDorian",   intervals: [ 0, 2, 3, 6, 7, 9, 10 ] }    -- dorian ♯4
+  , { name: "phrygianDominant",  intervals: [ 0, 1, 4, 5, 7, 8, 10 ] }
+  , { name: "lydianSharp2",      intervals: [ 0, 3, 4, 6, 7, 9, 11 ] }
+  , { name: "alteredDiminished", intervals: [ 0, 1, 3, 4, 6, 8, 9 ] }
+  -- Pentatonic
   , { name: "pentaMajor",   intervals: [ 0, 2, 4, 7, 9 ] }
   , { name: "pentaMinor",   intervals: [ 0, 3, 5, 7, 10 ] }
-  , { name: "wholetone",    intervals: [ 0, 2, 4, 6, 8, 10 ] }
+  -- Messiaen modes of limited transposition (mode 1 = whole tone)
+  , { name: "wholetone",    intervals: [ 0, 2, 4, 6, 8, 10 ] }            -- Messiaen 1
+  , { name: "messiaen2",    intervals: [ 0, 1, 3, 4, 6, 7, 9, 10 ] }      -- octatonic
+  , { name: "messiaen3",    intervals: [ 0, 2, 3, 4, 6, 7, 8, 10, 11 ] }
+  , { name: "messiaen4",    intervals: [ 0, 1, 2, 5, 6, 7, 8, 11 ] }
+  , { name: "messiaen5",    intervals: [ 0, 1, 5, 6, 7, 11 ] }
+  , { name: "messiaen6",    intervals: [ 0, 2, 4, 5, 6, 8, 10, 11 ] }
+  , { name: "messiaen7",    intervals: [ 0, 1, 2, 3, 5, 6, 7, 8, 9, 11 ] }
+  -- Carnatic (a curated few; the full set awaits the scale-library page)
+  , { name: "mayamalavagowla",    intervals: [ 0, 1, 4, 5, 7, 8, 11 ] }   -- double harmonic
+  , { name: "simhendramadhyamam", intervals: [ 0, 2, 3, 6, 7, 8, 11 ] }   -- Hungarian minor
+  , { name: "shanmukhapriya",     intervals: [ 0, 2, 3, 6, 7, 8, 10 ] }
+  -- Symmetric
   , { name: "chromatic",    intervals: [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ] }
   ]
 
