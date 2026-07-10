@@ -79,6 +79,7 @@ module Reef.Odonus
   , toggleScaleNote
   , setSpread
   , recallScene
+  , recallGesture
   ) where
 
 import Prelude
@@ -770,6 +771,30 @@ nudgeOffsets d o = o { heads = map (\hd -> hd { offset = clampI 0 15 (hd.offset 
 recallScene :: Odonus -> Odonus -> Odonus
 recallScene live scene =
   scene { heads = zipWith carry live.heads scene.heads }
+  where
+  carry lh sh = sh
+    { cursor = lh.cursor, seqPos = lh.seqPos
+    , accumulator = lh.accumulator, pendStep = lh.pendStep }
+
+-- | Recall only the *gesture* of `scene` over the `live` patch, KEEPING the live
+-- | harmonic context — root, scale intervals, distribution, any explicit
+-- | pitchSet (a Vetula feed), and the chord overlay all stay as they sound now.
+-- | Only the authored gesture crosses over: the sixteen cells, the playhead
+-- | configuration, the register transforms (octave / scalar-transpose / span)
+-- | and the global gate. Because a cell's `note` is a scale DEGREE, not an
+-- | absolute pitch, the recalled riff re-voices through whatever key or
+-- | progression is live — the same lick in the current key. Playhead phase
+-- | carries across exactly as `recallScene` does, so the swap flows.
+recallGesture :: Odonus -> Odonus -> Odonus
+recallGesture live scene =
+  live
+    { cells = scene.cells
+    , heads = zipWith carry live.heads scene.heads
+    , octaveShift = scene.octaveShift
+    , degShift = scene.degShift
+    , span = scene.span
+    , gatePct = scene.gatePct
+    }
   where
   carry lh sh = sh
     { cursor = lh.cursor, seqPos = lh.seqPos
