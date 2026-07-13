@@ -12,6 +12,8 @@ module Reef.Balistes.Protocol
   , decodeBTagged
   , encodeFixed
   , decodeFixed
+  , encodeTrigKit
+  , decodeTrigKit
   ) where
 
 import Prelude
@@ -23,6 +25,7 @@ import Foreign (ForeignError(..), MultipleErrors)
 import Reef.Balistes.Input (BTagged, WireBInput, fromWire, toWire)
 import Reef.Balistes.Sim (BalSim)
 import Reef.Balistes.Fixed (FixedPattern)
+import Reef.Balistes.Trig (TrigKit)
 import Simple.JSON (readJSON, writeJSON)
 
 -- | Encode the full Balistes simulation state for the handoff push.
@@ -57,3 +60,14 @@ encodeFixed = writeJSON
 
 decodeFixed :: String -> Either MultipleErrors FixedPattern
 decodeFixed = readJSON
+
+-- | The POLYTRIG handoff: the whole resolved `TrigKit` (an array of `{ note,
+-- | onsets }`, already wire-flat — the frontend resolved the mini-notation to
+-- | onset fractions before pushing, since reef carries no Tidal parser). The BEAM
+-- | decodes and evals `renderTrigStep` per step. Like the fixed rhythm, a POLYTRIG
+-- | rack is a pure function of the absolute step, so this snaps with no phase-hold.
+encodeTrigKit :: TrigKit -> String
+encodeTrigKit = writeJSON
+
+decodeTrigKit :: String -> Either MultipleErrors TrigKit
+decodeTrigKit = readJSON

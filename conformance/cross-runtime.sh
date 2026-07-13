@@ -214,6 +214,24 @@ echo "== fixedRun (128-step fixed rhythm): node vs erl =="
 diff /tmp/reef-fixed-node.txt /tmp/reef-fixed-erl.txt && echo "  ✅ fixedRun node == erl (fixed-rhythm eval + codec identical over 128 steps)"
 diff "$FIXED_GOLDEN" /tmp/reef-fixed-node.txt && echo "  ✅ fixedRun matches frozen golden"
 
+# --- Balistes POLYTRIG net (Reef.Conformance.trigRun) -------------------------
+# The TIDAL-tab / ASelene lockstep. A resolved rack (named jacks + an off-grid jack)
+# round-tripped through Reef.Balistes.Protocol (encodeTrigKit/decodeTrigKit) and
+# sliced by the shared renderTrigStep over two 16-step cycles. The off-grid onsets
+# land mid-step, so `frac = onset * cycleSteps - step` is a non-trivial float both
+# runtimes must compute identically. Byte-identical here = reef_balistes_voice plays
+# a pushed POLYTRIG rack in lockstep with the frontend's ASelene branch. Codec → jsx.
+TRIG_GOLDEN="$REEF/conformance/trig-golden.txt"
+echo "== trigRun (32-step POLYTRIG rack slice): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { trigRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(trigRun);' \
+  ) > /tmp/reef-trig-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':trigRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-trig-erl.txt
+diff /tmp/reef-trig-node.txt /tmp/reef-trig-erl.txt && echo "  ✅ trigRun node == erl (rack slicing + fractional-onset multiply + codec identical over 32 steps)"
+diff "$TRIG_GOLDEN" /tmp/reef-trig-node.txt && echo "  ✅ trigRun matches frozen golden"
+
 # --- Vetula performance-scheduler net (Reef.Conformance.vetulaRun) ------------
 # VETULA LOCKSTEP V1. The shared Reef.Vetula.Perf scheduler — a saved chord
 # progression fanned to voices with different per-chord dwell schedules (bars per
