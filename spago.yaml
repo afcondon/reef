@@ -29,4 +29,4 @@ workspace:
       git: https://github.com/afcondon/purescript-harmonia.git
       ref: v0.1.1
   packageSet:
-    registry: 73.3.0
+    registry: 77.13.1
