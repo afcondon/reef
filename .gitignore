@@ -5,3 +5,4 @@ output-es/
 node_modules/
 .psa-stash
 spago.lock
+.direnv/
