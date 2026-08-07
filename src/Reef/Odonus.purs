@@ -47,6 +47,7 @@ module Reef.Odonus
   , setCellRatchet
   , setCellVel
   , euclidHit
+  , maxEsteps
   , harmonyPCs
   , toggleHeadMute
   , headMask
@@ -453,7 +454,7 @@ advanceHead cells h =
   let
     order = orderOf h.patternIx
     len = clampI 1 16 h.len
-    es = clampI 1 16 h.esteps
+    es = clampI 1 maxEsteps h.esteps
     -- Exact integer phase: accumulate 1/8-step units, whole base ticks are the
     -- integer quotient, the carry is the remainder. (Both ≥ 0 ⇒ unsigned div/mod.)
     newAcc = h.accumulator + speedNumOf h
@@ -472,7 +473,7 @@ advanceHead cells h =
 -- | sound). Speed < 1 with no whole tick ⇒ no pulse ⇒ the head holds.
 pulsedThisStep :: Head -> Boolean
 pulsedThisStep h =
-  let es = clampI 1 16 h.esteps
+  let es = clampI 1 maxEsteps h.esteps
       ticks = (h.accumulator + speedNumOf h) `div` stepDenom
   in anyPulse h.pulses es h.etick ticks
 
@@ -579,16 +580,33 @@ setHeadOffset h v = editHead h \hd -> hd { offset = clampI 0 15 v }
 setHeadLen :: Int -> Int -> Odonus -> Odonus
 setHeadLen h v = editHead h \hd -> hd { len = clampI 1 16 v }
 
+-- | The Euclidean step-count ceiling — the largest n in E(k, n) a head may hold.
+-- |
+-- | Deliberately larger than the 16-cell grid: `esteps` is INDEPENDENT of `len`,
+-- | so a long ring against a short cell loop is the point, not an accident —
+-- | E(7, 24) over 16 cells decouples *which cell* from *when* and runs a long
+-- | phrase before repeating. Was 16, raised 2026-08-07 (AC).
+-- |
+-- | Raising a clamp is behaviour-preserving for everything at or below the old
+-- | value, so stored patches and the conformance goldens are unaffected. This is
+-- | NOT the 16 of the cell grid (`cells`, `replicate16`, `len`, `offset`), which
+-- | is structural and unrelated.
+maxEsteps :: Int
+maxEsteps = 64
+
 -- | Set a head's Euclidean pulse count (DIV) — the k in E(k, esteps). 0 silences
 -- | the voice; pulses ≥ esteps fires every step. The even (Bresenham) distribution.
+-- | Bounded by `maxEsteps` rather than by the head's own n, since k > n is a legal
+-- | way to say "every step".
 setHeadPulses :: Int -> Int -> Odonus -> Odonus
-setHeadPulses h v = editHead h \hd -> hd { pulses = clampI 0 16 v }
+setHeadPulses h v = editHead h \hd -> hd { pulses = clampI 0 maxEsteps v }
 
--- | Nudge a head's pulse count by a signed delta (clamped 0..16). RELATIVE so a
--- | burst of clicks accumulates even while the edit is buffered for the rig — an
--- | absolute `current±1` would re-read the same stale value on every click.
+-- | Nudge a head's pulse count by a signed delta (clamped 0..`maxEsteps`).
+-- | RELATIVE so a burst of clicks accumulates even while the edit is buffered for
+-- | the rig — an absolute `current±1` would re-read the same stale value on every
+-- | click.
 nudgeHeadPulses :: Int -> Int -> Odonus -> Odonus
-nudgeHeadPulses h d = editHead h \hd -> hd { pulses = clampI 0 16 (hd.pulses + d) }
+nudgeHeadPulses h d = editHead h \hd -> hd { pulses = clampI 0 maxEsteps (hd.pulses + d) }
 
 -- | Set a head's Euclidean step-count (STEPS) — the n in E(pulses, n). Independent
 -- | of the loop length, so the Euclidean rhythm can phase against the pattern.
@@ -597,14 +615,14 @@ nudgeHeadPulses h d = editHead h \hd -> hd { pulses = clampI 0 16 (hd.pulses + d
 -- | the model drift apart and a later k− has to burn off the hidden surplus first.
 setHeadEuclidSteps :: Int -> Int -> Odonus -> Odonus
 setHeadEuclidSteps h v = editHead h \hd ->
-  let n = clampI 1 16 v in hd { esteps = n, pulses = min hd.pulses n }
+  let n = clampI 1 maxEsteps v in hd { esteps = n, pulses = min hd.pulses n }
 
--- | Nudge a head's Euclidean step-count by a signed delta (clamped 1..16).
+-- | Nudge a head's Euclidean step-count by a signed delta (clamped 1..`maxEsteps`).
 -- | RELATIVE, like `nudgeHeadPulses`, so click bursts accumulate under buffering.
 -- | Same k ≤ n clamp as `setHeadEuclidSteps` — n− carries k down with it.
 nudgeHeadEuclidSteps :: Int -> Int -> Odonus -> Odonus
 nudgeHeadEuclidSteps h d = editHead h \hd ->
-  let n = clampI 1 16 (hd.esteps + d) in hd { esteps = n, pulses = min hd.pulses n }
+  let n = clampI 1 maxEsteps (hd.esteps + d) in hd { esteps = n, pulses = min hd.pulses n }
 
 -- | Is step `i` a pulse of the even Euclidean rhythm E(pulses, steps)? 0 pulses
 -- | is silent; pulses ≥ steps is every step; otherwise pulses spread evenly.
