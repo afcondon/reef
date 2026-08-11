@@ -29,9 +29,12 @@ module Reef.Voices
   , Release(..)
   , Order(..)
   , Instrument
+  , DecayMap
+  , decayVoltsFor
   , check
   , saich
   , rings
+  , qd
   , Slot
   , Voices
   , empty
@@ -49,6 +52,7 @@ import Prelude
 import Data.Array (catMaybes, filter, index, length, mapWithIndex, range, sortBy, updateAt)
 import Data.Foldable (foldl)
 import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
+import Reef.Numeric (ln)
 
 -- | How a module can stop a voice sounding.
 -- |
@@ -69,6 +73,24 @@ data Silencing
   -- ^ No per-voice control of any kind: a bare VCO patched to V/oct only. It
   -- can be repitched but never silenced, so it has no note-off. Worth naming
   -- rather than pretending otherwise — it is what a plain CV destination is.
+  | PerVoiceStrike { settleMs :: Number, triggerMs :: Number, decay :: Maybe DecayMap }
+  -- ^ n voices, each with its own pitch bus and its own trigger, and no
+  -- note-off: a bank of struck things. Four monophonic resonators, or a quad
+  -- sample player like the vpme QD.
+  --
+  -- WE allocate here — that is the whole difference from `SelfAllocating` — so
+  -- every policy applies, and two of them finally earn themselves:
+  --
+  --   * `RoundRobin` / `StealOldest` become musically right rather than merely
+  --     legal. Re-striking a voice cuts its decay short, so the longest-idle
+  --     one is the one to take. On a `CountCV` module round-robin is REFUSED
+  --     (it opens holes the hardware cannot silence); here it is the default.
+  --   * A chord arrives at ONE INSTANT, because n buses hold n pitches. That is
+  --     the direct payoff over `SelfAllocating`, whose strum spread was never a
+  --     musical choice — it was one wire.
+  --
+  -- `ByPitch` is incoherent: a struck voice holds a sounding sample and cannot
+  -- be re-seated, so pitch order could only be honoured by re-striking.
   | SelfAllocating { settleMs :: Number, triggerMs :: Number, strumMs :: Number }
   -- ^ The module allocates for itself, behind a single note input: one pitch
   -- bus and one trigger. Rings in polyphonic mode, Yarns, Plaits — set a pitch,
@@ -96,6 +118,30 @@ data Silencing
   -- cannot observe it, and a model of it would be believed.
 
 derive instance eqSilencing :: Eq Silencing
+
+-- | Gate length as a control voltage, for a voice whose decay is a CV input.
+-- |
+-- | Deliberately NOT a calibration table, and this is the one place all session
+-- | where that is the right answer. A decay CV scales the envelope of whatever
+-- | SAMPLE is loaded, so there is no module-level volts-to-milliseconds truth
+-- | to measure — it would be per-sample, and the samples are the part being
+-- | played with. So this is a musical control with endpoints dialled by ear,
+-- | and the artefact should not pretend otherwise.
+-- |
+-- | Logarithmic between the endpoints, because decay is heard that way: the
+-- | step from 50 ms to 100 ms is the step from 1 s to 2 s.
+type DecayMap = { minMs :: Number, maxMs :: Number, minV :: Number, maxV :: Number }
+
+-- | The decay CV for a note of this length, clamped to the map's range.
+decayVoltsFor :: DecayMap -> Number -> Number
+decayVoltsFor m durMs =
+  let
+    lo = max 1.0 m.minMs
+    hi = max (lo + 1.0) m.maxMs
+    d = if durMs < lo then lo else if durMs > hi then hi else durMs
+    t = ln (d / lo) / ln (hi / lo)
+  in
+    m.minV + t * (m.maxV - m.minV)
 
 -- | Which voice takes a new note.
 data Assign
@@ -216,6 +262,17 @@ check inst = case inst.silencing of
           <> show (sa.settleMs + sa.triggerMs) <> " ms), or two notes of a chord \
              \overlap and the second takes the first's pitch"
     | otherwise -> Nothing
+  -- We allocate here, so Assign and Overflow are live choices and nothing is
+  -- refused on their account. The two that ARE refused both come from the same
+  -- fact: a struck voice holds a sounding sample and cannot be moved.
+  PerVoiceStrike _
+    | inst.release /= LeaveHole ->
+        Just "a struck voice cannot be compacted — the sound is in that voice and \
+             \moving the note would mean striking it again somewhere else"
+    | inst.order /= Arrival ->
+        Just "a struck voice cannot be re-seated by pitch — it is already sounding, \
+             \so pitch order could only be honoured by re-striking it"
+    | otherwise -> Nothing
   PerVoiceGate -> Nothing
 
 -- | The Instruo Saïch as measured on 2026-08-11: four oscillators, one output,
@@ -246,6 +303,33 @@ rings =
   , silencing: SelfAllocating { settleMs: 4.0, triggerMs: 5.0, strumMs: 12.0 }
   , assign: LowestFree
   , overflow: Drop
+  , release: LeaveHole
+  , order: Arrival
+  }
+
+-- | The vpme QD (Quad Drum Voice) with its extender: four voices, each with a
+-- | trigger, a pitch CV and a decay CV.
+-- |
+-- | Only an INSTRUMENT when the four voices hold the same sample — a marimba in
+-- | all four is a polyphonic marimba. Load four different drum samples and it is
+-- | not this at all but a drumkit, where a note picks its voice by identity and
+-- | nothing is allocated. The SD card decides which, which is a good reason for
+-- | the card's contents and this setting to be versioned together.
+-- |
+-- | The decay endpoints are a starting guess to be dialled by ear; see
+-- | `DecayMap` for why they are not measured.
+qd :: Instrument
+qd =
+  { voices: 4
+  , silencing: PerVoiceStrike
+      { settleMs: 2.0
+      , triggerMs: 5.0
+      , decay: Just { minMs: 40.0, maxMs: 2000.0, minV: 0.0, maxV: 5.0 }
+      }
+  -- Longest-idle first, and steal the longest-idle when full: re-striking a
+  -- voice cuts its decay, so both policies are the same musical instinct.
+  , assign: RoundRobin
+  , overflow: StealOldest
   , release: LeaveHole
   , order: Arrival
   }
@@ -286,6 +370,10 @@ data Action
   -- ^ physical voice index, on/off — only for `PerVoiceGate` instruments
   | Mix Int Number
   -- ^ voice count, and the CV volts that produce it — only for `CountCV`
+  | Decay Int Number
+  -- ^ physical voice index, decay CV volts — only for `PerVoiceStrike` with a
+  -- decay map. Must precede the trigger, like `Pitch`: the module samples at
+  -- the edge.
   | Trigger Int Number
   -- ^ physical voice index, pulse width in ms — only for `SelfAllocating`.
   --
@@ -301,6 +389,7 @@ instance showAction :: Show Action where
     Pitch v p -> "Pitch " <> show v <> " " <> show p
     Gate v on -> "Gate " <> show v <> " " <> show on
     Mix n cv -> "Mix " <> show n <> " " <> show cv
+    Decay v cv -> "Decay " <> show v <> " " <> show cv
     Trigger v ms -> "Trigger " <> show v <> " " <> show ms
 
 type Emit = { atMs :: Number, action :: Action }
@@ -318,7 +407,36 @@ mixVoltsFor inst n = case inst.silencing of
 noteOn :: Number -> Int -> Number -> Voices -> { voices :: Voices, emits :: Array Emit }
 noteOn now pitch durMs v = case v.inst.silencing of
   SelfAllocating sa -> strum sa now pitch v
+  PerVoiceStrike ps -> strike ps now pitch durMs v
   _ -> allocate now pitch durMs v
+
+-- | Strike one voice of a bank of struck things: set its decay and its pitch,
+-- | let them settle, fire its trigger.
+-- |
+-- | Unlike `strum` this allocates properly, so `Assign` and `Overflow` decide
+-- | which voice — and unlike `allocate` there is no note-off to schedule, so the
+-- | slot's end time exists only to make a voice available again and to give
+-- | `StealOldest` something to sort by.
+-- |
+-- | Nothing is emitted for the OTHER voices. They are sounding samples that
+-- | cannot be moved, and re-pitching one would bend a note already in flight.
+strike
+  :: { settleMs :: Number, triggerMs :: Number, decay :: Maybe DecayMap }
+  -> Number -> Int -> Number -> Voices -> { voices :: Voices, emits :: Array Emit }
+strike ps now pitch durMs v = case pickVoice now pitch v of
+  Nothing -> { voices: v, emits: [] }
+  Just i ->
+    let
+      slot = { pitch, onAt: now, offAt: now + durMs }
+      placed = fromMaybe v.slots (updateAt i (Just slot) v.slots)
+    in
+      { voices: v { slots = placed, nextRR = (i + 1) `mod` v.inst.voices, lastAt = now }
+      , emits:
+          maybe [] (\m -> [ { atMs: now, action: Decay i (decayVoltsFor m durMs) } ]) ps.decay
+            <> [ { atMs: now, action: Pitch i pitch }
+               , { atMs: now + ps.settleMs, action: Trigger i ps.triggerMs }
+               ]
+      }
 
 -- | Hand a note to an instrument that allocates for itself: set the pitch, wait
 -- | for it to settle, fire the trigger.
@@ -375,6 +493,8 @@ audible inst now i n = case inst.silencing of
   -- caught by a wildcard so that adding a capability breaks this instead of
   -- silently emitting nothing.
   SelfAllocating _ -> []
+  -- Unreachable: `strike` emits its own trigger, since only it knows the voice.
+  PerVoiceStrike _ -> []
 
 -- | Choose the voice for an arriving note: `Assign` while one is free, then
 -- | `Overflow`.
@@ -445,6 +565,11 @@ expireAt now v =
       -- steals from itself when it needs the voice.
       SelfAllocating _, _ ->
         { voices: v, emits: [] }
+      -- The slot frees so the voice can be struck again; nothing is emitted,
+      -- because the sample rings out on its own envelope. `LeaveHole` is the
+      -- only coherent release here and `check` enforces it.
+      PerVoiceStrike _, _ ->
+        { voices: v { slots = live }, emits: [] }
       CountCV cv, _ ->
         let
           slots' = reorder v.inst (applyMoves live (compact live))
@@ -481,6 +606,8 @@ allOff now v =
       -- is its own. A stop leaves what is ringing to ring out, which is a
       -- release, not the infinite drone a `CountCV` instrument gives you.
       SelfAllocating _ -> []
+      -- Same as a resonator: what is sounding rings out. There is no off.
+      PerVoiceStrike _ -> []
   }
 
 -- | Re-seat the live notes according to `Order`.

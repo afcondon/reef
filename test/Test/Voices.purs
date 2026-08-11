@@ -11,7 +11,7 @@ import Prelude
 import Data.Array (catMaybes, filter, mapWithIndex)
 import Data.Foldable (foldl)
 import Effect (Effect)
-import Reef.Voices (Action(..), allOff, Assign(..), Order(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, rings, saich, sounding)
+import Reef.Voices (Action(..), allOff, Assign(..), Order(..), Overflow(..), Release(..), Silencing(..), Voices, check, decayVoltsFor, empty, expireAt, noteOn, qd, rings, saich, sounding)
 import Data.Maybe (Maybe(..), isJust, isNothing)
 import Test.Assert (assertEqual', assertTrue')
 
@@ -276,7 +276,66 @@ voicesTests = do
   assertEqual' "as configured, Rings is coherent"
     { actual: check rings, expected: Nothing }
 
+  -- ---------------------------------------------------------------------
+  -- QD: a bank of struck voices, allocated by us
+  -- ---------------------------------------------------------------------
+
+  -- The payoff over Rings: four buses hold four pitches, so a chord lands at ONE
+  -- instant instead of spreading. Every note's trigger sits settleMs after its
+  -- own pitch, and no two notes share a voice.
+  let w0 = empty qd
+      w1 = noteOn 100.0 60 500.0 w0
+      w2 = noteOn 100.0 64 500.0 w1.voices
+      w3 = noteOn 100.0 67 500.0 w2.voices
+  assertEqual' "three simultaneous notes are struck at the same instant"
+    { actual: map _.atMs (w1.emits <> w2.emits <> w3.emits)
+    , expected: [ 100.0, 100.0, 102.0, 100.0, 100.0, 102.0, 100.0, 100.0, 102.0 ] }
+  assertEqual' "each takes its own voice, decay and pitch before the trigger"
+    { actual: map _.action w3.emits
+    , expected: [ Decay 2 (decayVoltsFor dm 500.0), Pitch 2 67, Trigger 2 5.0 ] }
+
+  -- Round-robin, and it matters: re-striking a voice cuts its decay, so the
+  -- fourth note takes voice 3 and a fifth wraps to the longest-idle.
+  let w4 = noteOn 100.0 72 500.0 w3.voices
+  assertEqual' "the fourth note fills the last voice"
+    { actual: held w4.voices
+    , expected: [ {at:0,pitch:60}, {at:1,pitch:64}, {at:2,pitch:67}, {at:3,pitch:72} ] }
+  let w5 = noteOn 110.0 76 500.0 w4.voices
+  assertEqual' "a fifth note steals the voice struck longest ago"
+    { actual: held w5.voices
+    , expected: [ {at:0,pitch:76}, {at:1,pitch:64}, {at:2,pitch:67}, {at:3,pitch:72} ] }
+
+  -- Gate length becomes a VOLTAGE, monotonically and logarithmically. This is
+  -- the third thing duration has meant: a note-off time on the Saich, nothing
+  -- at all on Rings, a decay CV here.
+  assertTrue' "a longer note asks for a higher decay CV"
+    (decayVoltsFor dm 1000.0 > decayVoltsFor dm 200.0)
+  assertTrue' "the map is logarithmic, not linear — 40->200ms spans as much as 200->1000"
+    (let a = decayVoltsFor dm 200.0 - decayVoltsFor dm 40.0
+         b = decayVoltsFor dm 1000.0 - decayVoltsFor dm 200.0
+     in a - b < 0.01 && b - a < 0.01)
+  assertEqual' "and it clamps rather than running off the ends"
+    { actual: decayVoltsFor dm 99999.0, expected: 5.0 }
+
+  -- No note-off exists, so nothing is emitted when a note's time is up or when
+  -- the transport stops — the sample rings out on its own envelope.
+  assertEqual' "expiry frees the voice silently"
+    { actual: (expireAt 5000.0 w5.voices).emits, expected: [] }
+  assertEqual' "and a voice freed that way is available again"
+    { actual: sounding (expireAt 5000.0 w5.voices).voices, expected: 0 }
+  assertEqual' "stopping leaves the samples to ring out"
+    { actual: (allOff 5000.0 w5.voices).emits, expected: [] }
+
+  -- Both refusals come from one fact: a struck voice holds a sounding sample.
+  assertTrue' "compaction is refused — the sound is in that voice"
+    (isJust (check qd { release = Compact }))
+  assertTrue' "pitch-ordered seating is refused — it could only re-strike"
+    (isJust (check qd { order = ByPitch, assign = LowestFree }))
+  assertEqual' "as configured, QD is coherent"
+    { actual: check qd, expected: Nothing }
+
   where
+  dm = { minMs: 40.0, maxMs: 2000.0, minV: 0.0, maxV: 5.0 }
   foldNotes inst ns =
     let go v n = (noteOn n.on n.p 900.0 v).voices
     in foldl go (empty inst) ns
