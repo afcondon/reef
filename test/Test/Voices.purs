@@ -11,7 +11,7 @@ import Prelude
 import Data.Array (catMaybes, filter, mapWithIndex)
 import Data.Foldable (foldl)
 import Effect (Effect)
-import Reef.Voices (Action(..), Assign(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, saich, sounding)
+import Reef.Voices (Action(..), allOff, Assign(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, saich, sounding)
 import Data.Maybe (isJust, isNothing)
 import Test.Assert (assertEqual', assertTrue')
 
@@ -144,6 +144,27 @@ voicesTests = do
   assertEqual' "StealOldest takes the voice whose note began first"
     { actual: held st.voices
     , expected: [ {at:0,pitch:71}, {at:1,pitch:62}, {at:2,pitch:64}, {at:3,pitch:65} ] }
+  -- Stopping is an ACT. Without this the last chord drones for ever on a module
+  -- whose oscillators never stop — observed on the rack 2026-08-11, where
+  -- halting Odonus left four voices sounding indefinitely because nothing was
+  -- calling expireAt any more.
+  let d0 = empty saich
+      d1 = (noteOn 0.0 60 9999.0 d0).voices
+      d2 = (noteOn 0.0 64 9999.0 d1).voices
+      off = allOff 100.0 d2
+  assertEqual' "all-off drives the voice count to zero"
+    { actual: map _.action off.emits, expected: [ Mix 0 0.125 ] }
+  assertEqual' "and forgets every voice"
+    { actual: sounding off.voices, expected: 0 }
+  assertEqual' "all-off on an already-silent instrument says nothing"
+    { actual: map _.action (allOff 100.0 (empty saich)).emits, expected: [] }
+
+  -- A gated instrument closes its gates instead, one per sounding voice.
+  let g2 = (noteOn 0.0 64 9999.0 (noteOn 0.0 60 9999.0 (empty poly)).voices).voices
+  assertEqual' "a gated instrument closes each open gate"
+    { actual: map _.action (allOff 50.0 g2).emits
+    , expected: [ Gate 0 false, Gate 1 false ] }
+
   where
   foldNotes inst ns =
     let go v n = (noteOn n.on n.p 900.0 v).voices

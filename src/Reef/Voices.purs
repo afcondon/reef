@@ -38,6 +38,7 @@ module Reef.Voices
   , Emit
   , noteOn
   , expireAt
+  , allOff
   , mixVoltsFor
   ) where
 
@@ -303,6 +304,27 @@ expireAt now v =
           -- drop then fades that voice out from under it.
           , emits: pitchEmits <> [ mixEmit ]
           }
+
+-- | Silence everything, now.
+-- |
+-- | Stopping is an ACT, not the absence of ticks. `expireAt` only retires notes
+-- | whose time is up, so a transport that simply stops calling it leaves the
+-- | last chord sounding for ever — which on a module whose oscillators never
+-- | stop is an infinite drone, not a lingering release.
+-- |
+-- | `AlwaysDroning` returns nothing, honestly: such an instrument has no way to
+-- | be silenced and the caller should not believe otherwise.
+allOff :: Number -> Voices -> { voices :: Voices, emits :: Array Emit }
+allOff now v =
+  { voices: v { slots = map (const Nothing) v.slots }
+  , emits: case v.inst.silencing of
+      PerVoiceGate ->
+        map (\o -> { atMs: now, action: Gate o.at false }) (occupied v)
+      CountCV _ ->
+        if sounding v == 0 then []
+        else [ { atMs: now, action: Mix 0 (mixVoltsFor v.inst 0) } ]
+      AlwaysDroning -> []
+  }
 
 type Move = { from :: Int, to :: Int, pitch :: Int }
 
