@@ -11,8 +11,8 @@ import Prelude
 import Data.Array (catMaybes, filter, mapWithIndex)
 import Data.Foldable (foldl)
 import Effect (Effect)
-import Reef.Voices (Action(..), allOff, Assign(..), Order(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, saich, sounding)
-import Data.Maybe (isJust, isNothing)
+import Reef.Voices (Action(..), allOff, Assign(..), Order(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, rings, saich, sounding)
+import Data.Maybe (Maybe(..), isJust, isNothing)
 import Test.Assert (assertEqual', assertTrue')
 
 -- | Pitches currently held, by voice index, ignoring free voices.
@@ -205,6 +205,76 @@ voicesTests = do
     , expected: [ {at:0,pitch:67}, {at:1,pitch:72}, {at:2,pitch:60} ] }
   assertEqual' "one repitch, not three"
     { actual: pitches (map _.action a3.emits), expected: [ Pitch 2 60 ] }
+
+  -- ---------------------------------------------------------------------
+  -- Rings: the module allocates, we only strum
+  -- ---------------------------------------------------------------------
+
+  -- A chord cannot arrive at one instant through one bus, so it spreads. Each
+  -- trigger follows ITS OWN pitch by settleMs — the ordering that matters, since
+  -- the module samples the CV at the edge and a trigger that overtook its pitch
+  -- would sound the previous note again.
+  let k0 = empty rings
+      k1 = noteOn 100.0 60 500.0 k0
+      k2 = noteOn 100.0 64 500.0 k1.voices
+      k3 = noteOn 100.0 67 500.0 k2.voices
+  assertEqual' "the first note is strummed at once, pitch then trigger"
+    { actual: k1.emits
+    , expected:
+        [ { atMs: 100.0, action: Pitch 0 60 }
+        , { atMs: 104.0, action: Trigger 0 5.0 }
+        ]
+    }
+  assertEqual' "the second waits one strum gap"
+    { actual: k2.emits
+    , expected:
+        [ { atMs: 112.0, action: Pitch 0 64 }
+        , { atMs: 116.0, action: Trigger 0 5.0 }
+        ]
+    }
+  assertEqual' "and the third another, so the chord is a 24 ms arpeggio"
+    { actual: k3.emits
+    , expected:
+        [ { atMs: 124.0, action: Pitch 0 67 }
+        , { atMs: 128.0, action: Trigger 0 5.0 }
+        ]
+    }
+  -- Every pitch is clear of the trigger before it, which is the invariant the
+  -- strumMs >= settleMs + triggerMs check exists to guarantee.
+  assertTrue' "no note's pitch lands before the previous trigger has finished"
+    (124.0 >= 116.0 + 5.0)
+
+  -- A note arriving long after the last one is not delayed: the spread is a
+  -- minimum gap, not a quantisation.
+  let k4 = noteOn 1000.0 72 500.0 k3.voices
+  assertEqual' "a note well clear of the last strum goes out immediately"
+    { actual: map _.atMs k4.emits, expected: [ 1000.0, 1004.0 ] }
+
+  -- We take no slot, because we allocate nothing. `sounding` must not claim
+  -- otherwise — a count we cannot observe would be believed.
+  assertEqual' "no slots are taken" { actual: sounding k4.voices, expected: 0 }
+
+  -- No note-off exists, so time passing emits nothing and stopping emits
+  -- nothing. Unlike the Saich, that is not a stuck drone: what is ringing rings
+  -- out on the module's own decay.
+  assertEqual' "expiry has nothing to retire"
+    { actual: (expireAt 5000.0 k4.voices).emits, expected: [] }
+  assertEqual' "stopping leaves it to ring out"
+    { actual: (allOff 5000.0 k4.voices).emits, expected: [] }
+
+  -- The policies are all vacuous here, and `check` refuses them rather than
+  -- ignoring them — a setting that looks live and does nothing is the failure
+  -- this decomposition exists to prevent.
+  assertTrue' "round-robin on a self-allocating instrument is refused"
+    (isJust (check rings { assign = RoundRobin }))
+  assertTrue' "compaction on a self-allocating instrument is refused"
+    (isJust (check rings { release = Compact }))
+  assertTrue' "more than one bus is refused"
+    (isJust (check rings { voices = 4 }))
+  assertTrue' "a strum gap too short to fit its own settle and pulse is refused"
+    (isJust (check rings { silencing = SelfAllocating { settleMs: 4.0, triggerMs: 5.0, strumMs: 6.0 } }))
+  assertEqual' "as configured, Rings is coherent"
+    { actual: check rings, expected: Nothing }
 
   where
   foldNotes inst ns =

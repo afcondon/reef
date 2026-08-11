@@ -31,6 +31,7 @@ module Reef.Voices
   , Instrument
   , check
   , saich
+  , rings
   , Slot
   , Voices
   , empty
@@ -68,6 +69,31 @@ data Silencing
   -- ^ No per-voice control of any kind: a bare VCO patched to V/oct only. It
   -- can be repitched but never silenced, so it has no note-off. Worth naming
   -- rather than pretending otherwise — it is what a plain CV destination is.
+  | SelfAllocating { settleMs :: Number, triggerMs :: Number, strumMs :: Number }
+  -- ^ The module allocates for itself, behind a single note input: one pitch
+  -- bus and one trigger. Rings in polyphonic mode, Yarns, Plaits — set a pitch,
+  -- fire the trigger, and the module decides which of ITS voices takes the note
+  -- and which it steals.
+  --
+  -- So this side does no allocation at all. It never refuses a note, has no
+  -- note-off, and cannot say how many voices are sounding — which is why none
+  -- of the constructors above fits, and why the fields here are all about TIME
+  -- rather than about voices:
+  --
+  --   * `settleMs` — how far the pitch must LEAD the trigger. The module
+  --     samples the CV at the trigger edge, so a simultaneous pair gives it
+  --     whatever the bus held a moment ago: the previous note, played twice.
+  --     This is the one field the hardware dictates.
+  --   * `triggerMs` — pulse width the module will see.
+  --   * `strumMs` — the gap between successive notes. A chord cannot arrive at
+  --     one instant here, because two notes need two edges with two different
+  --     pitches between them; it is spread, and the input is called STRUM for
+  --     exactly that reason. `check` holds it at or above `settleMs +
+  --     triggerMs`, below which the notes would overlap and one would take the
+  --     other's pitch.
+  --
+  -- Deliberately NOT modelled: which of the module's own voices holds what. We
+  -- cannot observe it, and a model of it would be believed.
 
 derive instance eqSilencing :: Eq Silencing
 
@@ -164,6 +190,32 @@ check inst = case inst.silencing of
     | inst.release == Compact ->
         Just "a droning instrument has no note-off, so there is no hole to compact"
     | otherwise -> Nothing
+  -- Every allocation policy is vacuous here, and a vacuous setting is worse
+  -- than a rejected one: it looks like it did something. The whole point of
+  -- splitting capability from policy is that the combination is checkable, so
+  -- refuse rather than silently ignore.
+  SelfAllocating sa
+    | inst.voices /= 1 ->
+        Just "a self-allocating instrument is driven through ONE pitch bus and one \
+             \trigger, however many voices it has internally — set voices to 1 and \
+             \let the module do its own allocating"
+    | inst.assign /= LowestFree ->
+        Just "a self-allocating instrument chooses its own voice, so there is \
+             \nothing here for an assignment policy to decide"
+    | inst.overflow /= Drop ->
+        Just "a self-allocating instrument never runs out from this side — it \
+             \steals internally — so an overflow policy would never be reached"
+    | inst.release /= LeaveHole ->
+        Just "a self-allocating instrument has no note-off, so there is no hole to \
+             \compact and nothing to compact it into"
+    | inst.order /= Arrival ->
+        Just "a self-allocating instrument has one bus, so there is no seating to \
+             \order — its voices are not addressable from here"
+    | sa.strumMs < sa.settleMs + sa.triggerMs ->
+        Just $ "strumMs must be at least settleMs + triggerMs ("
+          <> show (sa.settleMs + sa.triggerMs) <> " ms), or two notes of a chord \
+             \overlap and the second takes the first's pitch"
+    | otherwise -> Nothing
   PerVoiceGate -> Nothing
 
 -- | The Instruo Saïch as measured on 2026-08-11: four oscillators, one output,
@@ -178,6 +230,26 @@ saich =
   , order: Arrival
   }
 
+-- | Mutable Instruments Rings in POLYPHONIC mode (2 or 4 voices, set on the
+-- | module — we neither know nor need to know which).
+-- |
+-- | Only correct in polyphonic mode. In monophonic mode Rings tracks V/oct
+-- | CONTINUOUSLY, so setting the pitch for a new note would bend the note still
+-- | ringing; polyphonic mode latches the pitch at the strum edge, which is what
+-- | makes a stream of independent notes possible through one input.
+-- |
+-- | `settleMs` is a conservative 4 ms — a CV set on the previous scheduler pass
+-- | is long settled, and the cost of being generous is only strum spread.
+rings :: Instrument
+rings =
+  { voices: 1
+  , silencing: SelfAllocating { settleMs: 4.0, triggerMs: 5.0, strumMs: 12.0 }
+  , assign: LowestFree
+  , overflow: Drop
+  , release: LeaveHole
+  , order: Arrival
+  }
+
 -- | One physical voice's occupancy. `onAt` and `offAt` share the caller's
 -- | millisecond timebase; `onAt` exists so `StealOldest` has something to sort
 -- | by that survives notes of different lengths.
@@ -187,11 +259,16 @@ type Voices =
   { inst :: Instrument
   , slots :: Array (Maybe Slot)
   , nextRR :: Int
+  , lastAt :: Number
+  -- ^ When the most recent note was PLACED, which is not always `now`: a
+  -- self-allocating instrument spreads a chord, so the third note of one is
+  -- scheduled ahead of the moment it arrived. Unused by every other capability,
+  -- which places notes the instant they come.
   }
 
 empty :: Instrument -> Voices
 empty inst =
-  { inst, slots: map (const Nothing) (range 1 inst.voices), nextRR: 0 }
+  { inst, slots: map (const Nothing) (range 1 inst.voices), nextRR: 0, lastAt: 0.0 }
 
 sounding :: Voices -> Int
 sounding v = length (filter (maybe false (const true)) v.slots)
@@ -209,6 +286,13 @@ data Action
   -- ^ physical voice index, on/off — only for `PerVoiceGate` instruments
   | Mix Int Number
   -- ^ voice count, and the CV volts that produce it — only for `CountCV`
+  | Trigger Int Number
+  -- ^ physical voice index, pulse width in ms — only for `SelfAllocating`.
+  --
+  -- Distinct from `Gate _ true` because it is not an interval with an end: a
+  -- gate says "this note is sounding NOW", a trigger says "take the pitch on
+  -- the bus". Two notes in one chord need two edges, so the pulse must FALL
+  -- between them — which a gate, being held, cannot do.
 
 derive instance eqAction :: Eq Action
 
@@ -217,6 +301,7 @@ instance showAction :: Show Action where
     Pitch v p -> "Pitch " <> show v <> " " <> show p
     Gate v on -> "Gate " <> show v <> " " <> show on
     Mix n cv -> "Mix " <> show n <> " " <> show cv
+    Trigger v ms -> "Trigger " <> show v <> " " <> show ms
 
 type Emit = { atMs :: Number, action :: Action }
 
@@ -231,7 +316,37 @@ mixVoltsFor inst n = case inst.silencing of
 
 -- | Sound a note now.
 noteOn :: Number -> Int -> Number -> Voices -> { voices :: Voices, emits :: Array Emit }
-noteOn now pitch durMs v =
+noteOn now pitch durMs v = case v.inst.silencing of
+  SelfAllocating sa -> strum sa now pitch v
+  _ -> allocate now pitch durMs v
+
+-- | Hand a note to an instrument that allocates for itself: set the pitch, wait
+-- | for it to settle, fire the trigger.
+-- |
+-- | No slot is taken, because nothing here is allocated — the only state that
+-- | moves is `lastAt`, and it exists so a chord SPREADS. Two notes arriving at
+-- | the same instant cannot both be strummed at it: one bus can hold one pitch,
+-- | so the second waits `strumMs` and the chord becomes an arpeggio a few
+-- | milliseconds wide. That is not a workaround; it is what strumming is.
+-- |
+-- | The duration is dropped, and deliberately: this instrument decides how long
+-- | its own notes ring. Pretending otherwise would put a note-off in the model
+-- | that nothing could send.
+strum
+  :: { settleMs :: Number, triggerMs :: Number, strumMs :: Number }
+  -> Number -> Int -> Voices -> { voices :: Voices, emits :: Array Emit }
+strum sa now pitch v =
+  let at = max now (v.lastAt + sa.strumMs)
+  in
+    { voices: v { lastAt = at }
+    , emits:
+        [ { atMs: at, action: Pitch 0 pitch }
+        , { atMs: at + sa.settleMs, action: Trigger 0 sa.triggerMs }
+        ]
+    }
+
+allocate :: Number -> Int -> Number -> Voices -> { voices :: Voices, emits :: Array Emit }
+allocate now pitch durMs v =
   case pickVoice now pitch v of
     Nothing -> { voices: v, emits: [] }
     Just i ->
@@ -239,7 +354,7 @@ noteOn now pitch durMs v =
         slot = { pitch, onAt: now, offAt: now + durMs }
         placed = fromMaybe v.slots (updateAt i (Just slot) v.slots)
         seated = reorder v.inst placed
-        v' = v { slots = seated, nextRR = (i + 1) `mod` v.inst.voices }
+        v' = v { slots = seated, nextRR = (i + 1) `mod` v.inst.voices, lastAt = now }
         n = length (filter (maybe false (const true)) seated)
       in
         { voices: v'
@@ -256,6 +371,10 @@ audible inst now i n = case inst.silencing of
   PerVoiceGate -> [ { atMs: now, action: Gate i true } ]
   CountCV _ -> [ { atMs: now, action: Mix n (mixVoltsFor inst n) } ]
   AlwaysDroning -> []
+  -- Unreachable: `strum` never goes through the allocator. Listed rather than
+  -- caught by a wildcard so that adding a capability breaks this instead of
+  -- silently emitting nothing.
+  SelfAllocating _ -> []
 
 -- | Choose the voice for an arriving note: `Assign` while one is free, then
 -- | `Overflow`.
@@ -321,6 +440,11 @@ expireAt now v =
       -- Nothing can be silenced; the note simply keeps sounding until repitched.
       AlwaysDroning, _ ->
         { voices: v { slots = live }, emits: [] }
+      -- No slots are ever filled, so this cannot be reached — and if it were,
+      -- there is no note-off to send: the module rings its own notes out and
+      -- steals from itself when it needs the voice.
+      SelfAllocating _, _ ->
+        { voices: v, emits: [] }
       CountCV cv, _ ->
         let
           slots' = reorder v.inst (applyMoves live (compact live))
@@ -353,6 +477,10 @@ allOff now v =
         if sounding v == 0 then []
         else [ { atMs: now, action: Mix 0 (mixVoltsFor v.inst 0) } ]
       AlwaysDroning -> []
+      -- Nothing to send, and saying so is the honest answer: the module's decay
+      -- is its own. A stop leaves what is ringing to ring out, which is a
+      -- release, not the infinite drone a `CountCV` instrument gives you.
+      SelfAllocating _ -> []
   }
 
 -- | Re-seat the live notes according to `Order`.
