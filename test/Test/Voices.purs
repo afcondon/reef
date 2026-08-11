@@ -9,9 +9,11 @@ module Test.Voices (voicesTests) where
 import Prelude
 
 import Data.Array (catMaybes, filter, mapWithIndex)
+import Data.Foldable (foldl)
 import Effect (Effect)
-import Reef.Voices (Action(..), Voices, empty, expireAt, noteOn, saich, sounding)
-import Test.Assert (assertEqual')
+import Reef.Voices (Action(..), Assign(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, saich, sounding)
+import Data.Maybe (isJust, isNothing)
+import Test.Assert (assertEqual', assertTrue')
 
 -- | Pitches currently held, by voice index, ignoring free voices.
 held :: Voices -> Array { at :: Int, pitch :: Int }
@@ -94,3 +96,55 @@ voicesTests = do
   let quiet = expireAt 10.0 r3.voices
   assertEqual' "no expiry, no emissions"
     { actual: map _.action quiet.emits, expected: [] }
+
+  -- The decomposition earns its keep by REFUSING incoherent instruments. Each
+  -- of these would be a stuck note on stage rather than a stylistic misstep.
+  assertTrue' "the measured Saich is coherent" (isNothing (check saich))
+
+  let rr = saich { assign = RoundRobin }
+  assertTrue' "round-robin on a one-ended mixer is refused" (isJust (check rr))
+
+  let hole = saich { release = LeaveHole }
+  assertTrue' "leaving a hole on a one-ended mixer is refused" (isJust (check hole))
+
+  let short = saich { silencing = CountCV { plateaus: [ 0.0, 1.0, 2.0 ], rampMs: 25.0 } }
+  assertTrue' "a plateau table that does not cover every count is refused"
+    (isJust (check short))
+
+  -- Per-voice gating permits everything the other cannot, which is the whole
+  -- reason the capability is a separate axis from the policies.
+  let poly = { voices: 4, silencing: PerVoiceGate, assign: RoundRobin
+             , overflow: StealOldest, release: LeaveHole }
+  assertTrue' "round-robin and holes are fine when voices gate independently"
+    (isNothing (check poly))
+
+  -- And it behaves differently: a released note closes its own gate and nothing
+  -- migrates, because nothing has to.
+  let p0 = empty poly
+      p1 = (noteOn 0.0 60 900.0 p0).voices
+      p2 = (noteOn 0.0 64 100.0 p1).voices
+      p3 = (noteOn 0.0 67 900.0 p2).voices
+      pr = expireAt 200.0 p3
+  assertEqual' "a gated instrument just closes the gate of the note that ended"
+    { actual: map _.action pr.emits, expected: [ Gate 1 false ] }
+  assertEqual' "and leaves the survivors exactly where they were"
+    { actual: held pr.voices, expected: [ {at:0,pitch:60}, {at:2,pitch:67} ] }
+
+  -- Round-robin walks the ring rather than falling back to voice 0, which is
+  -- the point: a repeated note should not retrigger the same oscillator.
+  let q0 = empty poly
+      q1 = (noteOn 0.0 60 50.0 q0).voices
+      q2 = (noteOn 100.0 62 50.0 (expireAt 60.0 q1).voices).voices
+  assertEqual' "the second note takes voice 1, not the freed voice 0"
+    { actual: held q2, expected: [ {at:1,pitch:62} ] }
+
+  -- Stealing, when asked for. StealOldest takes the longest-running note.
+  let s4 = foldNotes poly [ {p:60,on:0.0}, {p:62,on:10.0}, {p:64,on:20.0}, {p:65,on:30.0} ]
+      st = noteOn 40.0 71 900.0 s4
+  assertEqual' "StealOldest takes the voice whose note began first"
+    { actual: held st.voices
+    , expected: [ {at:0,pitch:71}, {at:1,pitch:62}, {at:2,pitch:64}, {at:3,pitch:65} ] }
+  where
+  foldNotes inst ns =
+    let go v n = (noteOn n.on n.p 900.0 v).voices
+    in foldl go (empty inst) ns
