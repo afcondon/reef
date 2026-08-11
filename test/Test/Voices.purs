@@ -11,7 +11,7 @@ import Prelude
 import Data.Array (catMaybes, filter, mapWithIndex)
 import Data.Foldable (foldl)
 import Effect (Effect)
-import Reef.Voices (Action(..), allOff, Assign(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, saich, sounding)
+import Reef.Voices (Action(..), allOff, Assign(..), Order(..), Overflow(..), Release(..), Silencing(..), Voices, check, empty, expireAt, noteOn, saich, sounding)
 import Data.Maybe (isJust, isNothing)
 import Test.Assert (assertEqual', assertTrue')
 
@@ -114,7 +114,7 @@ voicesTests = do
   -- Per-voice gating permits everything the other cannot, which is the whole
   -- reason the capability is a separate axis from the policies.
   let poly = { voices: 4, silencing: PerVoiceGate, assign: RoundRobin
-             , overflow: StealOldest, release: LeaveHole }
+             , overflow: StealOldest, release: LeaveHole, order: Arrival }
   assertTrue' "round-robin and holes are fine when voices gate independently"
     (isNothing (check poly))
 
@@ -164,6 +164,47 @@ voicesTests = do
   assertEqual' "a gated instrument closes each open gate"
     { actual: map _.action (allOff 50.0 g2).emits
     , expected: [ Gate 0 false, Gate 1 false ] }
+
+  -- ByPitch: voice 0 is always the lowest sounding note, so its CV can be
+  -- split to another oscillator and mean something stable. The cost is movement
+  -- — a new bass note shifts everything above it up a voice — which is the
+  -- exact opposite trade from Arrival, and why it is a mode rather than a fix.
+  let sorted = saich { order = ByPitch }
+  assertTrue' "ByPitch is coherent on the Saich" (isNothing (check sorted))
+  assertTrue' "but not together with round-robin, which would be ignored"
+    (isJust (check (sorted { assign = RoundRobin })))
+
+  let b0 = empty sorted
+      b1 = (noteOn 0.0 67 900.0 b0).voices     -- G
+      b2 = (noteOn 10.0 72 900.0 b1).voices    -- C above it: stays above
+  assertEqual' "a higher note seats above without disturbing the lower"
+    { actual: held b2, expected: [ {at:0,pitch:67}, {at:1,pitch:72} ] }
+
+  let b3 = noteOn 20.0 60 900.0 b2      -- C below both: pushes them up
+  assertEqual' "a new BASS note takes voice 0 and shifts the rest up"
+    { actual: held b3.voices
+    , expected: [ {at:0,pitch:60}, {at:1,pitch:67}, {at:2,pitch:72} ] }
+  assertEqual' "emitting one repitch per voice that actually changed, low first"
+    { actual: pitches (map _.action b3.emits)
+    , expected: [ Pitch 0 60, Pitch 1 67, Pitch 2 72 ] }
+
+  -- And the property the splitter depends on: after ANY change, voice 0 holds
+  -- the lowest note. Here the bass is released, so the next-lowest must descend.
+  let b4 = (noteOn 30.0 55 40.0 b3.voices).voices   -- lower still, short
+      b5 = expireAt 100.0 b4
+  assertEqual' "when the bass ends, the next-lowest takes voice 0"
+    { actual: held b5.voices
+    , expected: [ {at:0,pitch:60}, {at:1,pitch:67}, {at:2,pitch:72} ] }
+
+  -- Arrival, for contrast, leaves them where they were: same notes, different
+  -- seats, far fewer emissions.
+  let a2 = (noteOn 10.0 72 900.0 (noteOn 0.0 67 900.0 (empty saich)).voices).voices
+      a3 = noteOn 20.0 60 900.0 a2
+  assertEqual' "Arrival puts the bass in the next free voice and moves nobody"
+    { actual: held a3.voices
+    , expected: [ {at:0,pitch:67}, {at:1,pitch:72}, {at:2,pitch:60} ] }
+  assertEqual' "one repitch, not three"
+    { actual: pitches (map _.action a3.emits), expected: [ Pitch 2 60 ] }
 
   where
   foldNotes inst ns =

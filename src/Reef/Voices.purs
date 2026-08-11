@@ -27,6 +27,7 @@ module Reef.Voices
   , Assign(..)
   , Overflow(..)
   , Release(..)
+  , Order(..)
   , Instrument
   , check
   , saich
@@ -95,6 +96,24 @@ data Overflow
 
 derive instance eqOverflow :: Eq Overflow
 
+-- | Where a note SITS among the voices, as distinct from which voice it was
+-- | given when it arrived.
+data Order
+  = Arrival
+  -- ^ Notes stay on whatever voice they were assigned, and move only when
+  -- compaction forces it. Disturbs the fewest oscillators, which is the fewest
+  -- audible events.
+  | ByPitch
+  -- ^ Voice 0 always holds the lowest sounding note, voice 1 the next, and so
+  -- on. The exact OPPOSITE trade to `Arrival`: it disturbs as many oscillators
+  -- as it takes, because a new bass note shifts every other voice up one.
+  --
+  -- Worth that cost when a voice's IDENTITY matters outside the allocator —
+  -- splitting voice 0's CV to double the bass line on another oscillator, say.
+  -- Then "voice 0" has to mean something stable, and arrival order does not.
+
+derive instance eqOrder :: Eq Order
+
 -- | What happens to the gap a finished note leaves.
 data Release
   = Compact
@@ -112,6 +131,7 @@ type Instrument =
   , assign :: Assign
   , overflow :: Overflow
   , release :: Release
+  , order :: Order
   }
 
 -- | Reject policies the hardware cannot honour. `Nothing` means coherent.
@@ -121,6 +141,12 @@ type Instrument =
 -- | rather than a wrong choice — so it is worth refusing at load time instead of
 -- | discovering in a rehearsal.
 check :: Instrument -> Maybe String
+check inst
+  -- Pitch order decides where a note sits, so there is nothing left for an
+  -- assignment policy to choose. Accepting both would silently honour one.
+  | inst.order == ByPitch && inst.assign /= LowestFree =
+      Just "ByPitch decides a note's voice from its pitch, so it cannot also be \
+           \assigned round-robin — one of the two would be silently ignored"
 check inst = case inst.silencing of
   CountCV cv
     | length cv.plateaus /= inst.voices + 1 ->
@@ -149,6 +175,7 @@ saich =
   , assign: LowestFree
   , overflow: Drop
   , release: Compact
+  , order: Arrival
   }
 
 -- | One physical voice's occupancy. `onAt` and `offAt` share the caller's
@@ -210,14 +237,17 @@ noteOn now pitch durMs v =
     Just i ->
       let
         slot = { pitch, onAt: now, offAt: now + durMs }
-        slots' = fromMaybe v.slots (updateAt i (Just slot) v.slots)
-        v' = v { slots = slots', nextRR = (i + 1) `mod` v.inst.voices }
-        n = length (filter (maybe false (const true)) slots')
+        placed = fromMaybe v.slots (updateAt i (Just slot) v.slots)
+        seated = reorder v.inst placed
+        v' = v { slots = seated, nextRR = (i + 1) `mod` v.inst.voices }
+        n = length (filter (maybe false (const true)) seated)
       in
         { voices: v'
-        -- Pitch before anything that makes the voice audible, so it is already
-        -- on the right note when it arrives. The other order sounds a stale one.
-        , emits: [ { atMs: now, action: Pitch i pitch } ] <> audible v.inst now i n
+        -- Pitch before anything that makes the voice audible, so every voice is
+        -- already on the right note when it arrives. The other order sounds a
+        -- stale one — and under ByPitch there may be several to settle, because
+        -- a new bass note shifts everything above it up a voice.
+        , emits: pitchDiffs now v.slots seated <> audible v.inst now i n
         }
 
 -- | The emissions that make voice `i` heard, given how this module silences.
@@ -293,9 +323,8 @@ expireAt now v =
         { voices: v { slots = live }, emits: [] }
       CountCV cv, _ ->
         let
-          moves = compact live
-          slots' = applyMoves live moves
-          pitchEmits = map (\m -> { atMs: now, action: Pitch m.to m.pitch }) moves
+          slots' = reorder v.inst (applyMoves live (compact live))
+          pitchEmits = pitchDiffs now v.slots slots'
           mixEmit = { atMs: now + cv.rampMs, action: Mix after (mixVoltsFor v.inst after) }
         in
           { voices: v { slots = slots' }
@@ -325,6 +354,38 @@ allOff now v =
         else [ { atMs: now, action: Mix 0 (mixVoltsFor v.inst 0) } ]
       AlwaysDroning -> []
   }
+
+-- | Re-seat the live notes according to `Order`.
+-- |
+-- | Applied AFTER the arrival-order arrangement rather than instead of it, so
+-- | the two policies share one implementation of counting, compaction and
+-- | overflow, and only the seating differs. It cannot change how many voices
+-- | sound, so nothing downstream of the count is affected.
+reorder :: Instrument -> Array (Maybe Slot) -> Array (Maybe Slot)
+reorder inst slots = case inst.order of
+  Arrival -> slots
+  ByPitch ->
+    let sorted = sortBy (comparing _.pitch) (catMaybes slots)
+    in map (\i -> index sorted i) (upto inst.voices)
+
+-- | One `Pitch` emission per voice whose note changed, comparing before to
+-- | after.
+-- |
+-- | Diffing rather than reporting the moves means a voice that ends up back
+-- | where it started emits nothing, and — under `ByPitch` — a cascade that
+-- | shifts three notes up produces exactly three emissions rather than a
+-- | re-statement of every voice. A redundant repitch is not silent on an
+-- | analogue oscillator; it is a discontinuity.
+pitchDiffs :: Number -> Array (Maybe Slot) -> Array (Maybe Slot) -> Array Emit
+pitchDiffs now before after =
+  catMaybes (mapWithIndex step after)
+  where
+  step i ms = case ms of
+    Nothing -> Nothing
+    Just s ->
+      case index before i of
+        Just (Just old) | old.pitch == s.pitch -> Nothing
+        _ -> Just { atMs: now, action: Pitch i s.pitch }
 
 type Move = { from :: Int, to :: Int, pitch :: Int }
 
