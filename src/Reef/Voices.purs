@@ -35,6 +35,7 @@ module Reef.Voices
   , saich
   , rings
   , qd
+  , rample
   , Slot
   , Voices
   , empty
@@ -318,6 +319,41 @@ rings =
 -- |
 -- | The decay endpoints are a starting guess to be dialled by ear; see
 -- | `DecayMap` for why they are not measured.
+-- | Squarp Rample, playing a sliced card.
+-- |
+-- | Structurally the QuadDrum's twin — four independent voices, each its own
+-- | output, each silenced by being re-struck — and it differs in two ways that
+-- | both come from measurement rather than from the manual.
+-- |
+-- | `settleMs` is **40**, and it is not a guess about MIDI jitter: a note on
+-- | this module is a start-point CC followed by a trigger, and the CC must land
+-- | first or the trigger plays the previous slice. Forty milliseconds was
+-- | measured to be enough on 2026-09-08; how much less would do is not known,
+-- | so this is the figure that is known to work rather than the smallest one.
+-- |
+-- | And there is no decay CV. The Rample's decay is whatever the sample does,
+-- | which on a sliced card is the slice's own length — so unlike the QuadDrum
+-- | there is nothing to send, and `Decay` actions must never be emitted for it.
+rample :: Instrument
+rample =
+  { voices: 4
+  , silencing: PerVoiceStrike
+      { settleMs: 40.0
+      , triggerMs: 5.0
+      , decay: Nothing
+      }
+  -- Longest-idle first, and steal the longest-idle when full. Re-triggering a
+  -- voice cuts the note it was playing, so both are the same instinct: leave a
+  -- sounding note alone for as long as there is anything else to use.
+  , assign: RoundRobin
+  , overflow: StealOldest
+  -- Each voice has its own output and can be re-struck alone, so a silent
+  -- voice between two sounding ones costs nothing. Compaction would move a
+  -- note that is still ringing to a different output, which is worse.
+  , release: LeaveHole
+  , order: Arrival
+  }
+
 qd :: Instrument
 qd =
   { voices: 4
