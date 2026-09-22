@@ -44,6 +44,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
+import Reef.Conspicillum.Harmonic (Harmonic)
 import Simple.JSON (readJSON, writeJSON)
 
 -- | Everything the rig needs to run a cloud, pushed once.
@@ -123,9 +124,14 @@ type WireWeighting = { axis :: WireAxis, toward :: Int, strength :: Number }
 -- | simple-json maps `Maybe` to null, and null is exactly the sort of thing
 -- | that round-trips through V8 and through jsx in ways that agree until one
 -- | day they do not. An empty-or-singleton array is unambiguous on both.
+-- | `Harmonic` needs no projection at all: it is `{ target :: { pcs, root,
+-- | bass }, minFit, strength }`, which is Int / Array Int / Number the whole
+-- | way down. It rides as an at-most-one array for the same reason `weighting`
+-- | does.
 type WireQuery =
   { clauses :: Array WireClause
   , weighting :: Array WireWeighting
+  , harmonic :: Array Harmonic
   }
 
 type WireScene =
@@ -141,12 +147,16 @@ toWireQuery q =
   , weighting: case q.weighting of
       Nothing -> []
       Just w -> [ { axis: axisToWire w.axis, toward: towardToInt w.toward, strength: w.strength } ]
+  , harmonic: case q.harmonic of
+      Nothing -> []
+      Just h -> [ h ]
   }
 
 fromWireQuery :: WireQuery -> Query
 fromWireQuery w =
   { clauses: map (\c -> { axis: axisFromWire c.axis, cmp: cmpFromInt c.cmp, value: c.value }) w.clauses
   , weighting: if length w.weighting == 0 then Nothing else map toW (head w.weighting)
+  , harmonic: head w.harmonic
   }
   where
   toW :: WireWeighting -> Weighting

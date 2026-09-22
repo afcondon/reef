@@ -63,10 +63,11 @@ module Reef.Conspicillum.Corpus
 
 import Prelude
 
-import Data.Array (filter, index, length, (!!))
+import Data.Array (filter, index, length, zipWith, (!!))
 import Data.Foldable (foldl, sum)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..))
+import Reef.Conspicillum.Harmonic (Harmonic, fit)
 import Reef.Marbles (Seed, nextRand)
 
 -- ── the corpus ───────────────────────────────────────────────────────────────
@@ -153,17 +154,37 @@ derive instance eqToward :: Eq Toward
 -- | its own, the way `pow` is.
 type Weighting = { axis :: Axis, toward :: Toward, strength :: Number }
 
-type Query = { clauses :: Array Clause, weighting :: Maybe Weighting }
+-- | `harmonic` is a THIRD axis, and orthogonal to the other two on purpose.
+-- |
+-- | A clause and a weighting both ask about a property OF the sample. A
+-- | harmonic constraint asks about the relation between the sample and
+-- | something outside it — the chord currently wanted — so it is not an `Axis`
+-- | and forcing it to be one would have been the wrong shape. It carries its
+-- | own hard cut and soft lean, mirroring the pairing the numeric axes use.
+type Query =
+  { clauses :: Array Clause
+  , weighting :: Maybe Weighting
+  , harmonic :: Maybe Harmonic
+  }
 
 emptyQuery :: Query
-emptyQuery = { clauses: [], weighting: Nothing }
+emptyQuery = { clauses: [], weighting: Nothing, harmonic: Nothing }
 
 -- ── filtering ────────────────────────────────────────────────────────────────
 
 -- | The samples a query admits. Every clause must hold, and a sample that
 -- | cannot answer an axis fails it (see `axisOf`).
 survivors :: Query -> Corpus -> Array Grainable
-survivors q c = filter (\g -> foldl (\ok cl -> ok && holds cl g) true q.clauses) c.samples
+survivors q c = filter admits c.samples
+  where
+  admits g = foldl (\ok cl -> ok && holds cl g) true q.clauses && voices g
+  -- A harmonic cut is a clause like any other: below `minFit` the sample is
+  -- not in the cloud at all. Note this is where the 24 chord hits with no
+  -- recorded notes drop out, since `fit` scores them zero rather than
+  -- abstaining — see `Reef.Conspicillum.Harmonic`.
+  voices g = case q.harmonic of
+    Nothing -> true
+    Just h -> fit h.target g.notes >= h.minFit
 
 holds :: Clause -> Grainable -> Boolean
 holds cl g = case axisOf cl.axis g of
@@ -189,7 +210,25 @@ holds cl g = case axisOf cl.axis g of
 -- | Degenerate cases are uniform rather than arbitrary: no weighting, every
 -- | value equal, or a sample that cannot answer the axis.
 weights :: Query -> Array Grainable -> Array Number
-weights q gs = case q.weighting of
+weights q gs = zipWith (*) (axisWeights q gs) (harmonicWeights q gs)
+
+-- | The harmonic lean, or all-ones when there is none.
+-- |
+-- | Multiplied into the axis lean rather than replacing it, so "mostly the
+-- | bright ones AND mostly the ones that voice this chord" composes — which is
+-- | the whole reason the two are separate concepts.
+-- |
+-- | Not normalised across survivors, unlike the axis lean: `fit` is already an
+-- | absolute measure on [0,1] with a meaning ("how well does this voice the
+-- | chord"), so re-scaling it against whatever else survived would destroy
+-- | exactly the information it carries.
+harmonicWeights :: Query -> Array Grainable -> Array Number
+harmonicWeights q gs = case q.harmonic of
+  Nothing -> map (const 1.0) gs
+  Just h -> map (\g -> (1.0 - h.strength) + h.strength * fit h.target g.notes) gs
+
+axisWeights :: Query -> Array Grainable -> Array Number
+axisWeights q gs = case q.weighting of
   Nothing -> map (const 1.0) gs
   Just w ->
     let

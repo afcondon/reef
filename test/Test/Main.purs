@@ -9,7 +9,7 @@ import Prelude
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
 import Reef.Odonus (defaultOdonus)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
@@ -68,6 +68,24 @@ main = do
   assertEqual' "Conspicillum cloud golden (cycles 0,1,2,7 — cross-cycle Every + seeded Chance)"
     { actual: conspicillumCloudRun, expected: conspicillumCloudGolden }
   log "Reef Conspicillum cloud golden: OK"
+
+  -- Conspicillum C5: realising a progression onto RECORDED chord voicings.
+  --
+  -- A real corpus — actual Quadrat chord hits with the MIDI notes really
+  -- struck — scored against each chord of a ii-V-i in D minor. The point is
+  -- that the same corpus ranks DIFFERENTLY under each chord: Em7b5 picks the
+  -- Gm(maj7) (three shared tones of four), A7 picks the A major by a mile, and
+  -- Dm and Dm6 each pick themselves and rank the other second, so the scorer
+  -- distinguishes a sixth.
+  --
+  -- The last two columns are the ones that matter most. Of the 136 chord hits
+  -- recorded so far, 24 carry no notes and 7 are eleven-pitch-class smears, and
+  -- a smear covers every chord perfectly on coverage alone. Here the smear
+  -- never exceeds 149 and the empty hit is 0 throughout — if that ever stops
+  -- being true, the instrument has started preferring its broken material.
+  assertEqual' "Conspicillum harmonic golden (real chord hits under a ii-V-i)"
+    { actual: conspicillumHarmonicRun, expected: conspicillumHarmonicGolden }
+  log "Reef Conspicillum harmonic golden: OK"
   -- The chord-quantised render golden: a → odo Vetula feed turns the chord overlay
   -- on, then 32 steps render the SOUNDING pitch — pinning that the chord path realizes
   -- the cell index to a melodic pitch and snaps it to the nearest chord tone (sane
@@ -1607,3 +1625,10 @@ c7 g4 at 500000 n 2 b 470243 sp -1000000 gn 400000
 c7 g5 at 625000 n 2 b 335981 sp 1000000 gn 800000
 c7 g6 at 687500 n 0 b 492396 sp 1000000 gn 800000
 c7 g7 at 875000 n 4 b 309766 sp -1000000 gn 800000"""
+
+
+conspicillumHarmonicGolden :: String
+conspicillumHarmonicGolden = """Em7b5  |  502  456  187    0   69  123  126  103  149    0
+A7     |  117  312   59    0  208  863  151  135  149    0
+Dm     |  140    0  362  251    0   80 1000  902  110    0
+Dm6    |  144  102  289  202   45   80  918 1000  149    0"""

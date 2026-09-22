@@ -341,3 +341,27 @@ echo "== conspicillumCloudRun (4 cycles, cross-cycle Every + seeded Chance): nod
   > /tmp/reef-conspicillum-cloud-erl.txt
 diff /tmp/reef-conspicillum-cloud-node.txt /tmp/reef-conspicillum-cloud-erl.txt && echo "  OK conspicillumCloudRun node == erl (placement, rules and per-cycle seeds identical)"
 diff "$CONSPICILLUM_CLOUD_GOLDEN" /tmp/reef-conspicillum-cloud-node.txt && echo "  OK conspicillumCloudRun matches frozen golden"
+
+# --- Conspicillum harmonic fit (Reef.Conformance.conspicillumHarmonicRun) -----
+# CONSPICILLUM C5. A ii-V-i in D minor scored against a corpus of REAL Quadrat
+# chord hits — the actual MIDI notes struck, pulled from the chord-hits-* sets.
+#
+# The instrument's headline claim, made checkable: the same corpus ranks
+# differently under each chord, so a progression is realised onto recorded
+# voicings rather than transposed onto one sample.
+#
+# Watch the last two columns. 24 of the 136 chord hits carry no notes and 7 are
+# eleven-pitch-class smears, and a smear covers EVERY chord perfectly on
+# coverage alone — so if the smear column ever climbs above the real chords,
+# the instrument has learned to prefer its broken material. That is what the
+# squared foreign-note term in Reef.Conspicillum.Harmonic is defending.
+CONSPICILLUM_HARMONIC_GOLDEN="$REEF/conformance/conspicillum-harmonic-golden.txt"
+echo "== conspicillumHarmonicRun (ii-V-i over real chord hits): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumHarmonicRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumHarmonicRun);' \
+  ) > /tmp/reef-conspicillum-harmonic-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumHarmonicRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-harmonic-erl.txt
+diff /tmp/reef-conspicillum-harmonic-node.txt /tmp/reef-conspicillum-harmonic-erl.txt && echo "  OK conspicillumHarmonicRun node == erl"
+diff "$CONSPICILLUM_HARMONIC_GOLDEN" /tmp/reef-conspicillum-harmonic-node.txt && echo "  OK conspicillumHarmonicRun matches frozen golden"

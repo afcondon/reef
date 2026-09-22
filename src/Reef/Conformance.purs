@@ -41,6 +41,7 @@ module Reef.Conformance
   , stellatusRun, stellatusRunSteps
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
+  , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
 import Prelude
@@ -71,6 +72,7 @@ import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), grainAt, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Op(..), Spec, When(..), cycleOf) as CL
+import Reef.Conspicillum.Harmonic (Target, fit) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -808,6 +810,9 @@ conspicillumScene =
           , { axis: CC.AParam "harm", cmp: CC.Lte, value: 0.9 } -- intentional
           ]
       , weighting: Just { axis: CC.AZcr, toward: CC.High, strength: 0.8 }
+      -- C2 and C3 stay harmonically unconstrained, so their frozen goldens keep
+      -- their meaning: adding the axis must not move what they measure.
+      , harmonic: Nothing
       }
   , cloud: { sustain: 0.05, position: 0.4, spray: 0.3 }
   , seed: seedFrom 12345
@@ -913,3 +918,82 @@ conspicillumCloudRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
 
   six :: Number -> String
   six x = show (round (x * 1000000.0))
+
+
+-- ── 14. Conspicillum: realising a progression onto recorded chord hits ───────
+
+-- | **A real corpus.** Every one of these is an actual Quadrat chord hit, with
+-- | the MIDI notes that were really struck and the measurements really taken —
+-- | pulled from the `chord-hits-*` sets on 2026-09-22. Synthetic numbers would
+-- | not have told us what the last two rows tell us.
+-- |
+-- | Read as chords, they are: Gm(maj7), Em, a five-note cluster, Fm, another
+-- | cluster, A major, D minor, Dm6 — then a SMEAR of eleven pitch classes and
+-- | a hit with NO recorded notes at all. Those last two are not padding. Of the
+-- | 136 chord hits recorded so far, 24 carry no notes and 7 are smears, and a
+-- | smear covers every chord perfectly on coverage alone. A golden without them
+-- | would not notice the instrument learning to prefer its broken material.
+conspicillumChordCorpus :: Array CC.Grainable
+conspicillumChordCorpus =
+  [ g 0 7.77 0.3405 0.0431 1153.8 0.2248 7.4100 [43, 55, 66, 70, 74]   -- clean: pcs [2, 6, 7, 10]
+  , g 1 7.88 0.3406 0.0470 942.0 0.1603 7.5947 [40, 52, 55, 64, 71]   -- clean: pcs [4, 7, 11]
+  , g 2 7.83 0.4020 0.0506 1104.4 0.1969 7.5149 [39, 51, 62, 65, 67, 72]   -- clean: pcs [0, 2, 3, 5, 7]
+  , g 3 8.45 0.4281 0.0488 992.2 0.1728 7.9932 [41, 53, 56, 65, 72]   -- clean: pcs [0, 5, 8]
+  , g 4 8.06 0.4592 0.0584 1100.1 0.1949 7.7206 [37, 49, 59, 64, 68, 75]   -- clean: pcs [1, 3, 4, 8, 11]
+  , g 5 9.34 0.4427 0.0584 1054.5 0.1892 8.3575 [45, 57, 64, 69, 73]   -- clean: pcs [1, 4, 9]
+  , g 6 16.81 0.8394 0.1352 929.1 0.1379 15.3199 [38, 57, 62, 65, 74]   -- clean: pcs [2, 5, 9]
+  , g 7 17.12 0.9175 0.1379 1210.9 0.1652 15.6311 [38, 50, 65, 69, 71]   -- clean: pcs [2, 5, 9, 11]
+  , g 8 7.56 0.3361 0.0384 1177.0 0.2063 7.1482 [0, 1, 2, 3, 4, 5, 6, 13, 14, 16, 17, 18, 23, 25, 33, 34, 36, 38, 40, 45, 57, 62, 65, 73, 74, 75, 79, 86, 90, 91, 95, 102, 105, 115, 120, 123]   -- smear: pcs [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11]
+  , g 9 7.83 0.2558 0.0320 1138.3 0.2036 7.0129 []   -- empty: pcs []
+  ]
+  where
+  g ix secs peak rms zcr tilt decay notes =
+    { index: ix, secs, peak, rms, zcr, tilt, decay
+    , cell: [], params: [], notes }
+
+-- | A ii-V-i in D minor, as (name, target). Roots and basses are given
+-- | explicitly because a realised `Harmonia.Chord` is SORTED and its root
+-- | cannot be recovered from the set — see `Reef.Conspicillum.Harmonic`.
+conspicillumProgression :: Array { name :: String, target :: CH.Target }
+conspicillumProgression =
+  [ { name: "Em7b5", target: { pcs: [ 4, 7, 10, 2 ], root: 4, bass: 4 } }
+  , { name: "A7",    target: { pcs: [ 9, 1, 4, 7 ], root: 9, bass: 9 } }
+  , { name: "Dm",    target: { pcs: [ 2, 5, 9 ], root: 2, bass: 2 } }
+  , { name: "Dm6",   target: { pcs: [ 2, 5, 9, 11 ], root: 2, bass: 2 } }
+  ]
+
+-- | For each chord of the progression, every sample's fit.
+-- |
+-- | This is the claim the whole instrument was proposed for, made checkable:
+-- | the SAME corpus ranks differently under each chord, so a progression is
+-- | realised onto recorded voicings rather than transposed onto one sample.
+-- | Nothing else in the stack can do it, because nothing else recorded what it
+-- | sampled.
+-- |
+-- | Scaled integers, for the reason the other two Conspicillum goldens give.
+conspicillumHarmonicRun :: String
+conspicillumHarmonicRun =
+  intercalate "\n" (map row conspicillumProgression)
+  where
+  row c =
+    pad6 c.name <> " |" <> intercalate ""
+      (map (\s -> " " <> pad4 (round (CH.fit c.target s.notes * 1000.0)))
+        conspicillumChordCorpus)
+
+  -- Padded numerically rather than by string length: reef does not depend on
+  -- `strings`, and a fit is always 0..1000 here, so the cases are exhaustive.
+  pad4 :: Int -> String
+  pad4 n =
+    let t = show n
+    in if n >= 1000 then t
+       else if n >= 100 then " " <> t
+       else if n >= 10 then "  " <> t
+       else "   " <> t
+
+  pad6 :: String -> String
+  pad6 nm = case nm of
+    "Dm" -> "Dm    "
+    "A7" -> "A7    "
+    "Dm6" -> "Dm6   "
+    "Em7b5" -> "Em7b5 "
+    _ -> nm
