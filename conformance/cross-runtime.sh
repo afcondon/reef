@@ -314,3 +314,30 @@ echo "== conspicillumRun (64 weighted draws + grain windows): node vs erl =="
   > /tmp/reef-conspicillum-erl.txt
 diff /tmp/reef-conspicillum-node.txt /tmp/reef-conspicillum-erl.txt && echo "  OK conspicillumRun node == erl (filter, weighting and windows identical over 64 draws)"
 diff "$CONSPICILLUM_GOLDEN" /tmp/reef-conspicillum-node.txt && echo "  OK conspicillumRun matches frozen golden"
+
+# --- Conspicillum cloud over a cycle (Reef.Conformance.conspicillumCloudRun) --
+# CONSPICILLUM C3. Onsets -> placed, transformed grains: `Every n k` counted
+# across cycles, a seeded `Chance` rule beside it, and the per-cycle seed
+# derived (not threaded) from the base seed and the cycle number.
+#
+# Cycles 0,1,2 then 7 OUT OF ORDER. That last one is the point. Conspicillum is
+# cycle-ADDRESSED where Stellatus loops, because its browser side is a pure
+# visualizer that recomputes rather than being told — so it must be able to ask
+# for cycle 7 without having simulated the six before it. A threaded seed would
+# make cycle 7 alone differ from cycle 7 reached by playing, and the picture
+# would be quietly wrong exactly when the player dropped into a running set.
+#
+# The `Every 3 0` rule with 8 onsets a cycle is what pins the cross-cycle
+# counting: reversed grains land on ordinals 0,3,6 then 9,12,15 (indices 1,4,7)
+# then 18,21 — the figure WALKS. A per-cycle reset would restart it at index 0
+# every bar, which is both wrong and entirely silent.
+CONSPICILLUM_CLOUD_GOLDEN="$REEF/conformance/conspicillum-cloud-golden.txt"
+echo "== conspicillumCloudRun (4 cycles, cross-cycle Every + seeded Chance): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumCloudRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumCloudRun);' \
+  ) > /tmp/reef-conspicillum-cloud-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumCloudRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-cloud-erl.txt
+diff /tmp/reef-conspicillum-cloud-node.txt /tmp/reef-conspicillum-cloud-erl.txt && echo "  OK conspicillumCloudRun node == erl (placement, rules and per-cycle seeds identical)"
+diff "$CONSPICILLUM_CLOUD_GOLDEN" /tmp/reef-conspicillum-cloud-node.txt && echo "  OK conspicillumCloudRun matches frozen golden"

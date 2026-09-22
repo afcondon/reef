@@ -9,7 +9,7 @@ import Prelude
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
 import Reef.Odonus (defaultOdonus)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
@@ -52,6 +52,22 @@ main = do
   assertEqual' ("Conspicillum grain-selector golden (" <> show conspicillumGrains <> " draws, filter + weighting + window)")
     { actual: conspicillumRun, expected: conspicillumGolden }
   log "Reef Conspicillum selector golden: OK"
+
+  -- Conspicillum C3: the cloud over a cycle. Pins the two properties that make
+  -- a grain addressable at all.
+  --
+  --   `Every 3 0` counted ACROSS cycles, not within one. With 8 onsets a cycle
+  --   the reversed grains land on ordinals 0,3,6 then 9,12,15 (indices 1,4,7)
+  --   then 18,21 — the figure WALKS. A per-cycle reset would restart it at
+  --   index 0 every bar, which is wrong and completely silent.
+  --
+  --   Cycle 7 rendered OUT OF ORDER, after 0,1,2. Conspicillum derives each
+  --   cycle's seed from the base seed and the cycle number instead of threading
+  --   it, so any cycle can be computed directly — which is what the browser
+  --   visualizer needs when the player drops into a set already running.
+  assertEqual' "Conspicillum cloud golden (cycles 0,1,2,7 — cross-cycle Every + seeded Chance)"
+    { actual: conspicillumCloudRun, expected: conspicillumCloudGolden }
+  log "Reef Conspicillum cloud golden: OK"
   -- The chord-quantised render golden: a → odo Vetula feed turns the chord overlay
   -- on, then 32 steps render the SOUNDING pitch — pinning that the chord path realizes
   -- the cell index to a melodic pitch and snaps it to the nearest chord tone (sane
@@ -1556,3 +1572,38 @@ conspicillumGolden = """0 495198 507698
 0 380101 392601
 4 464196 470862
 2 454537 467358"""
+
+
+conspicillumCloudGolden :: String
+conspicillumCloudGolden = """c0 g0 at 0 n 4 b 357158 sp -1000000 gn 800000
+c0 g1 at 125000 n 1 b 465445 sp 1000000 gn 800000
+c0 g2 at 187500 n 0 b 355106 sp 1000000 gn 800000
+c0 g3 at 375000 n 4 b 339706 sp -1000000 gn 400000
+c0 g4 at 500000 n 2 b 298660 sp 1000000 gn 800000
+c0 g5 at 625000 n 4 b 281885 sp 1000000 gn 800000
+c0 g6 at 687500 n 2 b 360483 sp -1000000 gn 800000
+c0 g7 at 875000 n 4 b 369055 sp 1000000 gn 800000
+c1 g0 at 0 n 4 b 518736 sp 1000000 gn 800000
+c1 g1 at 125000 n 0 b 537579 sp -1000000 gn 400000
+c1 g2 at 187500 n 4 b 405535 sp 1000000 gn 800000
+c1 g3 at 375000 n 2 b 352737 sp 1000000 gn 800000
+c1 g4 at 500000 n 3 b 520784 sp -1000000 gn 800000
+c1 g5 at 625000 n 4 b 488738 sp 1000000 gn 800000
+c1 g6 at 687500 n 4 b 421326 sp 1000000 gn 800000
+c1 g7 at 875000 n 2 b 533055 sp -1000000 gn 800000
+c2 g0 at 0 n 4 b 460670 sp 1000000 gn 800000
+c2 g1 at 125000 n 4 b 465375 sp 1000000 gn 800000
+c2 g2 at 187500 n 4 b 444008 sp -1000000 gn 800000
+c2 g3 at 375000 n 1 b 471305 sp 1000000 gn 400000
+c2 g4 at 500000 n 3 b 404518 sp 1000000 gn 800000
+c2 g5 at 625000 n 4 b 461404 sp -1000000 gn 800000
+c2 g6 at 687500 n 4 b 424143 sp 1000000 gn 800000
+c2 g7 at 875000 n 1 b 530425 sp 1000000 gn 400000
+c7 g0 at 0 n 2 b 436181 sp 1000000 gn 800000
+c7 g1 at 125000 n 1 b 251474 sp -1000000 gn 800000
+c7 g2 at 187500 n 4 b 379843 sp 1000000 gn 800000
+c7 g3 at 375000 n 0 b 343518 sp 1000000 gn 800000
+c7 g4 at 500000 n 2 b 470243 sp -1000000 gn 400000
+c7 g5 at 625000 n 2 b 335981 sp 1000000 gn 800000
+c7 g6 at 687500 n 0 b 492396 sp 1000000 gn 800000
+c7 g7 at 875000 n 4 b 309766 sp -1000000 gn 800000"""

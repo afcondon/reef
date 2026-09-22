@@ -40,6 +40,7 @@ module Reef.Conformance
   , chordRun
   , stellatusRun, stellatusRunSteps
   , conspicillumRun, conspicillumGrains
+  , conspicillumCloudRun, conspicillumCycles
   ) where
 
 import Prelude
@@ -69,6 +70,7 @@ import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), grainAt, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
+import Reef.Conspicillum.Cloud (Op(..), Spec, When(..), cycleOf) as CL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -845,5 +847,69 @@ conspicillumRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
 
   -- Six decimal places, as an integer. Comfortably inside the exactness of the
   -- divisions that produced it, and format-free.
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
+
+-- ── 13. Conspicillum: the cloud over a cycle ─────────────────────────────────
+
+-- | Cycles rendered, and the one asked for OUT OF ORDER.
+-- |
+-- | 0,1,2 in sequence then 7 on its own. The out-of-order cycle is the point:
+-- | Conspicillum is cycle-ADDRESSED where Stellatus loops, so the browser can
+-- | recompute cycle 7 without having simulated the six before it. If the seed
+-- | were threaded rather than derived, cycle 7 alone would differ from cycle 7
+-- | reached by playing — and the visualizer would be quietly wrong whenever the
+-- | player dropped into a running set.
+conspicillumCycles :: Array Int
+conspicillumCycles = [ 0, 1, 2, 7 ]
+
+-- | Eight onsets, unevenly placed, so `at` is not recoverable from the index
+-- | and a drift in onset handling cannot hide behind regular spacing.
+conspicillumSpec :: CL.Spec
+conspicillumSpec =
+  { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
+  , cloud: { sustain: 0.05, position: 0.4, spray: 0.3 }
+  , rules:
+      -- The headline, and the thing no hardware granulator can express: every
+      -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
+      -- cycle against a period of three means the figure walks — grains 0,3,6
+      -- in the first cycle, 9,12,15 (= indices 1,4,7) in the second — which is
+      -- precisely what the golden has to pin, and what a per-cycle reset would
+      -- silently destroy.
+      [ { when: CL.Every 3 0, op: CL.OpSpeed (-1.0) }
+      -- And a seeded one beside it, so the golden covers both kinds of `when`
+      -- and the draw order between them.
+      , { when: CL.Chance 0.25, op: CL.OpGain 0.5 }
+      ]
+  , speed: 1.0
+  , gain: 0.8
+  , pan: 0.5
+  , accelerate: 0.0
+  }
+
+-- | Render the cloud for each cycle.
+-- |
+-- | Scaled integers, for the reason `conspicillumRun` and `betaProbe` give: a
+-- | Number's printed form is a formatting decision the two runtimes do not owe
+-- | each other, and this golden compares arithmetic.
+conspicillumCloudRun :: String
+conspicillumCloudRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
+  Left errs -> "CONSPICILLUM-CLOUD-DECODE-FAIL: " <> show errs
+  Right scene ->
+    intercalate "\n" (map (renderCycle scene) conspicillumCycles)
+  where
+  renderCycle scene cyc =
+    let es = CL.cycleOf scene.corpus scene.query conspicillumSpec 4242 cyc
+    in intercalate "\n" (mapWithIndex (renderEmit cyc) es)
+
+  renderEmit cyc i e =
+    "c" <> show cyc <> " g" <> show i
+      <> " at " <> six e.at
+      <> " n " <> show e.n
+      <> " b " <> six e.begin
+      <> " sp " <> six e.speed
+      <> " gn " <> six e.gain
+
   six :: Number -> String
   six x = show (round (x * 1000000.0))
