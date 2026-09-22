@@ -285,3 +285,32 @@ echo "== stellatusRun (96-step ring walk + glitch + jumps): node vs erl =="
   > /tmp/reef-stellatus-erl.txt
 diff /tmp/reef-stellatus-node.txt /tmp/reef-stellatus-erl.txt && echo "  OK stellatusRun node == erl (walk + glitch + jumps identical over 96 steps)"
 diff "$STELLATUS_GOLDEN" /tmp/reef-stellatus-node.txt && echo "  OK stellatusRun matches frozen golden"
+
+# --- Conspicillum grain selector (Reef.Conformance.conspicillumRun) -----------
+# CONSPICILLUM C2. The shared Reef.Conspicillum.Corpus selector: filter, weight,
+# seeded draw and grain-window placement, 64 draws from a fixed seed over a
+# synthetic Quadrat set. Uses decodeScene (codec -> jsx), so the BEAM needs
+# jsx's ebin.
+#
+# Byte-identical here is what lets the browser DRAW the cloud the rig SOUNDS.
+# Conspicillum's browser side is a pure visualizer — it recomputes the cloud
+# rather than being told what played — so any divergence is a picture that
+# lies, with nothing anywhere reporting it.
+#
+# Three things a divergence would move, all of them silently: which samples
+# survive the filter (including the rule that a sample which cannot answer an
+# axis is EXCLUDED, not defaulted — sample 7 carries no `harm`), how the draw
+# leans toward an axis, and each grain's begin/end window, which must be
+# `sustain / secs` for the sample it landed in or the cloud transposes itself
+# sample by sample. Rendered as scaled integers: `show` on a Number is a
+# formatting decision the two runtimes do not owe each other.
+CONSPICILLUM_GOLDEN="$REEF/conformance/conspicillum-golden.txt"
+echo "== conspicillumRun (64 weighted draws + grain windows): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumRun);' \
+  ) > /tmp/reef-conspicillum-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-erl.txt
+diff /tmp/reef-conspicillum-node.txt /tmp/reef-conspicillum-erl.txt && echo "  OK conspicillumRun node == erl (filter, weighting and windows identical over 64 draws)"
+diff "$CONSPICILLUM_GOLDEN" /tmp/reef-conspicillum-node.txt && echo "  OK conspicillumRun matches frozen golden"

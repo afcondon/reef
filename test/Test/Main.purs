@@ -9,7 +9,7 @@ import Prelude
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
 import Reef.Odonus (defaultOdonus)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
@@ -26,6 +26,32 @@ main = do
   assertEqual' "Odonus stepEmit conformance (defaultOdonus, scale source, 32 steps)"
     { actual: run, expected: golden }
   log "Reef Odonus conformance golden: OK"
+
+  -- Conspicillum: the grain selector (triggerfish/docs/CONSPICILLUM-DESIGN.md, C2).
+  --
+  -- The golden pins three things a drift in any of which is SILENT — the cloud
+  -- would simply be made of different material, with no error anywhere:
+  --
+  --   the FILTER. Only samples 0-4 may appear. 5 fails `decay > 0.5`, 6 fails
+  --   `harm <= 0.9`, and 7 is excluded because it carries no `harm` AT ALL —
+  --   the "a sample that cannot answer an axis is excluded, not defaulted"
+  --   rule, which a golden without a deficient sample could not defend.
+  --
+  --   the WEIGHTING. Leaning 0.8 toward high `zcr` over survivors spanning
+  --   400-2400 Hz predicts roughly 35/26/18/14/7 percent for samples
+  --   4/2/0/1/3; these 64 draws land 26/15/11/9/3.
+  --
+  --   the WINDOW. Every grain's `end - begin` is exactly `sustain / secs` for
+  --   whichever sample it landed in — 12500 for a 4.0 s sample, 6250 for an
+  --   8.0 s one. That is what keeps a cloud from transposing itself sample by
+  --   sample, and it is wrong in a way that sounds deliberate.
+  --
+  -- Rendered as scaled integers: `show` on a Number is a formatting decision
+  -- the two runtimes do not owe each other, and this golden has to compare the
+  -- arithmetic. Same reasoning as the Beta/pow probe.
+  assertEqual' ("Conspicillum grain-selector golden (" <> show conspicillumGrains <> " draws, filter + weighting + window)")
+    { actual: conspicillumRun, expected: conspicillumGolden }
+  log "Reef Conspicillum selector golden: OK"
   -- The chord-quantised render golden: a → odo Vetula feed turns the chord overlay
   -- on, then 32 steps render the SOUNDING pitch — pinning that the chord path realizes
   -- the cell index to a melodic pitch and snaps it to the nearest chord tone (sane
@@ -1463,3 +1489,70 @@ vetulaMidiGolden = """   0 | v0:36/82/3136,60/82/3136,64/82/3136,67/82/3136 | v1
  125 | v0:- | v1:59/80/90 | v2:- | v3:- | v4:-
  126 | v0:- | v1:62/80/90 | v2:- | v3:- | v4:-
  127 | v0:- | v1:66/80/90 | v2:- | v3:- | v4:-"""
+
+
+conspicillumGolden :: String
+conspicillumGolden = """0 495198 507698
+4 258097 264764
+0 260347 272847
+4 422812 429479
+4 482473 489140
+2 303406 316226
+1 483049 494954
+4 291999 298666
+2 255104 267925
+1 295465 307370
+4 310074 316740
+4 318892 325558
+4 528061 534728
+1 434115 446020
+2 304238 317059
+4 347773 354440
+4 532160 538827
+4 262790 269456
+4 513568 520235
+2 276639 289459
+4 422318 428985
+1 298573 310478
+4 339501 346168
+2 457722 470543
+3 397141 403391
+2 424463 437284
+2 462355 475175
+0 404417 416917
+0 415057 427557
+0 444987 457487
+4 347874 354541
+3 385998 392248
+0 287653 300153
+2 274148 286968
+0 374700 387200
+1 315683 327588
+2 267768 280589
+4 422446 429113
+2 330905 343726
+4 299872 306539
+2 435540 448361
+4 541541 548208
+2 458920 471740
+4 310670 317336
+1 372431 384336
+4 410235 416901
+1 354394 366299
+1 437946 449851
+0 379653 392153
+4 261292 267959
+0 376974 389474
+3 384152 390402
+4 270925 277592
+4 261913 268579
+4 468454 475121
+4 449166 455833
+2 291134 303955
+4 541038 547705
+2 370107 382928
+0 282364 294864
+1 482443 494348
+0 380101 392601
+4 464196 470862
+2 454537 467358"""

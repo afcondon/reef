@@ -39,6 +39,7 @@ module Reef.Conformance
   , vetulaMidiRun
   , chordRun
   , stellatusRun, stellatusRunSteps
+  , conspicillumRun, conspicillumGrains
   ) where
 
 import Prelude
@@ -65,6 +66,9 @@ import Reef.Vetula.Perf (Perf, VDest(..), VRenderer(..), cursorAt, odoCursorAt, 
 import Reef.Vetula.Protocol (decodePerf, encodePerf) as VP
 import Reef.Stellatus.Engine (Scene, walk, walkLen, events) as SE
 import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
+import Reef.Conspicillum.Corpus
+  (Axis(..), Cmp(..), Grainable, Toward(..), grainAt, pick) as CC
+import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -754,3 +758,92 @@ pad4 :: Int -> String
 pad4 n =
   let s = show n
   in if n < 10 then "   " <> s else if n < 100 then "  " <> s else if n < 1000 then " " <> s else s
+
+
+-- ── 12. Conspicillum: the grain selector ─────────────────────────────────────
+
+-- | How many grains the golden draws. Enough that a weighting drift shows up
+-- | as a changed distribution rather than as one unlucky draw.
+conspicillumGrains :: Int
+conspicillumGrains = 64
+
+-- | A synthetic Quadrat set, built so that every branch of the selector is
+-- | exercised by the golden rather than merely compiled:
+-- |
+-- |   * both axis families vary — measured (`zcr`, `decay`, …) and intentional
+-- |     (`cell`, and a `harm` parameter);
+-- |   * two samples are DEFICIENT on purpose: one has a `cell` too short to
+-- |     answer `ACell 1`, one carries no `harm` parameter. The rule is that a
+-- |     sample which cannot answer an axis is EXCLUDED, not defaulted, and a
+-- |     golden that never contains such a sample would not notice that rule
+-- |     being quietly reversed;
+-- |   * durations differ, so `grainAt`'s window arithmetic is not accidentally
+-- |     uniform.
+conspicillumCorpus :: Array CC.Grainable
+conspicillumCorpus =
+  [ g 0 4.0 0.9 0.30 1200.0 0.62 3.1 [ 0, 0 ] [ p "harm" 0.10 ]
+  , g 1 4.2 0.8 0.28 900.0 0.41 2.4 [ 0, 1 ] [ p "harm" 0.35 ]
+  , g 2 3.9 1.0 0.34 1800.0 0.78 1.2 [ 0, 2 ] [ p "harm" 0.60 ]
+  , g 3 8.0 0.7 0.22 400.0 0.19 6.5 [ 1, 0 ] [ p "harm" 0.85 ]
+  , g 4 7.5 0.95 0.31 2400.0 0.88 0.8 [ 1, 1 ] [ p "harm" 0.05 ]
+  , g 5 0.6 0.5 0.12 600.0 0.25 0.4 [ 1, 2 ] [ p "harm" 0.50 ]
+  , g 6 12.0 0.85 0.27 1500.0 0.70 9.0 [ 2 ] [ p "harm" 0.95 ]   -- cell too short
+  , g 7 5.5 0.6 0.19 1100.0 0.55 2.0 [ 2, 1 ] []                 -- no `harm`
+  ]
+  where
+  g ix secs peak rms zcr tilt decay cell params =
+    { index: ix, secs, peak, rms, zcr, tilt, decay, cell, params, notes: [] }
+  p nm level = { name: nm, level }
+
+-- | The scene: a filter on a MEASURED axis and one on an INTENTIONAL axis
+-- | together, leaning toward the bright end of what survives.
+conspicillumScene :: CP.Scene
+conspicillumScene =
+  { corpus: { name: "golden", samples: conspicillumCorpus }
+  , query:
+      { clauses:
+          [ { axis: CC.ADecay, cmp: CC.Gt, value: 0.5 }       -- measured
+          , { axis: CC.AParam "harm", cmp: CC.Lte, value: 0.9 } -- intentional
+          ]
+      , weighting: Just { axis: CC.AZcr, toward: CC.High, strength: 0.8 }
+      }
+  , cloud: { sustain: 0.05, position: 0.4, spray: 0.3 }
+  , seed: seedFrom 12345
+  }
+
+-- | Draw the cloud and render it.
+-- |
+-- | **Rendered as scaled integers, not as Numbers.** `show` on a Number is a
+-- | formatting decision and the two runtimes do not owe each other the same
+-- | one; the golden has to compare the arithmetic, not the printer. Same
+-- | reasoning as `betaProbe`, and the reason that probe renders Int draws.
+-- |
+-- | The scene is put through `encodeScene`/`decodeScene` first, so the golden
+-- | also proves the wire projection of the three closed ADTs round-trips — a
+-- | clause whose axis decoded to the house default would select different
+-- | material and report no error at all.
+conspicillumRun :: String
+conspicillumRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
+  Left errs -> "CONSPICILLUM-DECODE-FAIL: " <> show errs
+  Right scene ->
+    intercalate "\n" (draw conspicillumGrains scene.seed [])
+  where
+  draw :: Int -> Seed -> Array String -> Array String
+  draw 0 _ acc = acc
+  draw n sd acc =
+    let scene = conspicillumScene
+        { chosen, seed: s1 } = CC.pick scene.query scene.corpus sd
+    in case chosen of
+      -- A query that admits nothing is a real state, and the golden says so
+      -- rather than skipping: "the filter excluded everything" must not look
+      -- like "the cloud is quiet".
+      Nothing -> draw (n - 1) s1 (snoc acc "-")
+      Just gr ->
+        let { grain, seed: s2 } = CC.grainAt scene.cloud gr s1
+        in draw (n - 1) s2
+             (snoc acc (show grain.n <> " " <> six grain.begin <> " " <> six grain.end))
+
+  -- Six decimal places, as an integer. Comfortably inside the exactness of the
+  -- divisions that produced it, and format-free.
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
