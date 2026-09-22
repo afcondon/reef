@@ -22,6 +22,8 @@ module Reef.Conspicillum.Protocol
   , WireClause
   , WireWeighting
   , WireQuery
+  , WireRule
+  , WireSpec
   , WireScene
   , Scene
   , axisToWire
@@ -30,6 +32,8 @@ module Reef.Conspicillum.Protocol
   , cmpFromInt
   , towardToInt
   , towardFromInt
+  , toWireRule
+  , fromWireRule
   , toWireScene
   , fromWireScene
   , encodeScene
@@ -44,6 +48,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
+import Reef.Conspicillum.Cloud (Op(..), Rule, Spec, When(..))
 import Reef.Conspicillum.Harmonic (Harmonic)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -51,8 +56,15 @@ import Simple.JSON (readJSON, writeJSON)
 type Scene =
   { corpus :: Corpus
   , query :: Query
-  , cloud :: Cloud
-  , seed :: Number
+  , spec :: Spec
+  -- | The base seed, as an Int rather than a `Seed`.
+  -- |
+  -- | `Cloud.cycleOf` derives each cycle's `Seed` from this and the cycle
+  -- | number — that derivation is what makes any cycle directly addressable —
+  -- | so the Int IS the scene's seed and a `Seed` would be a already-consumed
+  -- | form of it. A scene has ONE seed; anything reaching for `pick` directly
+  -- | calls `seedFrom` on this.
+  , seed :: Int
   }
 
 -- ── axis ─────────────────────────────────────────────────────────────────────
@@ -134,12 +146,86 @@ type WireQuery =
   , harmonic :: Array Harmonic
   }
 
+-- | A rule, wire-flat. `when` and `op` are the two closed ADTs as small ints;
+-- | their payloads ride in fixed fields so the record shape never varies,
+-- | which keeps the JSON uniform for jsx.
+-- |
+-- | Append-only, like the axis numbering, and for the same reason: renumbering
+-- | would not fail a decode, it would silently turn "reverse every third
+-- | grain" into something else.
+type WireRule =
+  { when :: Int      -- 0 always, 1 every, 2 chance
+  , everyN :: Int
+  , everyK :: Int
+  , chance :: Number
+  , op :: Int        -- 0 speed, 1 gain, 2 length, 3 pan, 4 accelerate
+  , amount :: Number
+  }
+
+type WireSpec =
+  { onsets :: Array Number
+  , cloud :: Cloud
+  , rules :: Array WireRule
+  , speed :: Number
+  , gain :: Number
+  , pan :: Number
+  , accelerate :: Number
+  }
+
 type WireScene =
   { corpus :: Corpus
   , query :: WireQuery
-  , cloud :: Cloud
-  , seed :: Number
+  , spec :: WireSpec
+  , seed :: Int
   }
+
+whenToWire :: When -> { when :: Int, everyN :: Int, everyK :: Int, chance :: Number }
+whenToWire = case _ of
+  Always -> { when: 0, everyN: 0, everyK: 0, chance: 0.0 }
+  Every n k -> { when: 1, everyN: n, everyK: k, chance: 0.0 }
+  Chance p -> { when: 2, everyN: 0, everyK: 0, chance: p }
+
+-- | Total. An unrecognised kind reads as `Always`, which applies the rule to
+-- | every grain — deliberately the LOUD failure rather than the quiet one. A
+-- | version skew that silently stopped applying a rule would be heard as
+-- | "this preset sounds flat" and blamed on the material.
+whenFromWire :: WireRule -> When
+whenFromWire w = case w.when of
+  1 -> Every w.everyN w.everyK
+  2 -> Chance w.chance
+  _ -> Always
+
+opToWire :: Op -> { op :: Int, amount :: Number }
+opToWire = case _ of
+  OpSpeed x -> { op: 0, amount: x }
+  OpGain x -> { op: 1, amount: x }
+  OpLength x -> { op: 2, amount: x }
+  OpPan x -> { op: 3, amount: x }
+  OpAccelerate x -> { op: 4, amount: x }
+
+opFromWire :: WireRule -> Op
+opFromWire w = case w.op of
+  0 -> OpSpeed w.amount
+  1 -> OpGain w.amount
+  2 -> OpLength w.amount
+  3 -> OpPan w.amount
+  _ -> OpAccelerate w.amount
+
+toWireRule :: Rule -> WireRule
+toWireRule r =
+  let wh = whenToWire r.when
+      o = opToWire r.op
+  in { when: wh.when, everyN: wh.everyN, everyK: wh.everyK, chance: wh.chance
+     , op: o.op, amount: o.amount }
+
+fromWireRule :: WireRule -> Rule
+fromWireRule w = { when: whenFromWire w, op: opFromWire w }
+
+toWireSpec :: Spec -> WireSpec
+toWireSpec sp = sp { rules = map toWireRule sp.rules }
+
+fromWireSpec :: WireSpec -> Spec
+fromWireSpec sp = sp { rules = map fromWireRule sp.rules }
 
 toWireQuery :: Query -> WireQuery
 toWireQuery q =
@@ -163,10 +249,10 @@ fromWireQuery w =
   toW x = { axis: axisFromWire x.axis, toward: towardFromInt x.toward, strength: x.strength }
 
 toWireScene :: Scene -> WireScene
-toWireScene s = { corpus: s.corpus, query: toWireQuery s.query, cloud: s.cloud, seed: s.seed }
+toWireScene s = { corpus: s.corpus, query: toWireQuery s.query, spec: toWireSpec s.spec, seed: s.seed }
 
 fromWireScene :: WireScene -> Scene
-fromWireScene s = { corpus: s.corpus, query: fromWireQuery s.query, cloud: s.cloud, seed: s.seed }
+fromWireScene s = { corpus: s.corpus, query: fromWireQuery s.query, spec: fromWireSpec s.spec, seed: s.seed }
 
 encodeScene :: Scene -> String
 encodeScene = writeJSON <<< toWireScene

@@ -814,8 +814,12 @@ conspicillumScene =
       -- their meaning: adding the axis must not move what they measure.
       , harmonic: Nothing
       }
-  , cloud: { sustain: 0.05, position: 0.4, spray: 0.3 }
-  , seed: seedFrom 12345
+  -- The scene now carries the whole Spec, so ONE push is the entire cross-
+  -- runtime wire — and `conspicillumCloudRun` reading its spec back out of the
+  -- DECODED scene means the C3 golden also covers the rule projection: a
+  -- broken `When`/`Op` encode would move it.
+  , spec: conspicillumSpec
+  , seed: 12345
   }
 
 -- | Draw the cloud and render it.
@@ -833,7 +837,7 @@ conspicillumRun :: String
 conspicillumRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
   Left errs -> "CONSPICILLUM-DECODE-FAIL: " <> show errs
   Right scene ->
-    intercalate "\n" (draw conspicillumGrains scene.seed [])
+    intercalate "\n" (draw conspicillumGrains (seedFrom scene.seed) [])
   where
   draw :: Int -> Seed -> Array String -> Array String
   draw 0 _ acc = acc
@@ -846,7 +850,7 @@ conspicillumRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
       -- like "the cloud is quiet".
       Nothing -> draw (n - 1) s1 (snoc acc "-")
       Just gr ->
-        let { grain, seed: s2 } = CC.grainAt scene.cloud gr s1
+        let { grain, seed: s2 } = CC.grainAt scene.spec.cloud gr s1
         in draw (n - 1) s2
              (snoc acc (show grain.n <> " " <> six grain.begin <> " " <> six grain.end))
 
@@ -905,7 +909,7 @@ conspicillumCloudRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
     intercalate "\n" (map (renderCycle scene) conspicillumCycles)
   where
   renderCycle scene cyc =
-    let es = CL.cycleOf scene.corpus scene.query conspicillumSpec 4242 cyc
+    let es = CL.cycleOf scene.corpus scene.query scene.spec scene.seed cyc
     in intercalate "\n" (mapWithIndex (renderEmit cyc) es)
 
   renderEmit cyc i e =
