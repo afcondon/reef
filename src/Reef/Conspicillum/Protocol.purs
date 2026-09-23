@@ -223,6 +223,18 @@ opToWire = case _ of
   OpPshift x -> { op: 13, amount: x }
   OpTremolo x -> { op: 14, amount: x }
   OpPhaser x -> { op: 15, amount: x }
+  OpGenv x -> { op: 16, amount: x }
+  OpGtilt x -> { op: 17, amount: x }
+  OpGplat x -> { op: 18, amount: x }
+  OpAtk x -> { op: 19, amount: x }
+  OpHold x -> { op: 20, amount: x }
+  OpRel x -> { op: 21, amount: x }
+  OpCurve x -> { op: 22, amount: x }
+  OpRsnPitch x -> { op: 23, amount: x }
+  OpRsnDecay x -> { op: 24, amount: x }
+  OpRsnBright x -> { op: 25, amount: x }
+  OpRsnMix x -> { op: 26, amount: x }
+  OpRsnModel x -> { op: 27, amount: x }
 
 -- | Total, and the fallthrough is now `OpAccelerate` only because it always
 -- | was. An unknown op reads as the LAST of the original five rather than the
@@ -245,6 +257,18 @@ opFromWire w = case w.op of
   13 -> OpPshift w.amount
   14 -> OpTremolo w.amount
   15 -> OpPhaser w.amount
+  16 -> OpGenv w.amount
+  17 -> OpGtilt w.amount
+  18 -> OpGplat w.amount
+  19 -> OpAtk w.amount
+  20 -> OpHold w.amount
+  21 -> OpRel w.amount
+  22 -> OpCurve w.amount
+  23 -> OpRsnPitch w.amount
+  24 -> OpRsnDecay w.amount
+  25 -> OpRsnBright w.amount
+  26 -> OpRsnMix w.amount
+  27 -> OpRsnModel w.amount
   _ -> OpAccelerate w.amount
 
 toWireRule :: Rule -> WireRule

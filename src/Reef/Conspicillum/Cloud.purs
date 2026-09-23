@@ -116,6 +116,18 @@ data Op
   | OpPshift Number
   | OpTremolo Number
   | OpPhaser Number
+  | OpGenv Number
+  | OpGtilt Number
+  | OpGplat Number
+  | OpAtk Number
+  | OpHold Number
+  | OpRel Number
+  | OpCurve Number
+  | OpRsnPitch Number
+  | OpRsnDecay Number
+  | OpRsnBright Number
+  | OpRsnMix Number
+  | OpRsnModel Number
 
 type Rule = { when :: When, op :: Op }
 
@@ -167,6 +179,46 @@ type Fx =
   , tremdepth :: Number
   , phaser :: Number
   , phdepth :: Number
+  -- | The grain's own amplitude envelope, which is a DIFFERENT thing from its
+  -- | window: the window says which audio the grain is cut from, the envelope
+  -- | says how that audio arrives and leaves. `genv` engages SuperDirt's
+  -- | `grenvelo` (`gtilt` is where the peak sits, so 0.9 is a reverse swell;
+  -- | `gplat` is the plateau, so a grain can be a burst rather than a bump).
+  -- | `atk`/`rel` engage the plain ASR instead, and `curve` is shared — 0 is
+  -- | linear, and it is sent whenever either envelope runs rather than gated
+  -- | on its own value, because 0 is meaningful for it.
+  , genv :: Number
+  , gtilt :: Number
+  , gplat :: Number
+  , atk :: Number
+  , hold :: Number
+  , rel :: Number
+  , curve :: Number
+  -- | The resonator — OURS, not SuperDirt's. See `superdirt-daemon.scd`, where
+  -- | a SynthDef and one `addModule` put it on the same footing as `crush`.
+  -- |
+  -- | This is the only effect here that does not colour the grain: it makes the
+  -- | grain the EXCITER of something else, so the pitch comes from `rsnpitch`
+  -- | and the timbre from the recording. `rsnpitch` is a MIDI note, so 0 is
+  -- | 8.2 Hz and safely unusable — zero-is-off holds here as everywhere.
+  -- | `rsnbright` is how much of its decay each successive partial keeps, which
+  -- | is the property that makes something sound struck. `rsnmodel` picks a
+  -- | ringing bank (0) or Karplus-Strong (1).
+  -- |
+  -- | **Its tail is bounded by the grain.** SuperDirt's `dirt_gate` carries
+  -- | `doneAction: 14` — free the surrounding group and everything in it —
+  -- | after `sustain`, and a per-event synth cannot outlive that. So `rsndecay`
+  -- | 2.5 on a 90 ms grain gives 90 ms of ring and sounds like a filtered
+  -- | click; nothing errors, it simply does not do what was asked. Use it by
+  -- | opening the gate wide and letting the ENVELOPE make the grain short —
+  -- | a long `sustain` with `genv` on and `gtilt` near 0 is a percussive burst
+  -- | of sample followed by the resonator singing out the window, which is how
+  -- | a struck instrument behaves. `Chain.grsn` is the one that rings freely.
+  , rsnpitch :: Number
+  , rsndecay :: Number
+  , rsnbright :: Number
+  , rsnmix :: Number
+  , rsnmodel :: Number
   }
 
 -- | No effect engaged — and so, byte for byte on the wire, the cloud this
@@ -177,6 +229,8 @@ noFx =
   , lpf: 0.0, hpf: 0.0, bpf: 0.0, res: 0.0
   , vowel: 0.0, pshift: 0.0
   , tremolo: 0.0, tremdepth: 0.5, phaser: 0.0, phdepth: 0.5
+  , genv: 0.0, gtilt: 0.25, gplat: 0.3, atk: 0.0, hold: 0.0, rel: 0.0, curve: 0.0
+  , rsnpitch: 0.0, rsndecay: 1.5, rsnbright: 0.7, rsnmix: 1.0, rsnmodel: 0.0
   }
 
 -- | The **per-orbit** effects: one reverb, one delay, one leslie for the whole
@@ -207,6 +261,16 @@ type Chain =
   , leslie :: Number
   , lrate :: Number
   , lsize :: Number
+  -- | The resonator that can actually ring. `Fx.rsnpitch` is per grain and its
+  -- | tail is bounded by the grain — SuperDirt's `dirt_gate` frees the whole
+  -- | event group after `sustain`, so a 2.5 s decay on a 90 ms grain is 90 ms
+  -- | of decay. This one lives for the life of the orbit, so the whole cloud
+  -- | excites ONE body: many grains striking one string. `grsn` is the send
+  -- | amount and behaves like `room`.
+  , grsn :: Number
+  , grsnpitch :: Number
+  , grsndecay :: Number
+  , grsnbright :: Number
   }
 
 -- | A dry chain. `size` and the two leslie rates keep SuperDirt's own defaults
@@ -218,6 +282,7 @@ noChain =
   , room: 0.0, size: 0.4, dry: 0.0
   , delay: 0.0, delaytime: 0.25, delayfeedback: 0.4, lock: 0.0
   , leslie: 0.0, lrate: 6.7, lsize: 0.3
+  , grsn: 0.0, grsnpitch: 45.0, grsndecay: 3.0, grsnbright: 0.85
   }
 
 -- | Everything about the cloud that is not the corpus or the query.
@@ -347,6 +412,18 @@ applyOp op e = case op of
   OpPshift x -> e { fx = e.fx { pshift = x } }
   OpTremolo x -> e { fx = e.fx { tremolo = x } }
   OpPhaser x -> e { fx = e.fx { phaser = x } }
+  OpGenv x -> e { fx = e.fx { genv = x } }
+  OpGtilt x -> e { fx = e.fx { gtilt = x } }
+  OpGplat x -> e { fx = e.fx { gplat = x } }
+  OpAtk x -> e { fx = e.fx { atk = x } }
+  OpHold x -> e { fx = e.fx { hold = x } }
+  OpRel x -> e { fx = e.fx { rel = x } }
+  OpCurve x -> e { fx = e.fx { curve = x } }
+  OpRsnPitch x -> e { fx = e.fx { rsnpitch = x } }
+  OpRsnDecay x -> e { fx = e.fx { rsndecay = x } }
+  OpRsnBright x -> e { fx = e.fx { rsnbright = x } }
+  OpRsnMix x -> e { fx = e.fx { rsnmix = x } }
+  OpRsnModel x -> e { fx = e.fx { rsnmodel = x } }
 
 -- ── the cycle ────────────────────────────────────────────────────────────────
 
