@@ -71,7 +71,7 @@ import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), grainAt, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Op(..), Spec, When(..), cycleOf) as CL
+import Reef.Conspicillum.Cloud (Op(..), Spec, When(..), cycleOf, noChain, noFx) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -890,11 +890,25 @@ conspicillumSpec =
       -- And a seeded one beside it, so the golden covers both kinds of `when`
       -- and the draw order between them.
       , { when: CL.Chance 0.25, op: CL.OpGain 0.5 }
+      -- Two effect rules, APPENDED. `Every` draws nothing, so adding these
+      -- leaves the seed sequence untouched and every column the golden already
+      -- pinned is byte-identical — which is what makes the regeneration
+      -- reviewable: the diff is new columns and nothing else.
+      --
+      -- Periods 4 and 6 against 8 onsets a cycle, so they coincide every
+      -- twelfth grain and separate everywhere else — which pins that two
+      -- effect rules CO-APPLY to one grain rather than the last one winning.
+      , { when: CL.Every 4 0, op: CL.OpCrush 4.0 }
+      , { when: CL.Every 6 0, op: CL.OpPshift 1.5 }
       ]
   , speed: 1.0
   , gain: 0.8
   , pan: 0.5
   , accelerate: 0.0
+  -- A base effect every grain carries, so the golden covers "the spec turned
+  -- it on" as well as "a rule did".
+  , fx: CL.noFx { lpf = 2200.0, res = 0.2 }
+  , chain: CL.noChain { room = 0.35, size = 0.6 }
   }
 
 -- | Render the cloud for each cycle.
@@ -919,6 +933,19 @@ conspicillumCloudRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
       <> " b " <> six e.begin
       <> " sp " <> six e.speed
       <> " gn " <> six e.gain
+      -- The effect columns. Only the three the spec and its rules can move —
+      -- a golden that printed all thirteen would be thirteen columns of zero
+      -- and would say nothing about whether the fold is right.
+      --
+      -- `lpf` is printed WHOLE, not through `six`. A cutoff is already in Hz,
+      -- and 2200 * 10^6 is past Int32: V8 saturates `round` at 2147483647
+      -- where the BEAM, whose Int is arbitrary-precision, returns the true
+      -- value. Scaling a quantity that is already large is how a golden
+      -- manufactures the divergence it exists to detect — caught here by the
+      -- column reading 2147483647 on the first regeneration.
+      <> " lpf " <> show (round e.fx.lpf)
+      <> " cr " <> six e.fx.crush
+      <> " ps " <> six e.fx.pshift
 
   six :: Number -> String
   six x = show (round (x * 1000000.0))

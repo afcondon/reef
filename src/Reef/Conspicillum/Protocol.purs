@@ -48,7 +48,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
-import Reef.Conspicillum.Cloud (Op(..), Rule, Spec, When(..))
+import Reef.Conspicillum.Cloud (Chain, Fx, Op(..), Rule, Spec, When(..))
 import Reef.Conspicillum.Harmonic (Harmonic)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -158,10 +158,16 @@ type WireRule =
   , everyN :: Int
   , everyK :: Int
   , chance :: Number
-  , op :: Int        -- 0 speed, 1 gain, 2 length, 3 pan, 4 accelerate
+  , op :: Int        -- see `opToWire`; 0-4 are the voice, 5 up are the effects
   , amount :: Number
   }
 
+-- | `Fx` and `Chain` need no projection: both are flat records of Number (plus
+-- | one Int), which simple-json's generic codec covers directly on both
+-- | runtimes. They ride at full width — every field always present — for the
+-- | reason the module header gives about `weighting`: a nullable or optional
+-- | field is exactly the sort of thing that round-trips through V8 and through
+-- | jsx in ways that agree until one day they do not.
 type WireSpec =
   { onsets :: Array Number
   , cloud :: Cloud
@@ -170,6 +176,8 @@ type WireSpec =
   , gain :: Number
   , pan :: Number
   , accelerate :: Number
+  , fx :: Fx
+  , chain :: Chain
   }
 
 type WireScene =
@@ -195,6 +203,8 @@ whenFromWire w = case w.when of
   2 -> Chance w.chance
   _ -> Always
 
+-- | **Append-only from 5.** 0-4 were frozen the day the first scene went over
+-- | the wire; the effects take 5 up and nothing already on it changes meaning.
 opToWire :: Op -> { op :: Int, amount :: Number }
 opToWire = case _ of
   OpSpeed x -> { op: 0, amount: x }
@@ -202,13 +212,39 @@ opToWire = case _ of
   OpLength x -> { op: 2, amount: x }
   OpPan x -> { op: 3, amount: x }
   OpAccelerate x -> { op: 4, amount: x }
+  OpShape x -> { op: 5, amount: x }
+  OpCrush x -> { op: 6, amount: x }
+  OpCoarse x -> { op: 7, amount: x }
+  OpLpf x -> { op: 8, amount: x }
+  OpHpf x -> { op: 9, amount: x }
+  OpBpf x -> { op: 10, amount: x }
+  OpRes x -> { op: 11, amount: x }
+  OpVowel x -> { op: 12, amount: x }
+  OpPshift x -> { op: 13, amount: x }
+  OpTremolo x -> { op: 14, amount: x }
+  OpPhaser x -> { op: 15, amount: x }
 
+-- | Total, and the fallthrough is now `OpAccelerate` only because it always
+-- | was. An unknown op reads as the LAST of the original five rather than the
+-- | last of all of them, so a page built against a newer numbering than the rig
+-- | misbehaves in a way that existed before rather than in a new way.
 opFromWire :: WireRule -> Op
 opFromWire w = case w.op of
   0 -> OpSpeed w.amount
   1 -> OpGain w.amount
   2 -> OpLength w.amount
   3 -> OpPan w.amount
+  5 -> OpShape w.amount
+  6 -> OpCrush w.amount
+  7 -> OpCoarse w.amount
+  8 -> OpLpf w.amount
+  9 -> OpHpf w.amount
+  10 -> OpBpf w.amount
+  11 -> OpRes w.amount
+  12 -> OpVowel w.amount
+  13 -> OpPshift w.amount
+  14 -> OpTremolo w.amount
+  15 -> OpPhaser w.amount
   _ -> OpAccelerate w.amount
 
 toWireRule :: Rule -> WireRule
