@@ -43,6 +43,7 @@ module Reef.Conformance
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
   , conspicillumFixRun
+  , conspicillumPermuteRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -73,7 +74,7 @@ import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), When(..), cycleOf, noChain, noFx, noSwing, noWalk, rule) as CL
+import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -881,7 +882,7 @@ conspicillumSpec :: CL.Spec
 conspicillumSpec =
   { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
   , cloud: { sustain: 0.05, position: 0.4, spray: 0.3, follow: 0.0 }
-  , walk: CL.noWalk, swing: CL.noSwing
+  , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
   , rules:
       -- The headline, and the thing no hardware granulator can express: every
       -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
@@ -1088,6 +1089,7 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
           -- and grain lengths all move, and the ratchet subdivides the swung
           -- slot, which is what the golden pins.
         , swing: { tape: 0.6, play: 0.55, grid: 16 }
+        , tape: CL.oneBar, steps: CL.noSteps
         , rules:
             [ CL.rule (CL.Every 16 14) (CL.OpRatchet 3.0)
             , CL.rule (CL.Every 8 7) (CL.OpShift (-0.0625))
@@ -1157,7 +1159,7 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
         { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.15, hold: 0.1, home: 0.1, grid: 16, reach: 0 }
-        , swing: CL.noSwing
+        , swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
         , rules:
             [ CL.rule (CL.Hit CL.Snare 0.5) (CL.OpPshift 1.5)
             , { when: CL.Hit CL.Kick 0.5, op: CL.OpRsnPitch 0.0
@@ -1171,4 +1173,49 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
         , sends: [ { chain: CL.noChain { orbit = 10 }, level: 0.7 } ]
         }
     , seed: 1357
+    }
+
+
+-- ── 16. Conspicillum: a longer tape, permuted, with Sector's step table ─────
+
+-- | A two-bar tape played in the order [0, 1, 1, 0], with a step table on a
+-- | grid of 8: two certain jumps, one even-odds, one rare, and a few holds
+-- | from the walk on top. Pins the bar chosen by cycle (cycle 7 out of order
+-- | again), the table's own seed stream, and a relocation carrying on from
+-- | where it landed, all on the whole tape's fractions.
+conspicillumPermuteRun :: String
+conspicillumPermuteRun = case CP.decodeScene (CP.encodeScene permuteScene) of
+  Left errs -> "CONSPICILLUM-PERMUTE-DECODE-FAIL: " <> show errs
+  Right scene ->
+    intercalate "\n" (map (renderCycle scene) conspicillumCycles)
+  where
+  renderCycle scene cyc =
+    let es = CL.cycleOf scene.corpus scene.query scene.spec scene.seed cyc
+    in intercalate "\n" (mapWithIndex (renderEmit cyc) es)
+
+  renderEmit cyc i e =
+    "c" <> show cyc <> " g" <> show i <> " at " <> six e.at <> " b " <> six e.begin
+
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
+  tape =
+    { index: 0, secs: 4.0, peak: 0.45, rms: 0.08, zcr: 900.0, tilt: 0.1, decay: 2.0
+    , cell: [], params: [], notes: [], hits: CC.noHits }
+
+  permuteScene =
+    { corpus: { name: "prog-g-2bar", samples: [ tape ] }
+    , query: CC.emptyQuery
+    , spec:
+        { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
+        , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: { jump: 0.0, hold: 0.1, home: 0.0, grid: 16, reach: 0 }
+        , swing: CL.noSwing
+        , tape: { bars: 2, order: [ 0, 1, 1, 0 ] }
+        , steps: { grid: 8, to: [ -1, -1, 5, -1, 2, -1, -1, 7 ], p: [ 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.3 ] }
+        , rules: []
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain, sends: []
+        }
+    , seed: 97531
     }

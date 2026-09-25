@@ -374,6 +374,20 @@ echo "== conspicillumFixRun (fix by hit scores + value sequences): node vs erl =
 diff /tmp/reef-conspicillum-fix-node.txt /tmp/reef-conspicillum-fix-erl.txt && echo "  OK conspicillumFixRun node == erl (hit selection and sequences identical)"
 diff "$CONSPICILLUM_FIX_GOLDEN" /tmp/reef-conspicillum-fix-node.txt && echo "  OK conspicillumFixRun matches frozen golden"
 
+# --- Conspicillum permutations (Reef.Conformance.conspicillumPermuteRun) -------
+# A two-bar tape in a bar order, with Sector's per-step jump table (certain and
+# uncertain targets on a grid of 8) and walk holds on top.
+CONSPICILLUM_PERMUTE_GOLDEN="$REEF/conformance/conspicillum-permute-golden.txt"
+echo "== conspicillumPermuteRun (multi-bar tape + bar order + step table): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumPermuteRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumPermuteRun);' \
+  ) > /tmp/reef-conspicillum-permute-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumPermuteRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-permute-erl.txt
+diff /tmp/reef-conspicillum-permute-node.txt /tmp/reef-conspicillum-permute-erl.txt && echo "  OK conspicillumPermuteRun node == erl (tape, order and step table identical)"
+diff "$CONSPICILLUM_PERMUTE_GOLDEN" /tmp/reef-conspicillum-permute-node.txt && echo "  OK conspicillumPermuteRun matches frozen golden"
+
 # --- Conspicillum harmonic fit (Reef.Conformance.conspicillumHarmonicRun) -----
 # CONSPICILLUM C5. A ii-V-i in D minor scored against a corpus of REAL Quadrat
 # chord hits — the actual MIDI notes struck, pulled from the chord-hits-* sets.

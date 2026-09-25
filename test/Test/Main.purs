@@ -6,7 +6,7 @@ module Test.Main (main) where
 
 import Prelude
 
-import Data.Array (range, take)
+import Data.Array (filter, mapWithIndex, range, take)
 import Data.Either (Either(..))
 import Data.Int (toNumber)
 import Data.Int as Int
@@ -95,7 +95,7 @@ main = do
       shifted = map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
         { onsets: sixteenths
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
-        , walk: CL.noWalk, swing: CL.noSwing
+        , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
         , rules: [ CL.rule (CL.Every 16 5) (CL.OpShift (-0.0625)) ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: [] } 1 0)
@@ -113,6 +113,7 @@ main = do
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: CL.noWalk
         , swing: { tape: tapeSw, play: playSw, grid: 16 }
+        , tape: CL.oneBar, steps: CL.noSteps
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: [] }
@@ -128,6 +129,29 @@ main = do
   assertEqual' "Conspicillum swing: straight slices in swung slots last the shorter of the two"
     { actual: map (\e -> r6 e.sustain) (take 4 added), expected: [ 0.125, 0.095, 0.125, 0.095 ] }
   log "Reef Conspicillum swing: OK"
+
+  -- A two-bar tape: each cycle reads its own bar, `order` re-lays them, and a
+  -- certain step table is a permutation of the bar.
+  let longTape = tape { secs = 4.0 }
+      longCorpus = { name: "tape", samples: [ longTape ] }
+      barSpec tp st =
+        { onsets: sixteenths
+        , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: CL.noWalk, swing: CL.noSwing, tape: tp, steps: st
+        , rules: []
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain, sends: [] }
+      beginsAt tp st c = map (\e -> e.begin * 32.0) (CL.cycleOf longCorpus CC.emptyQuery (barSpec tp st) 1 c)
+      heads c = map (\k -> toNumber (16 * c + k)) (range 0 15)
+  assertEqual' "Conspicillum tape: a two-bar tape reads bar 2 on the second cycle"
+    { actual: beginsAt { bars: 2, order: [] } CL.noSteps 1, expected: heads 1 }
+  assertEqual' "Conspicillum tape: order [1, 0] plays the bars swapped"
+    { actual: beginsAt { bars: 2, order: [ 1, 0 ] } CL.noSteps 0, expected: heads 1 }
+  assertEqual' "Conspicillum steps: [2, 3, 0, 1] on a grid of 4 swaps the halves of the bar"
+    { actual: map (\e -> e * 4.0) (everyFourth (map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
+        (barSpec CL.oneBar { grid: 4, to: [ 2, 3, 0, 1 ], p: [] }) 1 0)))
+    , expected: [ 2.0, 3.0, 0.0, 1.0 ] }
+  log "Reef Conspicillum tape and steps: OK"
 
   -- Conspicillum C5: realising a progression onto RECORDED chord voicings.
   --
@@ -1692,3 +1716,8 @@ conspicillumHarmonicGolden = """Em7b5  |  502  456  187    0   69  123  126  103
 A7     |  117  312   59    0  208  863  151  135  149    0
 Dm     |  140    0  362  251    0   80 1000  902  110    0
 Dm6    |  144  102  289  202   45   80  918 1000  149    0"""
+
+-- Every fourth element, starting with the first: the grains that start each
+-- beat of a sixteen-grain bar.
+everyFourth :: Array Number -> Array Number
+everyFourth xs = map _.x (filter (\r -> r.i `mod` 4 == 0) (mapWithIndex (\i x -> { i, x }) xs))

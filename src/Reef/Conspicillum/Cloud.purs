@@ -58,6 +58,10 @@ module Reef.Conspicillum.Cloud
   , noWalk
   , Swing
   , noSwing
+  , Tape
+  , oneBar
+  , Steps
+  , noSteps
   , swingWarp
   , Send
   , Spec
@@ -425,6 +429,34 @@ swingStretch m grid x =
       f = q - toNumber (floor q)
   in if f < 0.5 then 2.0 * m else 2.0 * (1.0 - m)
 
+-- | How long the tape is, in cycles, and which of its bars each cycle plays.
+-- |
+-- | A one-bar break is `oneBar`. A two-bar chord progression is `bars 2`, and
+-- | the head then reads bar `cyc mod 2` of it each cycle; `order` re-lays the
+-- | bars — `[0, 1, 0, 3]` of a four-bar loop is a permutation of its phrase,
+-- | the progression re-ordered — and is indexed by the cycle, so it stays
+-- | addressable. Everything inside a cycle (the walk, swing, the step table)
+-- | still happens within the one bar being read. Only a following cloud has
+-- | bars; a scanning one reads the whole sample by `position` as it always did.
+type Tape = { bars :: Int, order :: Array Int }
+
+oneBar :: Tape
+oneBar = { bars: 1, order: [] }
+
+-- | Sector's per-step jump table. For step k of `grid` steps in the bar,
+-- | `to !! k` is where the head relocates (-1: nowhere) with probability
+-- | `p !! k` (missing: certain), and it carries on reading from there, as a
+-- | walk jump does. All-certain targets are a fixed permutation of the bar —
+-- | `[0, 1, 2, 3]` on a grid of 4 is the bar as it is, `[2, 3, 0, 1]` swaps
+-- | its halves — and uncertain ones are the table Sector gave each step.
+-- | Applied after the walk, so a table can move even the downbeat, which the
+-- | random walk never does: that is a choice you wrote, not a die. Its draws
+-- | come from their own stream, one per grain.
+type Steps = { grid :: Int, to :: Array Int, p :: Array Number }
+
+noSteps :: Steps
+noSteps = { grid: 16, to: [], p: [] }
+
 -- | One send bus. `level` scales the copy's gain, like a send knob.
 type Send = { chain :: Chain, level :: Number }
 
@@ -433,6 +465,8 @@ type Spec =
   , cloud :: Cloud
   , walk :: Walk
   , swing :: Swing
+  , tape :: Tape
+  , steps :: Steps
   , rules :: Array Rule
   , speed :: Number
   , gain :: Number
@@ -663,6 +697,7 @@ cycleOf corpus query spec base cyc =
     (foldl step
        { seed: cycleSeed base cyc
        , head: { offset: 0.0, prevRead: 0.0, first: true, seed: walkSeed }
+       , stepSeed: cycleSeed (base + 700001) cyc
        , fired: replicate (length spec.rules) 0
        , out: []
        }
@@ -683,15 +718,17 @@ cycleOf corpus query spec base cyc =
   step acc o =
     let
       ordinal = cyc * count + o.i
-      hd = walkStep spec.cloud.follow spec.walk acc.head o.at
+      hd0 = walkStep spec.cloud.follow spec.walk acc.head o.at
+      { u: us, seed: ss } = nextRand acc.stepSeed
+      hd = stepJump spec.cloud.follow spec.steps hd0 o.at us
       read = spec.cloud.follow * o.at + hd.offset
       sw = spec.swing
       -- Read on the tape's own grid: slice i begins where its hit is.
-      readSwung = if spec.cloud.follow == 0.0 then read else swingWarp sw.tape sw.grid read
+      readSwung = if spec.cloud.follow == 0.0 then read else onTape (swingWarp sw.tape sw.grid read)
       fit = min (swingStretch sw.play sw.grid o.at) (swingStretch sw.tape sw.grid read)
       { chosen, seed: s1 } = pick query corpus acc.seed
     in case chosen of
-      Nothing -> { seed: s1, head: hd, fired: acc.fired, out: acc.out }
+      Nothing -> { seed: s1, head: hd, stepSeed: ss, fired: acc.fired, out: acc.out }
       Just g ->
         let
           -- Fitted BEFORE placing, so the window that must fit in the tape is
@@ -713,9 +750,9 @@ cycleOf corpus query spec base cyc =
             , ratchet: 1
             , send: 0
             }
-          sc = scoresAt g read
+          sc = scoresAt g (if spec.cloud.follow == 0.0 then read else onTape read)
           r = foldl (applyRule ordinal sc) { e: base', seed: s2, fired: acc.fired, i: 0 } spec.rules
-        in { seed: r.seed, head: hd, fired: r.fired, out: snoc acc.out r.e }
+        in { seed: r.seed, head: hd, stepSeed: ss, fired: r.fired, out: snoc acc.out r.e }
 
   -- A ratcheted grain's slot runs to the next onset (round the bar for the
   -- last), and its repeats share it evenly.
@@ -760,6 +797,13 @@ cycleOf corpus query spec base cyc =
       , fired: if fires then fromMaybe acc.fired (modifyAt acc.i (_ + 1) acc.fired) else acc.fired
       , i: acc.i + 1
       }
+
+  -- The bar this cycle reads, and a within-bar read placed on the whole tape.
+  bars = if spec.tape.bars < 1 then 1 else spec.tape.bars
+  barIx = case length spec.tape.order of
+    0 -> posMod cyc bars
+    n -> posMod (fromMaybe 0 (index spec.tape.order (posMod cyc n))) bars
+  onTape r = (toNumber barIx + wrapUnit r) / toNumber bars
 
   -- Onsets move last, after ratchet and sends, so everything that was laid
   -- out in straight time lands on the swung grid together.
@@ -817,3 +861,21 @@ walkStep follow w h at =
 
 wrapUnit :: Number -> Number
 wrapUnit x = x - toNumber (floor x)
+
+-- | Apply the step table at the grain that starts a step: relocate with the
+-- | step's probability. See `Steps`.
+stepJump :: Number -> Steps -> Head -> Number -> Number -> Head
+stepJump follow st h at u =
+  let
+    grid = if st.grid < 1 then 1 else st.grid
+    gridF = toNumber grid
+    x = at * gridF
+    k = round x
+    starts = x - toNumber k < 1.0e-6 && toNumber k - x < 1.0e-6
+    kk = let m = k `mod` grid in if m < 0 then m + grid else m
+    p = fromMaybe 1.0 (index st.p kk)
+  in case index st.to kk of
+    Just t | starts && t >= 0 && u < p ->
+      let r = toNumber t / gridF
+      in h { offset = r - follow * at, prevRead = r }
+    _ -> h
