@@ -41,6 +41,7 @@ module Reef.Conformance
   , stellatusRun, stellatusRunSteps
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
+  , conspicillumSectorRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -49,7 +50,7 @@ import Prelude
 import Data.Array (filter, length, null, range, snoc, mapWithIndex, (!!))
 import Data.Either (Either(..))
 import Data.Foldable (foldl, intercalate)
-import Data.Int (round)
+import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), maybe)
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
@@ -69,9 +70,9 @@ import Reef.Vetula.Protocol (decodePerf, encodePerf) as VP
 import Reef.Stellatus.Engine (Scene, walk, walkLen, events) as SE
 import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
-  (Axis(..), Cmp(..), Grainable, Toward(..), grainAt, pick) as CC
+  (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Op(..), Spec, When(..), cycleOf, noChain, noFx) as CL
+import Reef.Conspicillum.Cloud (Op(..), Spec, When(..), cycleOf, noChain, noFx, noWalk) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -879,6 +880,7 @@ conspicillumSpec :: CL.Spec
 conspicillumSpec =
   { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
   , cloud: { sustain: 0.05, position: 0.4, spray: 0.3, follow: 0.0 }
+  , walk: CL.noWalk
   , rules:
       -- The headline, and the thing no hardware granulator can express: every
       -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
@@ -1028,3 +1030,65 @@ conspicillumHarmonicRun =
     "Dm6" -> "Dm6   "
     "Em7b5" -> "Em7b5 "
     _ -> nm
+
+
+-- ── 14. Conspicillum as Sector: a tape that walks ────────────────────────────
+
+-- | One bar of beats as sixteen grains that FOLLOW the tape, with the walk on
+-- | and the two tape ops in the rules. What it pins:
+-- |
+-- | - the walk's bands and targets, drawn from their own stream: holds read
+-- |   the previous grain's place, jumps land on the grid within `reach`;
+-- | - the RESET: every cycle's first grain reads the tape afresh, which is
+-- |   why cycle 7 out of order can agree with cycle 7 played;
+-- | - `OpShift` composing after the walk, and `OpRatchet` expanding one grain
+-- |   into three inside its slot, the only place `cycleOf` emits more grains
+-- |   than it has onsets.
+-- |
+-- | Put through the wire first, so `walk` and ops 28/29 are covered by the
+-- | projection as well as by the arithmetic.
+conspicillumSectorRun :: String
+conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
+  Left errs -> "CONSPICILLUM-SECTOR-DECODE-FAIL: " <> show errs
+  Right scene ->
+    intercalate "\n" (map (renderCycle scene) conspicillumCycles)
+  where
+  renderCycle scene cyc =
+    let es = CL.cycleOf scene.corpus scene.query scene.spec scene.seed cyc
+    in intercalate "\n" (mapWithIndex (renderEmit cyc) es)
+
+  renderEmit cyc i e =
+    "c" <> show cyc <> " g" <> show i
+      <> " at " <> six e.at
+      <> " b " <> six e.begin
+      -- `end` because ratchet and length must shrink the WINDOW with the
+      -- grain: the voice's crossfade reads the rate off window over sustain,
+      -- and a window left full-width put every ratchet 3 ms early on the rig.
+      <> " e " <> six e.end
+      <> " sus " <> six e.sustain
+      <> " sp " <> six e.speed
+
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
+  tape =
+    { index: 0, secs: 2.0, peak: 0.6, rms: 0.08, zcr: 4000.0, tilt: 0.2, decay: 2.0
+    , cell: [], params: [], notes: [] }
+
+  sectorScene =
+    { corpus: { name: "fd-beat-bar", samples: [ tape ] }
+    , query: CC.emptyQuery
+    , spec:
+        { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
+        , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: { jump: 0.2, hold: 0.15, home: 0.1, grid: 8, reach: 3 }
+        , rules:
+            [ { when: CL.Every 16 14, op: CL.OpRatchet 3.0 }
+            , { when: CL.Every 8 7, op: CL.OpShift (-0.0625) }
+            , { when: CL.Chance 0.1, op: CL.OpSpeed (-1.0) }
+            ]
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain
+        }
+    , seed: 2468
+    }

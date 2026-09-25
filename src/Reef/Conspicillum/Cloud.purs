@@ -51,6 +51,8 @@ module Reef.Conspicillum.Cloud
   , Chain
   , noFx
   , noChain
+  , Walk
+  , noWalk
   , Spec
   , Emit
   , cycleSeed
@@ -60,7 +62,8 @@ module Reef.Conspicillum.Cloud
 
 import Prelude
 
-import Data.Array (foldl, length, mapWithIndex, snoc)
+import Data.Array (concatMap, foldl, index, length, mapWithIndex, range, snoc)
+import Data.Int (floor, round, toNumber)
 import Data.Int.Bits (and)
 import Data.Maybe (Maybe(..))
 import Reef.Bits (xorshift32)
@@ -133,6 +136,11 @@ data Op
   -- | one sixteenth repeats the one before it, `+0.25` plays a beat ahead.
   -- | Additive, not multiplicative, because a position has no zero to scale.
   | OpShift Number
+  -- | One grain becomes `n` inside its own slot, each `1/n` as long and every
+  -- | one reading the grain's start: the stutter, the ratchet, the roll. Rules
+  -- | that ran before it shape every repeat alike; the repeats are not grains
+  -- | of their own, so they have no ordinals and no rule can pick them out.
+  | OpRatchet Number
 
 type Rule = { when :: When, op :: Op }
 
@@ -296,9 +304,47 @@ noChain =
 -- | density pattern. An empty list is a silent cloud, which is a legitimate
 -- | thing to ask for and must not be confused with a filter that admitted
 -- | nothing (see `cycleOf`).
+-- | The playhead's own life inside one cycle, which is what makes a following
+-- | cloud (`Cloud.follow`) a Sector rather than a slicer.
+-- |
+-- | `OpShift` is **displacement**: one grain looks elsewhere and the next is
+-- | back on its own sixteenth. The walk is **relocation**: the head moves and
+-- | carries on reading from where it landed, so every later grain in the bar
+-- | inherits the jump and the break re-lays itself in a new order instead of
+-- | stuttering over a fixed one. That is state, and it is kept honest the way
+-- | the design brief proposed: **it resets on every cycle**. Each bar starts
+-- | on the tape, walks, and comes home at the bar line — a fill, not a drift —
+-- | and `cycleOf` stays a pure function of the scene and the cycle number.
+-- |
+-- | Per grain, one die decides, in this order of bands:
+-- |
+-- | - `home` — a displaced head returns to the tape (this grain reads its own
+-- |   place again);
+-- | - `hold` — the head does not advance: this grain reads what the last one
+-- |   read, which is Sector's repeat, and a run of holds is a stutter that
+-- |   the tape then catches up from;
+-- | - `jump` — the head relocates to one of `grid` places in the cycle (16 =
+-- |   any sixteenth, 4 = a beat), at most `reach` of them away from where it is
+-- |   (0 = anywhere).
+-- |
+-- | The walk draws from its OWN seed stream, so a scene that does not walk is
+-- | draw-for-draw the scene it was before walks existed. It moves the read head
+-- | only; with `follow` at 0 there is no head to move, and it is inert.
+type Walk =
+  { jump :: Number
+  , hold :: Number
+  , home :: Number
+  , grid :: Int
+  , reach :: Int
+  }
+
+noWalk :: Walk
+noWalk = { jump: 0.0, hold: 0.0, home: 0.0, grid: 16, reach: 0 }
+
 type Spec =
   { onsets :: Array Number
   , cloud :: Cloud
+  , walk :: Walk
   , rules :: Array Rule
   , speed :: Number
   , gain :: Number
@@ -330,6 +376,9 @@ type Emit =
   -- | than of the grain, and it rides here only because the encoder sees one
   -- | grain at a time — see `Chain` for why it must be sent on every one.
   , chain :: Chain
+  -- | How many times `OpRatchet` asked this grain to sound. `cycleOf` expands
+  -- | it before anything leaves, so every Emit that reaches the rig says 1.
+  , ratchet :: Int
   }
 
 -- ── the per-cycle seed ───────────────────────────────────────────────────────
@@ -401,7 +450,10 @@ applyOp :: Op -> Emit -> Emit
 applyOp op e = case op of
   OpSpeed x -> e { speed = e.speed * x }
   OpGain x -> e { gain = e.gain * x }
-  OpLength x -> e { sustain = e.sustain * x }
+  -- The window scales with the grain, so a shorter grain reads less tape
+  -- rather than the same tape faster: SuperDirt, and the voice's crossfade,
+  -- both read the rate off window over sustain.
+  OpLength x -> e { sustain = e.sustain * x, end = min 1.0 (e.begin + (e.end - e.begin) * x) }
   OpPan x -> e { pan = x }
   OpAccelerate x -> e { accelerate = x }
   -- Absolute, every one: see the note on `Op`. Setting a value engages the
@@ -429,6 +481,7 @@ applyOp op e = case op of
   OpRsnBright x -> e { fx = e.fx { rsnbright = x } }
   OpRsnMix x -> e { fx = e.fx { rsnmix = x } }
   OpRsnModel x -> e { fx = e.fx { rsnmodel = x } }
+  OpRatchet x -> e { ratchet = round x }
   OpShift x ->
     let w = e.end - e.begin
         b = clampTo 0.0 (1.0 - w) (wrap01 (e.begin + x))
@@ -450,9 +503,18 @@ applyOp op e = case op of
 -- | narrowing does not reshuffle the grains that do survive.
 cycleOf :: Corpus -> Query -> Spec -> Int -> Int -> Array Emit
 cycleOf corpus query spec base cyc =
-  (foldl step { seed: cycleSeed base cyc, out: [] } indexed).out
+  concatMap expand
+    (foldl step
+       { seed: cycleSeed base cyc
+       , head: { offset: 0.0, prevRead: 0.0, first: true, seed: walkSeed }
+       , out: []
+       }
+       indexed).out
   where
   count = length spec.onsets
+
+  -- Its own stream, so walking never moves a grain the walk did not touch.
+  walkSeed = cycleSeed (base + 500009) cyc
 
   indexed :: Array { i :: Int, at :: Number }
   indexed = mapWithIndex (\i at -> { i, at }) spec.onsets
@@ -464,12 +526,14 @@ cycleOf corpus query spec base cyc =
   step acc o =
     let
       ordinal = cyc * count + o.i
+      hd = walkStep spec.cloud.follow spec.walk acc.head o.at
+      read = spec.cloud.follow * o.at + hd.offset
       { chosen, seed: s1 } = pick query corpus acc.seed
     in case chosen of
-      Nothing -> { seed: s1, out: acc.out }
+      Nothing -> { seed: s1, head: hd, out: acc.out }
       Just g ->
         let
-          { grain, seed: s2 } = grainAt spec.cloud o.at g s1
+          { grain, seed: s2 } = grainAt spec.cloud read g s1
           base' =
             { at: o.at
             , n: grain.n
@@ -482,10 +546,70 @@ cycleOf corpus query spec base cyc =
             , accelerate: spec.accelerate
             , fx: spec.fx
             , chain: spec.chain
+            , ratchet: 1
             }
           r = foldl (applyRule ordinal) { e: base', seed: s2 } spec.rules
-        in { seed: r.seed, out: snoc acc.out r.e }
+        in { seed: r.seed, head: hd, out: snoc acc.out r.e }
+
+  -- A ratcheted grain's slot runs to the next onset (round the bar for the
+  -- last), and its repeats share it evenly.
+  expand :: Emit -> Array Emit
+  expand e
+    | e.ratchet <= 1 = [ e { ratchet = 1 } ]
+    | otherwise =
+        let
+          k = e.ratchet
+          slot = slotOf e.at
+          one j = e { at = e.at + slot * toNumber j / toNumber k
+                    , sustain = e.sustain / toNumber k
+                    , end = e.begin + (e.end - e.begin) / toNumber k
+                    , ratchet = 1 }
+        in map one (range 0 (k - 1))
+
+  slotOf :: Number -> Number
+  slotOf at =
+    let later = foldl (\m x -> if x > at && x < m then x else m) (1.0 + first) spec.onsets
+        first = case index spec.onsets 0 of
+          Just x -> x
+          Nothing -> 0.0
+    in later - at
 
   applyRule ordinal acc rule =
     let { fires, seed } = applies rule ordinal acc.seed
     in { e: if fires then applyOp rule.op acc.e else acc.e, seed }
+
+-- ── the walk ─────────────────────────────────────────────────────────────────
+
+type Head = { offset :: Number, prevRead :: Number, first :: Boolean, seed :: Seed }
+
+-- | Advance the playhead to the grain at `at`. Two draws per grain, always —
+-- | the band die and the target die — so the stream never depends on which
+-- | band fired. `prevRead` is where the last grain read, unwrapped; a hold
+-- | reads it again.
+walkStep :: Number -> Walk -> Head -> Number -> Head
+walkStep follow w h at =
+  let
+    { u: u1, seed: s1 } = nextRand h.seed
+    { u: u2, seed: s2 } = nextRand s1
+    here = follow * at
+    grid = if w.grid < 1 then 1 else w.grid
+    gridF = toNumber grid
+    cur = floor (wrapUnit (here + h.offset) * gridF)
+    target =
+      if w.reach <= 0 then floor (u2 * gridF)
+      else
+        let k = floor (u2 * toNumber (2 * w.reach))
+            d = if k < w.reach then k - w.reach else k - w.reach + 1
+        in cur + d
+    offset
+      -- The downbeat is always the tape's: a bar that could open anywhere
+      -- would not come home, it would only change the subject.
+      | h.first = 0.0
+      | u1 < w.home = 0.0
+      | u1 < w.home + w.hold = h.prevRead - here
+      | u1 < w.home + w.hold + w.jump = toNumber target / gridF - here
+      | otherwise = h.offset
+  in { offset, prevRead: here + offset, first: false, seed: s2 }
+
+wrapUnit :: Number -> Number
+wrapUnit x = x - toNumber (floor x)

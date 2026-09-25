@@ -48,7 +48,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
-import Reef.Conspicillum.Cloud (Chain, Fx, Op(..), Rule, Spec, When(..))
+import Reef.Conspicillum.Cloud (Chain, Fx, Op(..), Rule, Spec, Walk, When(..))
 import Reef.Conspicillum.Harmonic (Harmonic)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -171,6 +171,9 @@ type WireRule =
 type WireSpec =
   { onsets :: Array Number
   , cloud :: Cloud
+  -- | Full width like everything else here: a scene that does not walk sends
+  -- | `noWalk`, all zeros but `grid`.
+  , walk :: Walk
   , rules :: Array WireRule
   , speed :: Number
   , gain :: Number
@@ -236,6 +239,7 @@ opToWire = case _ of
   OpRsnMix x -> { op: 26, amount: x }
   OpRsnModel x -> { op: 27, amount: x }
   OpShift x -> { op: 28, amount: x }
+  OpRatchet x -> { op: 29, amount: x }
 
 -- | Total, and the fallthrough is now `OpAccelerate` only because it always
 -- | was. An unknown op reads as the LAST of the original five rather than the
@@ -271,6 +275,7 @@ opFromWire w = case w.op of
   26 -> OpRsnMix w.amount
   27 -> OpRsnModel w.amount
   28 -> OpShift w.amount
+  29 -> OpRatchet w.amount
   _ -> OpAccelerate w.amount
 
 toWireRule :: Rule -> WireRule

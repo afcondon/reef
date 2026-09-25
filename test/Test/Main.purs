@@ -94,6 +94,7 @@ main = do
       shifted = map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
         { onsets: sixteenths
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: CL.noWalk
         , rules: [ { when: CL.Every 16 5, op: CL.OpShift (-0.0625) } ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain } 1 0)

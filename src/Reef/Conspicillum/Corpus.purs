@@ -311,12 +311,14 @@ type Grain = { n :: Int, begin :: Number, end :: Number, sustain :: Number }
 -- | transposed, consistently, in a way that sounds like a deliberate choice.
 -- | That is why `Grainable` carries `secs` at all.
 -- |
--- | `at` is the grain's onset in the cycle, 0..1, and matters only when the
--- | cloud follows. A following head is not scaled by `room` the way the scan
--- | point is: the grain at `at` must read from `at` exactly, or sixteen slices
--- | of a bar drift a sixteenth early by the last of them.
+-- | `head` is where a following cloud's read head is for this grain — the
+-- | grain's place in the cycle times `follow`, plus wherever the walk has
+-- | carried it (`Reef.Conspicillum.Cloud.Walk`) — and it matters only when the
+-- | cloud follows. It is not scaled by `room` the way the scan point is: the
+-- | grain at `at` must read from `at` exactly, or sixteen slices of a bar
+-- | drift a sixteenth early by the last of them.
 grainAt :: Cloud -> Number -> Grainable -> Seed -> { grain :: Grain, seed :: Seed }
-grainAt cl at g s =
+grainAt cl head g s =
   let
     { u, seed } = nextRand s
     w = clamp01 (if g.secs <= 0.0 then 1.0 else cl.sustain / g.secs)
@@ -324,7 +326,7 @@ grainAt cl at g s =
     jitter = (u - 0.5) * cl.spray
     begin =
       if cl.follow == 0.0 then clampTo 0.0 room (cl.position * room + jitter)
-      else clampTo 0.0 room (wrap01 (cl.follow * at + cl.position + jitter))
+      else clampTo 0.0 room (wrap01 (head + cl.position + jitter))
   in
     { grain: { n: g.index, begin, end: begin + w, sustain: cl.sustain }, seed }
 

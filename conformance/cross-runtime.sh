@@ -342,6 +342,23 @@ echo "== conspicillumCloudRun (4 cycles, cross-cycle Every + seeded Chance): nod
 diff /tmp/reef-conspicillum-cloud-node.txt /tmp/reef-conspicillum-cloud-erl.txt && echo "  OK conspicillumCloudRun node == erl (placement, rules and per-cycle seeds identical)"
 diff "$CONSPICILLUM_CLOUD_GOLDEN" /tmp/reef-conspicillum-cloud-node.txt && echo "  OK conspicillumCloudRun matches frozen golden"
 
+# --- Conspicillum as Sector (Reef.Conformance.conspicillumSectorRun) ----------
+# A one-bar tape as sixteen grains that FOLLOW it, with the walk on (jump, hold
+# and home on an 8-step grid, reach 3) and OpShift/OpRatchet in the rules. Pins
+# the walk's own seed stream, its reset on every cycle (cycle 7 out of order
+# again), and ratchet's expansion — the one place a cycle emits more grains
+# than it has onsets.
+CONSPICILLUM_SECTOR_GOLDEN="$REEF/conformance/conspicillum-sector-golden.txt"
+echo "== conspicillumSectorRun (tape walk + shift + ratchet): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumSectorRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumSectorRun);' \
+  ) > /tmp/reef-conspicillum-sector-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumSectorRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-sector-erl.txt
+diff /tmp/reef-conspicillum-sector-node.txt /tmp/reef-conspicillum-sector-erl.txt && echo "  OK conspicillumSectorRun node == erl (walk, shift and ratchet identical)"
+diff "$CONSPICILLUM_SECTOR_GOLDEN" /tmp/reef-conspicillum-sector-node.txt && echo "  OK conspicillumSectorRun matches frozen golden"
+
 # --- Conspicillum harmonic fit (Reef.Conformance.conspicillumHarmonicRun) -----
 # CONSPICILLUM C5. A ii-V-i in D minor scored against a corpus of REAL Quadrat
 # chord hits — the actual MIDI notes struck, pulled from the chord-hits-* sets.
