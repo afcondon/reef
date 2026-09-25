@@ -97,7 +97,7 @@ main = do
         , walk: CL.noWalk
         , rules: [ CL.rule (CL.Every 16 5) (CL.OpShift (-0.0625)) ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
-        , fx: CL.noFx, chain: CL.noChain } 1 0)
+        , fx: CL.noFx, chain: CL.noChain, sends: [] } 1 0)
   assertEqual' "Conspicillum shift: sixteenth 5 repeats sixteenth 4"
     { actual: shifted
     , expected: map (\k -> toNumber (if k == 5 then 4 else k) / 16.0) (range 0 15) }

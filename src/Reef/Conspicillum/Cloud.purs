@@ -56,6 +56,7 @@ module Reef.Conspicillum.Cloud
   , noChain
   , Walk
   , noWalk
+  , Send
   , Spec
   , Emit
   , cycleSeed
@@ -163,6 +164,13 @@ data Op
   -- | that ran before it shape every repeat alike; the repeats are not grains
   -- | of their own, so they have no ordinals and no rule can pick them out.
   | OpRatchet Number
+  -- | Send this grain to send `n` (1-based) of `Spec.sends`: the dub
+  -- | producer's flick of a send knob. The grain still plays where it was, and
+  -- | a COPY at the send's level plays through the send's chain — its own
+  -- | orbit, which SuperDirt can put on its own output pair (3/4, 5/6) for an
+  -- | Ableton return with whatever reverb or delay is on it. 0, or a send that
+  -- | does not exist, sends nothing.
+  | OpSend Number
 
 -- | `values`, when not empty, replaces the op's own amount with a sequence
 -- | (a control pattern, in Tidal's terms): kicks through a resonator with
@@ -290,7 +298,8 @@ noFx =
 -- | `orbit` names which chain all of this configures. It is the scene's orbit,
 -- | not a per-grain choice — a rule that moved single grains between orbits
 -- | would drag these settings with them and configure both chains identically,
--- | which is the opposite of the point. Twelve orbits exist and the rest of the
+-- | which is the opposite of the point. Per-grain routing exists instead as
+-- | `Spec.sends` + `OpSend`: the grain moves to a chain of its own. Twelve orbits exist and the rest of the
 -- | rig wants them; see CONSPICILLUM-DESIGN.md.
 type Chain =
   { orbit :: Int
@@ -371,6 +380,9 @@ type Walk =
 noWalk :: Walk
 noWalk = { jump: 0.0, hold: 0.0, home: 0.0, grid: 16, reach: 0 }
 
+-- | One send bus. `level` scales the copy's gain, like a send knob.
+type Send = { chain :: Chain, level :: Number }
+
 type Spec =
   { onsets :: Array Number
   , cloud :: Cloud
@@ -385,6 +397,13 @@ type Spec =
   , fx :: Fx
   -- | The one chain the whole cloud feeds. Not rule-addressable: see `Chain`.
   , chain :: Chain
+  -- | Send buses: a chain on its own orbit and a send level, which `OpSend`
+  -- | copies single grains to. This is how a per-grain effect that SuperDirt
+  -- | only offers per orbit becomes addressable after all: not by moving a
+  -- | grain's settings, which would reconfigure the orbit it lands on, but by
+  -- | copying the grain to an orbit already set up for it. Usually that orbit
+  -- | is dry and comes out on its own outputs, and the effect is in Ableton.
+  , sends :: Array Send
   }
 
 -- | One grain, placed in the cycle and fully resolved: everything
@@ -409,6 +428,9 @@ type Emit =
   -- | How many times `OpRatchet` asked this grain to sound. `cycleOf` expands
   -- | it before anything leaves, so every Emit that reaches the rig says 1.
   , ratchet :: Int
+  -- | Which send `OpSend` asked for; `cycleOf` turns it into a copy on the
+  -- | send's chain, so every Emit that reaches the rig says 0.
+  , send :: Int
   }
 
 -- ── the per-cycle seed ───────────────────────────────────────────────────────
@@ -530,6 +552,7 @@ setAmount op x = case op of
   OpRsnModel _ -> OpRsnModel x
   OpShift _ -> OpShift x
   OpRatchet _ -> OpRatchet x
+  OpSend _ -> OpSend x
 
 applyOp :: Op -> Emit -> Emit
 applyOp op e = case op of
@@ -567,6 +590,8 @@ applyOp op e = case op of
   OpRsnMix x -> e { fx = e.fx { rsnmix = x } }
   OpRsnModel x -> e { fx = e.fx { rsnmodel = x } }
   OpRatchet x -> e { ratchet = round x }
+  -- Resolved in `cycleOf`, which knows the sends; see `routeSend`.
+  OpSend _ -> e
   OpShift x ->
     let w = e.end - e.begin
         b = clampTo 0.0 (1.0 - w) (wrap01 (e.begin + x))
@@ -588,7 +613,7 @@ applyOp op e = case op of
 -- | narrowing does not reshuffle the grains that do survive.
 cycleOf :: Corpus -> Query -> Spec -> Int -> Int -> Array Emit
 cycleOf corpus query spec base cyc =
-  concatMap expand
+  concatMap sendCopies $ concatMap expand
     (foldl step
        { seed: cycleSeed base cyc
        , head: { offset: 0.0, prevRead: 0.0, first: true, seed: walkSeed }
@@ -633,6 +658,7 @@ cycleOf corpus query spec base cyc =
             , fx: spec.fx
             , chain: spec.chain
             , ratchet: 1
+            , send: 0
             }
           sc = scoresAt g read
           r = foldl (applyRule ordinal sc) { e: base', seed: s2, fired: acc.fired, i: 0 } spec.rules
@@ -676,11 +702,24 @@ cycleOf corpus query spec base cyc =
                 PerBar -> cyc
           in setAmount r.op (fromMaybe 0.0 (index r.values (posMod k len)))
     in
-      { e: if fires then applyOp op acc.e else acc.e
+      { e: if fires then routeSend op (applyOp op acc.e) else acc.e
       , seed
       , fired: if fires then fromMaybe acc.fired (modifyAt acc.i (_ + 1) acc.fired) else acc.fired
       , i: acc.i + 1
       }
+
+  routeSend :: Op -> Emit -> Emit
+  routeSend op e = case op of
+    OpSend x -> e { send = round x }
+    _ -> e
+
+  -- The copy is made after ratchet, so a ratcheted grain sends every repeat.
+  sendCopies :: Emit -> Array Emit
+  sendCopies e =
+    let dry = e { send = 0 }
+    in case (if e.send >= 1 then index spec.sends (e.send - 1) else Nothing) of
+      Nothing -> [ dry ]
+      Just sd -> [ dry, dry { chain = sd.chain, gain = e.gain * sd.level } ]
 
   posMod :: Int -> Int -> Int
   posMod a m = let r = a `mod` m in if r < 0 then r + m else r

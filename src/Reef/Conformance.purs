@@ -912,6 +912,7 @@ conspicillumSpec =
   -- it on" as well as "a rule did".
   , fx: CL.noFx { lpf = 2200.0, res = 0.2 }
   , chain: CL.noChain { room = 0.35, size = 0.6 }
+  , sends: []
   }
 
 -- | Render the cloud for each cycle.
@@ -1089,7 +1090,7 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
             , CL.rule (CL.Chance 0.1) (CL.OpSpeed (-1.0))
             ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
-        , fx: CL.noFx, chain: CL.noChain
+        , fx: CL.noFx, chain: CL.noChain, sends: []
         }
     , seed: 2468
     }
@@ -1109,7 +1110,9 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
 -- | - `Hit` thresholds, including a hat threshold low enough to catch the
 -- |   kick slices' faint top (0.3 against their 0.35);
 -- | - `PerBar` stepping by cycle (cycle 7 out of order reads `values !! 3`);
--- | - `PerHit` counting firings within the cycle and restarting at the bar.
+-- | - `PerHit` counting firings within the cycle and restarting at the bar;
+-- | - `OpSend`: a snare that plays where it was AND as a copy at the send
+-- |   level on the send's orbit.
 conspicillumFixRun :: String
 conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
   Left errs -> "CONSPICILLUM-FIX-DECODE-FAIL: " <> show errs
@@ -1126,6 +1129,10 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
       <> " ps " <> six e.fx.pshift
       <> " rsn " <> six e.fx.rsnpitch
       <> " pan " <> six e.pan
+      -- The chain it plays through: a sent snare sounds twice, once where it
+      -- was and once, at the send level, on the send's orbit.
+      <> " orb " <> show e.chain.orbit
+      <> " gn " <> six e.gain
 
   six :: Number -> String
   six x = show (round (x * 1000000.0))
@@ -1152,9 +1159,11 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
               , values: [ 36.0, 36.0, 39.0, 31.0 ], step: CL.PerBar }
             , { when: CL.Hit CL.Hat 0.3, op: CL.OpPan 0.5
               , values: [ 0.2, 0.8 ], step: CL.PerHit }
+            , CL.rule (CL.Hit CL.Snare 0.5) (CL.OpSend 1.0)
             ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain
+        , sends: [ { chain: CL.noChain { orbit = 10 }, level: 0.7 } ]
         }
     , seed: 1357
     }
