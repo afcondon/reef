@@ -48,7 +48,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
-import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Op(..), Rule, Send, Spec, Step(..), Walk, When(..))
+import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Op(..), Rule, Send, Spec, Step(..), Swing, Walk, When(..))
 import Reef.Conspicillum.Harmonic (Harmonic)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -176,6 +176,8 @@ type WireSpec =
   -- | Full width like everything else here: a scene that does not walk sends
   -- | `noWalk`, all zeros but `grid`.
   , walk :: Walk
+  -- | `noSwing` (0.5, 0.5, 16) for a straight cloud.
+  , swing :: Swing
   , rules :: Array WireRule
   , speed :: Number
   , gain :: Number

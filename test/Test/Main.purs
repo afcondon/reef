@@ -6,9 +6,10 @@ module Test.Main (main) where
 
 import Prelude
 
-import Data.Array (range)
+import Data.Array (range, take)
 import Data.Either (Either(..))
 import Data.Int (toNumber)
+import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
 import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
@@ -94,7 +95,7 @@ main = do
       shifted = map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
         { onsets: sixteenths
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
-        , walk: CL.noWalk
+        , walk: CL.noWalk, swing: CL.noSwing
         , rules: [ CL.rule (CL.Every 16 5) (CL.OpShift (-0.0625)) ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: [] } 1 0)
@@ -102,6 +103,31 @@ main = do
     { actual: shifted
     , expected: map (\k -> toNumber (if k == 5 then 4 else k) / 16.0) (range 0 15) }
   log "Reef Conspicillum shift: OK"
+
+  -- Swing. Tape and play swing equal on a following cloud reproduce a swung
+  -- tape exactly: every grain reads from where it lands, sized to its slot.
+  -- A straight tape played swung lands on the swung grid, and the short
+  -- offbeat slots cut their grains short rather than leak the next hit.
+  let swungSpec tapeSw playSw =
+        { onsets: sixteenths
+        , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: CL.noWalk
+        , swing: { tape: tapeSw, play: playSw, grid: 16 }
+        , rules: []
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain, sends: [] }
+      same = CL.cycleOf tapeCorpus CC.emptyQuery (swungSpec 0.62 0.62) 1 0
+      added = CL.cycleOf tapeCorpus CC.emptyQuery (swungSpec 0.5 0.62) 1 0
+      r6 x = toNumber (Int.round (x * 1000000.0)) / 1000000.0
+  assertEqual' "Conspicillum swing: equal tape and play swing read each grain where it lands"
+    { actual: map (\e -> r6 e.begin) same, expected: map (\e -> r6 e.at) same }
+  assertEqual' "Conspicillum swing: slots alternate long and short at 0.62"
+    { actual: map (\e -> r6 e.sustain) (take 4 same), expected: [ 0.155, 0.095, 0.155, 0.095 ] }
+  assertEqual' "Conspicillum swing: a straight tape gains swing — offbeat 16ths land late"
+    { actual: map (\e -> r6 (e.at * 16.0)) (take 4 added), expected: [ 0.0, 1.24, 2.0, 3.24 ] }
+  assertEqual' "Conspicillum swing: straight slices in swung slots last the shorter of the two"
+    { actual: map (\e -> r6 e.sustain) (take 4 added), expected: [ 0.125, 0.095, 0.125, 0.095 ] }
+  log "Reef Conspicillum swing: OK"
 
   -- Conspicillum C5: realising a progression onto RECORDED chord voicings.
   --

@@ -56,6 +56,9 @@ module Reef.Conspicillum.Cloud
   , noChain
   , Walk
   , noWalk
+  , Swing
+  , noSwing
+  , swingWarp
   , Send
   , Spec
   , Emit
@@ -380,6 +383,48 @@ type Walk =
 noWalk :: Walk
 noWalk = { jump: 0.0, hold: 0.0, home: 0.0, grid: 16, reach: 0 }
 
+-- | Swing, twice over: the swing the TAPE was played with, and the swing the
+-- | grains are PLAYED with. Both are swing percentages as a fraction — where
+-- | the off-beat falls inside its pair, 0.5 straight, 0.66 triplet, 0.75
+-- | dotted — on a `grid` of 16ths (pairs within an 8th) or 8ths (pairs within
+-- | a beat).
+-- |
+-- | The tape swing is where the slices are CUT: slice i starts on its own hit,
+-- | late offbeats included. The play swing is where grains LAND. So a swung
+-- | break re-ordered by the walk keeps its feel (an offbeat slice moved to a
+-- | downbeat plays its hit ON the downbeat, not late of it), and a straight
+-- | break played with `play` above 0.5 gains swing it never had. Equal values
+-- | on a following cloud reproduce the tape exactly, swing and all.
+-- |
+-- | Swung slots and slices alternate long and short, so a grain lasts the
+-- | shorter of its slot and its slice: where the slice is short it stops and
+-- | leaves a sliver of silence rather than leaking the next hit's transient —
+-- | the choice Ableton's Beats mode makes too.
+type Swing = { tape :: Number, play :: Number, grid :: Int }
+
+noSwing :: Swing
+noSwing = { tape: 0.5, play: 0.5, grid: 16 }
+
+-- | Straight time to swung time, cycle fractions in and out. Piecewise
+-- | linear and monotone, so it can be applied after ratchets are laid out
+-- | and their repeats still subdivide the swung slot evenly.
+swingWarp :: Number -> Int -> Number -> Number
+swingWarp m grid x =
+  let pairs = toNumber (if grid < 2 then 1 else grid / 2)
+      q = x * pairs
+      p = toNumber (floor q)
+      f = q - p
+      f' = if f < 0.5 then f * 2.0 * m else m + (f - 0.5) * 2.0 * (1.0 - m)
+  in (p + f') / pairs
+
+-- | How much longer (or shorter) than straight the swung slot at `x` is.
+swingStretch :: Number -> Int -> Number -> Number
+swingStretch m grid x =
+  let pairs = toNumber (if grid < 2 then 1 else grid / 2)
+      q = x * pairs
+      f = q - toNumber (floor q)
+  in if f < 0.5 then 2.0 * m else 2.0 * (1.0 - m)
+
 -- | One send bus. `level` scales the copy's gain, like a send knob.
 type Send = { chain :: Chain, level :: Number }
 
@@ -387,6 +432,7 @@ type Spec =
   { onsets :: Array Number
   , cloud :: Cloud
   , walk :: Walk
+  , swing :: Swing
   , rules :: Array Rule
   , speed :: Number
   , gain :: Number
@@ -613,7 +659,7 @@ applyOp op e = case op of
 -- | narrowing does not reshuffle the grains that do survive.
 cycleOf :: Corpus -> Query -> Spec -> Int -> Int -> Array Emit
 cycleOf corpus query spec base cyc =
-  concatMap sendCopies $ concatMap expand
+  map landSwung $ concatMap sendCopies $ concatMap expand
     (foldl step
        { seed: cycleSeed base cyc
        , head: { offset: 0.0, prevRead: 0.0, first: true, seed: walkSeed }
@@ -639,12 +685,19 @@ cycleOf corpus query spec base cyc =
       ordinal = cyc * count + o.i
       hd = walkStep spec.cloud.follow spec.walk acc.head o.at
       read = spec.cloud.follow * o.at + hd.offset
+      sw = spec.swing
+      -- Read on the tape's own grid: slice i begins where its hit is.
+      readSwung = if spec.cloud.follow == 0.0 then read else swingWarp sw.tape sw.grid read
+      fit = min (swingStretch sw.play sw.grid o.at) (swingStretch sw.tape sw.grid read)
       { chosen, seed: s1 } = pick query corpus acc.seed
     in case chosen of
       Nothing -> { seed: s1, head: hd, fired: acc.fired, out: acc.out }
       Just g ->
         let
-          { grain, seed: s2 } = grainAt spec.cloud read g s1
+          -- Fitted BEFORE placing, so the window that must fit in the tape is
+          -- the grain's real length: the last short slice of a swung bar sits
+          -- nearer the end than a straight sixteenth would be allowed to.
+          { grain, seed: s2 } = grainAt (spec.cloud { sustain = spec.cloud.sustain * fit }) readSwung g s1
           base' =
             { at: o.at
             , n: grain.n
@@ -707,6 +760,11 @@ cycleOf corpus query spec base cyc =
       , fired: if fires then fromMaybe acc.fired (modifyAt acc.i (_ + 1) acc.fired) else acc.fired
       , i: acc.i + 1
       }
+
+  -- Onsets move last, after ratchet and sends, so everything that was laid
+  -- out in straight time lands on the swung grid together.
+  landSwung :: Emit -> Emit
+  landSwung e = e { at = swingWarp spec.swing.play spec.swing.grid e.at }
 
   routeSend :: Op -> Emit -> Emit
   routeSend op e = case op of

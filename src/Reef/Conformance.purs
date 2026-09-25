@@ -73,7 +73,7 @@ import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), When(..), cycleOf, noChain, noFx, noWalk, rule) as CL
+import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), When(..), cycleOf, noChain, noFx, noSwing, noWalk, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -881,7 +881,7 @@ conspicillumSpec :: CL.Spec
 conspicillumSpec =
   { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
   , cloud: { sustain: 0.05, position: 0.4, spray: 0.3, follow: 0.0 }
-  , walk: CL.noWalk
+  , walk: CL.noWalk, swing: CL.noSwing
   , rules:
       -- The headline, and the thing no hardware granulator can express: every
       -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
@@ -1084,6 +1084,10 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
         { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.2, hold: 0.15, home: 0.1, grid: 8, reach: 3 }
+          -- A swung tape played a little straighter: onsets, read positions
+          -- and grain lengths all move, and the ratchet subdivides the swung
+          -- slot, which is what the golden pins.
+        , swing: { tape: 0.6, play: 0.55, grid: 16 }
         , rules:
             [ CL.rule (CL.Every 16 14) (CL.OpRatchet 3.0)
             , CL.rule (CL.Every 8 7) (CL.OpShift (-0.0625))
@@ -1153,6 +1157,7 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
         { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.15, hold: 0.1, home: 0.1, grid: 16, reach: 0 }
+        , swing: CL.noSwing
         , rules:
             [ CL.rule (CL.Hit CL.Snare 0.5) (CL.OpPshift 1.5)
             , { when: CL.Hit CL.Kick 0.5, op: CL.OpRsnPitch 0.0
