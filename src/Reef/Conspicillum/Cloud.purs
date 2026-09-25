@@ -64,7 +64,7 @@ import Data.Array (foldl, length, mapWithIndex, snoc)
 import Data.Int.Bits (and)
 import Data.Maybe (Maybe(..))
 import Reef.Bits (xorshift32)
-import Reef.Conspicillum.Corpus (Cloud, Corpus, Query, grainAt, pick)
+import Reef.Conspicillum.Corpus (Cloud, Corpus, Query, clampTo, grainAt, pick, wrap01)
 import Reef.Marbles (Seed, nextRand, seedFrom)
 
 -- ── when a rule applies ──────────────────────────────────────────────────────
@@ -128,6 +128,11 @@ data Op
   | OpRsnBright Number
   | OpRsnMix Number
   | OpRsnModel Number
+  -- | Move this grain's read head by a fraction of the source, wrapping. On a
+  -- | following cloud (`Cloud.follow`) that is a jump in the tape: `-1/16` on
+  -- | one sixteenth repeats the one before it, `+0.25` plays a beat ahead.
+  -- | Additive, not multiplicative, because a position has no zero to scale.
+  | OpShift Number
 
 type Rule = { when :: When, op :: Op }
 
@@ -424,6 +429,10 @@ applyOp op e = case op of
   OpRsnBright x -> e { fx = e.fx { rsnbright = x } }
   OpRsnMix x -> e { fx = e.fx { rsnmix = x } }
   OpRsnModel x -> e { fx = e.fx { rsnmodel = x } }
+  OpShift x ->
+    let w = e.end - e.begin
+        b = clampTo 0.0 (1.0 - w) (wrap01 (e.begin + x))
+    in e { begin = b, end = b + w }
 
 -- ── the cycle ────────────────────────────────────────────────────────────────
 
@@ -460,7 +469,7 @@ cycleOf corpus query spec base cyc =
       Nothing -> { seed: s1, out: acc.out }
       Just g ->
         let
-          { grain, seed: s2 } = grainAt spec.cloud g s1
+          { grain, seed: s2 } = grainAt spec.cloud o.at g s1
           base' =
             { at: o.at
             , n: grain.n

@@ -58,6 +58,8 @@ module Reef.Conspicillum.Corpus
   , weights
   , pick
   , grainAt
+  , clampTo
+  , wrap01
   , emptyQuery
   ) where
 
@@ -65,7 +67,7 @@ import Prelude
 
 import Data.Array (filter, index, length, zipWith, (!!))
 import Data.Foldable (foldl, sum)
-import Data.Int (toNumber)
+import Data.Int (floor, toNumber)
 import Data.Maybe (Maybe(..))
 import Reef.Conspicillum.Harmonic (Harmonic, fit)
 import Reef.Marbles (Seed, nextRand)
@@ -284,7 +286,19 @@ pick q c s =
 -- |
 -- | `position` is the scan point, 0..1; `spray` is the jitter around it, in the
 -- | same units, so `spray 0.0` scans and `spray 1.0` is the whole sample.
-type Cloud = { sustain :: Number, position :: Number, spray :: Number }
+-- |
+-- | `follow` is how far the read head tracks the grain's own place in the
+-- | cycle. At `0.0` every grain reads from `position`, which is the granulator
+-- | Conspicillum has always been. At `1.0` the grain at `at` reads from `at`, so
+-- | sixteen even grains of a one-bar take play the bar back in order: the tape
+-- | IS the default, and every way of breaking it — displacement, drag, repeat —
+-- | is a departure from an identity rather than a new op. In between, the head
+-- | crawls: `0.5` reads the first half of the tape across the whole cycle.
+-- |
+-- | Once the head follows, `position` stops being a place and becomes an
+-- | offset, and it WRAPS: `0.25` reads a beat behind, taking the last beat from
+-- | the top of the tape, which is the single-beat delay without a delay line.
+type Cloud = { sustain :: Number, position :: Number, spray :: Number, follow :: Number }
 
 -- | What `/dirt/play` needs: which sample, and which window of it.
 type Grain = { n :: Int, begin :: Number, end :: Number, sustain :: Number }
@@ -296,19 +310,31 @@ type Grain = { n :: Int, begin :: Number, end :: Number, sustain :: Number }
 -- | `(end - begin) * secs / sustain`: get the width wrong and every grain is
 -- | transposed, consistently, in a way that sounds like a deliberate choice.
 -- | That is why `Grainable` carries `secs` at all.
-grainAt :: Cloud -> Grainable -> Seed -> { grain :: Grain, seed :: Seed }
-grainAt cl g s =
+-- |
+-- | `at` is the grain's onset in the cycle, 0..1, and matters only when the
+-- | cloud follows. A following head is not scaled by `room` the way the scan
+-- | point is: the grain at `at` must read from `at` exactly, or sixteen slices
+-- | of a bar drift a sixteenth early by the last of them.
+grainAt :: Cloud -> Number -> Grainable -> Seed -> { grain :: Grain, seed :: Seed }
+grainAt cl at g s =
   let
     { u, seed } = nextRand s
     w = clamp01 (if g.secs <= 0.0 then 1.0 else cl.sustain / g.secs)
     room = 1.0 - w
     jitter = (u - 0.5) * cl.spray
-    begin = clampTo 0.0 room (cl.position * room + jitter)
+    begin =
+      if cl.follow == 0.0 then clampTo 0.0 room (cl.position * room + jitter)
+      else clampTo 0.0 room (wrap01 (cl.follow * at + cl.position + jitter))
   in
     { grain: { n: g.index, begin, end: begin + w, sustain: cl.sustain }, seed }
 
 clamp01 :: Number -> Number
 clamp01 = clampTo 0.0 1.0
+
+-- | Into [0, 1), for a read head that runs off one end of the tape and back on
+-- | at the other.
+wrap01 :: Number -> Number
+wrap01 x = x - toNumber (floor x)
 
 clampTo :: Number -> Number -> Number -> Number
 clampTo lo hi x = if x < lo then lo else if x > hi then hi else x

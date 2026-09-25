@@ -6,10 +6,15 @@ module Test.Main (main) where
 
 import Prelude
 
+import Data.Array (range)
 import Data.Either (Either(..))
+import Data.Int (toNumber)
 import Effect (Effect)
 import Effect.Console (log)
 import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
+import Reef.Conspicillum.Cloud as CL
+import Reef.Conspicillum.Corpus as CC
+import Reef.Marbles (seedFrom)
 import Reef.Odonus (defaultOdonus)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
@@ -68,6 +73,34 @@ main = do
   assertEqual' "Conspicillum cloud golden (cycles 0,1,2,7 — cross-cycle Every + seeded Chance)"
     { actual: conspicillumCloudRun, expected: conspicillumCloudGolden }
   log "Reef Conspicillum cloud golden: OK"
+
+  -- A cloud that FOLLOWS reads the tape at the rate the cycle plays it. Sixteen
+  -- even grains a sixteenth long over a two-second take must begin at exactly
+  -- i/16 — scaled by `room` the way the scan point is, the last slice would
+  -- read a sixteenth early — and a `position` of a beat must wrap, so the
+  -- grain on the last beat reads the first.
+  let tape = { index: 0, secs: 2.0, peak: 1.0, rms: 0.5, zcr: 0.0, tilt: 0.0, decay: 0.0, cell: [], notes: [], params: [] }
+      followAt pos at = (CC.grainAt { sustain: 0.125, position: pos, spray: 0.0, follow: 1.0 } at tape (seedFrom 1)).grain.begin
+      sixteenths = map (\k -> toNumber k / 16.0) (range 0 15)
+  assertEqual' "Conspicillum follow: sixteen grains read the bar in order"
+    { actual: map (followAt 0.0) sixteenths, expected: sixteenths }
+  assertEqual' "Conspicillum follow: a beat of offset wraps"
+    { actual: map (followAt 0.25) [ 0.0, 0.75, 0.8125 ], expected: [ 0.25, 0.0, 0.0625 ] }
+  log "Reef Conspicillum follow: OK"
+
+  -- And `OpShift` is how the tape is broken: one sixteenth told to read the one
+  -- before it is a repeat, and the grains either side still read their own.
+  let tapeCorpus = { name: "tape", samples: [ tape ] }
+      shifted = map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
+        { onsets: sixteenths
+        , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , rules: [ { when: CL.Every 16 5, op: CL.OpShift (-0.0625) } ]
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain } 1 0)
+  assertEqual' "Conspicillum shift: sixteenth 5 repeats sixteenth 4"
+    { actual: shifted
+    , expected: map (\k -> toNumber (if k == 5 then 4 else k) / 16.0) (range 0 15) }
+  log "Reef Conspicillum shift: OK"
 
   -- Conspicillum C5: realising a progression onto RECORDED chord voicings.
   --
@@ -1593,38 +1626,38 @@ conspicillumGolden = """0 495198 507698
 
 
 conspicillumCloudGolden :: String
-conspicillumCloudGolden = """c0 g0 at 0 n 2 b 430248 sp -1000000 gn 800000
-c0 g1 at 125000 n 4 b 354495 sp 1000000 gn 800000
-c0 g2 at 187500 n 4 b 383641 sp 1000000 gn 800000
-c0 g3 at 375000 n 4 b 374649 sp -1000000 gn 800000
-c0 g4 at 500000 n 4 b 517943 sp 1000000 gn 800000
-c0 g5 at 625000 n 1 b 466702 sp 1000000 gn 400000
-c0 g6 at 687500 n 1 b 349481 sp -1000000 gn 400000
-c0 g7 at 875000 n 0 b 464406 sp 1000000 gn 800000
-c1 g0 at 0 n 4 b 406957 sp 1000000 gn 800000
-c1 g1 at 125000 n 4 b 338590 sp -1000000 gn 800000
-c1 g2 at 187500 n 2 b 478990 sp 1000000 gn 400000
-c1 g3 at 375000 n 2 b 346201 sp 1000000 gn 800000
-c1 g4 at 500000 n 1 b 534282 sp -1000000 gn 400000
-c1 g5 at 625000 n 4 b 506075 sp 1000000 gn 800000
-c1 g6 at 687500 n 0 b 305984 sp 1000000 gn 800000
-c1 g7 at 875000 n 4 b 417872 sp -1000000 gn 400000
-c2 g0 at 0 n 4 b 417771 sp 1000000 gn 800000
-c2 g1 at 125000 n 3 b 480057 sp 1000000 gn 800000
-c2 g2 at 187500 n 0 b 314565 sp -1000000 gn 800000
-c2 g3 at 375000 n 0 b 409771 sp 1000000 gn 400000
-c2 g4 at 500000 n 1 b 386861 sp 1000000 gn 400000
-c2 g5 at 625000 n 4 b 431375 sp -1000000 gn 800000
-c2 g6 at 687500 n 0 b 404010 sp 1000000 gn 800000
-c2 g7 at 875000 n 4 b 388724 sp 1000000 gn 400000
-c7 g0 at 0 n 2 b 411553 sp 1000000 gn 400000
-c7 g1 at 125000 n 3 b 416989 sp -1000000 gn 800000
-c7 g2 at 187500 n 3 b 442105 sp 1000000 gn 800000
-c7 g3 at 375000 n 2 b 431632 sp 1000000 gn 800000
-c7 g4 at 500000 n 2 b 483461 sp -1000000 gn 800000
-c7 g5 at 625000 n 2 b 297198 sp 1000000 gn 800000
-c7 g6 at 687500 n 4 b 289450 sp 1000000 gn 800000
-c7 g7 at 875000 n 4 b 420659 sp -1000000 gn 800000"""
+conspicillumCloudGolden = """c0 g0 at 0 n 2 b 430248 sp -1000000 gn 800000 lpf 2200 cr 4000000 ps 1500000
+c0 g1 at 125000 n 4 b 354495 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c0 g2 at 187500 n 4 b 383641 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c0 g3 at 375000 n 4 b 374649 sp -1000000 gn 800000 lpf 2200 cr 0 ps 0
+c0 g4 at 500000 n 4 b 517943 sp 1000000 gn 800000 lpf 2200 cr 4000000 ps 0
+c0 g5 at 625000 n 1 b 466702 sp 1000000 gn 400000 lpf 2200 cr 0 ps 0
+c0 g6 at 687500 n 1 b 349481 sp -1000000 gn 400000 lpf 2200 cr 0 ps 1500000
+c0 g7 at 875000 n 0 b 464406 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c1 g0 at 0 n 4 b 406957 sp 1000000 gn 800000 lpf 2200 cr 4000000 ps 0
+c1 g1 at 125000 n 4 b 338590 sp -1000000 gn 800000 lpf 2200 cr 0 ps 0
+c1 g2 at 187500 n 2 b 478990 sp 1000000 gn 400000 lpf 2200 cr 0 ps 0
+c1 g3 at 375000 n 2 b 346201 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c1 g4 at 500000 n 1 b 534282 sp -1000000 gn 400000 lpf 2200 cr 4000000 ps 1500000
+c1 g5 at 625000 n 4 b 506075 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c1 g6 at 687500 n 0 b 305984 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c1 g7 at 875000 n 4 b 417872 sp -1000000 gn 400000 lpf 2200 cr 0 ps 0
+c2 g0 at 0 n 4 b 417771 sp 1000000 gn 800000 lpf 2200 cr 4000000 ps 0
+c2 g1 at 125000 n 3 b 480057 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c2 g2 at 187500 n 0 b 314565 sp -1000000 gn 800000 lpf 2200 cr 0 ps 1500000
+c2 g3 at 375000 n 0 b 409771 sp 1000000 gn 400000 lpf 2200 cr 0 ps 0
+c2 g4 at 500000 n 1 b 386861 sp 1000000 gn 400000 lpf 2200 cr 4000000 ps 0
+c2 g5 at 625000 n 4 b 431375 sp -1000000 gn 800000 lpf 2200 cr 0 ps 0
+c2 g6 at 687500 n 0 b 404010 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c2 g7 at 875000 n 4 b 388724 sp 1000000 gn 400000 lpf 2200 cr 0 ps 0
+c7 g0 at 0 n 2 b 411553 sp 1000000 gn 400000 lpf 2200 cr 4000000 ps 0
+c7 g1 at 125000 n 3 b 416989 sp -1000000 gn 800000 lpf 2200 cr 0 ps 0
+c7 g2 at 187500 n 3 b 442105 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c7 g3 at 375000 n 2 b 431632 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c7 g4 at 500000 n 2 b 483461 sp -1000000 gn 800000 lpf 2200 cr 4000000 ps 1500000
+c7 g5 at 625000 n 2 b 297198 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c7 g6 at 687500 n 4 b 289450 sp 1000000 gn 800000 lpf 2200 cr 0 ps 0
+c7 g7 at 875000 n 4 b 420659 sp -1000000 gn 800000 lpf 2200 cr 0 ps 0"""
 
 
 conspicillumHarmonicGolden :: String

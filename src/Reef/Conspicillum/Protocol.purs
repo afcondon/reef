@@ -235,6 +235,7 @@ opToWire = case _ of
   OpRsnBright x -> { op: 25, amount: x }
   OpRsnMix x -> { op: 26, amount: x }
   OpRsnModel x -> { op: 27, amount: x }
+  OpShift x -> { op: 28, amount: x }
 
 -- | Total, and the fallthrough is now `OpAccelerate` only because it always
 -- | was. An unknown op reads as the LAST of the original five rather than the
@@ -269,6 +270,7 @@ opFromWire w = case w.op of
   25 -> OpRsnBright w.amount
   26 -> OpRsnMix w.amount
   27 -> OpRsnModel w.amount
+  28 -> OpShift w.amount
   _ -> OpAccelerate w.amount
 
 toWireRule :: Rule -> WireRule

@@ -850,7 +850,7 @@ conspicillumRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
       -- like "the cloud is quiet".
       Nothing -> draw (n - 1) s1 (snoc acc "-")
       Just gr ->
-        let { grain, seed: s2 } = CC.grainAt scene.spec.cloud gr s1
+        let { grain, seed: s2 } = CC.grainAt scene.spec.cloud 0.0 gr s1
         in draw (n - 1) s2
              (snoc acc (show grain.n <> " " <> six grain.begin <> " " <> six grain.end))
 
@@ -878,7 +878,7 @@ conspicillumCycles = [ 0, 1, 2, 7 ]
 conspicillumSpec :: CL.Spec
 conspicillumSpec =
   { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
-  , cloud: { sustain: 0.05, position: 0.4, spray: 0.3 }
+  , cloud: { sustain: 0.05, position: 0.4, spray: 0.3, follow: 0.0 }
   , rules:
       -- The headline, and the thing no hardware granulator can express: every
       -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
