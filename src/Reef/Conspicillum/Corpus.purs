@@ -50,6 +50,8 @@ module Reef.Conspicillum.Corpus
   , Weighting
   , Query
   , Grainable
+  , Hits
+  , noHits
   , Corpus
   , Cloud
   , Grain
@@ -97,7 +99,19 @@ type Grainable =
   , cell   :: Array Int
   , params :: Array { name :: String, level :: Number }
   , notes  :: Array Int   -- carried, unused here; the harmonia join is C5
+  -- | What each slice of the sample sounds like, as strengths 0..1 per kind:
+  -- | a take divided into `length hits.kick` equal slices (sixteenths, for a
+  -- | bar-locked break). Empty for a sample nobody has listened to this way.
+  -- | Scores, not labels, so the rule that reads them chooses its own
+  -- | threshold — and a low threshold is how a snare rule starts catching the
+  -- | clap and the kick's click, which is sometimes the point.
+  , hits   :: Hits
   }
+
+type Hits = { kick :: Array Number, snare :: Array Number, hat :: Array Number }
+
+noHits :: Hits
+noHits = { kick: [], snare: [], hat: [] }
 
 -- | A corpus is one Quadrat set. `name` is the SuperDirt `s`.
 type Corpus = { name :: String, samples :: Array Grainable }

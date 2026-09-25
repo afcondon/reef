@@ -359,6 +359,21 @@ echo "== conspicillumSectorRun (tape walk + shift + ratchet): node vs erl =="
 diff /tmp/reef-conspicillum-sector-node.txt /tmp/reef-conspicillum-sector-erl.txt && echo "  OK conspicillumSectorRun node == erl (walk, shift and ratchet identical)"
 diff "$CONSPICILLUM_SECTOR_GOLDEN" /tmp/reef-conspicillum-sector-node.txt && echo "  OK conspicillumSectorRun matches frozen golden"
 
+# --- Conspicillum fix + control patterns (Reef.Conformance.conspicillumFixRun) -
+# Rules that select by what a grain READS (Hit kind threshold: Tidal's `fix`)
+# and take amounts from a sequence per hit or per bar (Tidal's control
+# patterns), with the walk on so the scores must follow the read head.
+CONSPICILLUM_FIX_GOLDEN="$REEF/conformance/conspicillum-fix-golden.txt"
+echo "== conspicillumFixRun (fix by hit scores + value sequences): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumFixRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumFixRun);' \
+  ) > /tmp/reef-conspicillum-fix-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumFixRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-fix-erl.txt
+diff /tmp/reef-conspicillum-fix-node.txt /tmp/reef-conspicillum-fix-erl.txt && echo "  OK conspicillumFixRun node == erl (hit selection and sequences identical)"
+diff "$CONSPICILLUM_FIX_GOLDEN" /tmp/reef-conspicillum-fix-node.txt && echo "  OK conspicillumFixRun matches frozen golden"
+
 # --- Conspicillum harmonic fit (Reef.Conformance.conspicillumHarmonicRun) -----
 # CONSPICILLUM C5. A ii-V-i in D minor scored against a corpus of REAL Quadrat
 # chord hits — the actual MIDI notes struck, pulled from the chord-hits-* sets.

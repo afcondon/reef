@@ -48,7 +48,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
-import Reef.Conspicillum.Cloud (Chain, Fx, Op(..), Rule, Spec, Walk, When(..))
+import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Op(..), Rule, Spec, Step(..), Walk, When(..))
 import Reef.Conspicillum.Harmonic (Harmonic)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -154,12 +154,14 @@ type WireQuery =
 -- | would not fail a decode, it would silently turn "reverse every third
 -- | grain" into something else.
 type WireRule =
-  { when :: Int      -- 0 always, 1 every, 2 chance
+  { when :: Int      -- 0 always, 1 every, 2 chance, 3 hit (kind in everyN, threshold in chance)
   , everyN :: Int
   , everyK :: Int
   , chance :: Number
   , op :: Int        -- see `opToWire`; 0-4 are the voice, 5 up are the effects
   , amount :: Number
+  , values :: Array Number   -- empty: the op's own amount
+  , step :: Int              -- 0 per hit ("a b c"), 1 per bar ("<a b c>")
   }
 
 -- | `Fx` and `Chain` need no projection: both are flat records of Number (plus
@@ -195,6 +197,22 @@ whenToWire = case _ of
   Always -> { when: 0, everyN: 0, everyK: 0, chance: 0.0 }
   Every n k -> { when: 1, everyN: n, everyK: k, chance: 0.0 }
   Chance p -> { when: 2, everyN: 0, everyK: 0, chance: p }
+  Hit k t -> { when: 3, everyN: kindToInt k, everyK: 0, chance: t }
+
+kindToInt :: Kind -> Int
+kindToInt = case _ of
+  Kick -> 0
+  Snare -> 1
+  Hat -> 2
+
+-- | Total, and a hit kind this build does not know reads as `Hat`: the
+-- | sparsest of the three, so a version skew thins a figure rather than
+-- | filling one.
+kindFromInt :: Int -> Kind
+kindFromInt = case _ of
+  0 -> Kick
+  1 -> Snare
+  _ -> Hat
 
 -- | Total. An unrecognised kind reads as `Always`, which applies the rule to
 -- | every grain — deliberately the LOUD failure rather than the quiet one. A
@@ -204,6 +222,7 @@ whenFromWire :: WireRule -> When
 whenFromWire w = case w.when of
   1 -> Every w.everyN w.everyK
   2 -> Chance w.chance
+  3 -> Hit (kindFromInt w.everyN) w.chance
   _ -> Always
 
 -- | **Append-only from 5.** 0-4 were frozen the day the first scene went over
@@ -283,10 +302,13 @@ toWireRule r =
   let wh = whenToWire r.when
       o = opToWire r.op
   in { when: wh.when, everyN: wh.everyN, everyK: wh.everyK, chance: wh.chance
-     , op: o.op, amount: o.amount }
+     , op: o.op, amount: o.amount
+     , values: r.values, step: if r.step == PerBar then 1 else 0 }
 
 fromWireRule :: WireRule -> Rule
-fromWireRule w = { when: whenFromWire w, op: opFromWire w }
+fromWireRule w =
+  { when: whenFromWire w, op: opFromWire w
+  , values: w.values, step: if w.step == 1 then PerBar else PerHit }
 
 toWireSpec :: Spec -> WireSpec
 toWireSpec sp = sp { rules = map toWireRule sp.rules }

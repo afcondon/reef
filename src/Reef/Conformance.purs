@@ -42,6 +42,7 @@ module Reef.Conformance
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
+  , conspicillumFixRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -70,9 +71,9 @@ import Reef.Vetula.Protocol (decodePerf, encodePerf) as VP
 import Reef.Stellatus.Engine (Scene, walk, walkLen, events) as SE
 import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
-  (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, pick) as CC
+  (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Op(..), Spec, When(..), cycleOf, noChain, noFx, noWalk) as CL
+import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), When(..), cycleOf, noChain, noFx, noWalk, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -797,7 +798,7 @@ conspicillumCorpus =
   ]
   where
   g ix secs peak rms zcr tilt decay cell params =
-    { index: ix, secs, peak, rms, zcr, tilt, decay, cell, params, notes: [] }
+    { index: ix, secs, peak, rms, zcr, tilt, decay, cell, params, notes: [], hits: CC.noHits }
   p nm level = { name: nm, level }
 
 -- | The scene: a filter on a MEASURED axis and one on an INTENTIONAL axis
@@ -888,10 +889,10 @@ conspicillumSpec =
       -- in the first cycle, 9,12,15 (= indices 1,4,7) in the second — which is
       -- precisely what the golden has to pin, and what a per-cycle reset would
       -- silently destroy.
-      [ { when: CL.Every 3 0, op: CL.OpSpeed (-1.0) }
+      [ CL.rule (CL.Every 3 0) (CL.OpSpeed (-1.0))
       -- And a seeded one beside it, so the golden covers both kinds of `when`
       -- and the draw order between them.
-      , { when: CL.Chance 0.25, op: CL.OpGain 0.5 }
+      , CL.rule (CL.Chance 0.25) (CL.OpGain 0.5)
       -- Two effect rules, APPENDED. `Every` draws nothing, so adding these
       -- leaves the seed sequence untouched and every column the golden already
       -- pinned is byte-identical — which is what makes the regeneration
@@ -900,8 +901,8 @@ conspicillumSpec =
       -- Periods 4 and 6 against 8 onsets a cycle, so they coincide every
       -- twelfth grain and separate everywhere else — which pins that two
       -- effect rules CO-APPLY to one grain rather than the last one winning.
-      , { when: CL.Every 4 0, op: CL.OpCrush 4.0 }
-      , { when: CL.Every 6 0, op: CL.OpPshift 1.5 }
+      , CL.rule (CL.Every 4 0) (CL.OpCrush 4.0)
+      , CL.rule (CL.Every 6 0) (CL.OpPshift 1.5)
       ]
   , speed: 1.0
   , gain: 0.8
@@ -982,7 +983,7 @@ conspicillumChordCorpus =
   where
   g ix secs peak rms zcr tilt decay notes =
     { index: ix, secs, peak, rms, zcr, tilt, decay
-    , cell: [], params: [], notes }
+    , cell: [], params: [], notes, hits: CC.noHits }
 
 -- | A ii-V-i in D minor, as (name, target). Roots and basses are given
 -- | explicitly because a realised `Harmonia.Chord` is SORTED and its root
@@ -1073,7 +1074,7 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
 
   tape =
     { index: 0, secs: 2.0, peak: 0.6, rms: 0.08, zcr: 4000.0, tilt: 0.2, decay: 2.0
-    , cell: [], params: [], notes: [] }
+    , cell: [], params: [], notes: [], hits: CC.noHits }
 
   sectorScene =
     { corpus: { name: "fd-beat-bar", samples: [ tape ] }
@@ -1083,12 +1084,77 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.2, hold: 0.15, home: 0.1, grid: 8, reach: 3 }
         , rules:
-            [ { when: CL.Every 16 14, op: CL.OpRatchet 3.0 }
-            , { when: CL.Every 8 7, op: CL.OpShift (-0.0625) }
-            , { when: CL.Chance 0.1, op: CL.OpSpeed (-1.0) }
+            [ CL.rule (CL.Every 16 14) (CL.OpRatchet 3.0)
+            , CL.rule (CL.Every 8 7) (CL.OpShift (-0.0625))
+            , CL.rule (CL.Chance 0.1) (CL.OpSpeed (-1.0))
             ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain
         }
     , seed: 2468
+    }
+
+
+-- ── 15. Conspicillum: fix, and a control pattern ─────────────────────────────
+
+-- | Rules that select by what a grain READS (`Hit`, Tidal's `fix`) and take
+-- | their amounts from a sequence (`values`, Tidal's control patterns).
+-- |
+-- | Hand-made scores, a four-on-the-floor kick with snares on 4 and 12 and a
+-- | hat on the off-beats, so the golden does not depend on any analysis. The
+-- | walk is on, which is the point of reading scores at the READ position: a
+-- | grain that jumped onto a snare slice must pshift, and a kick that holds
+-- | must still step the bassline. Pins:
+-- |
+-- | - `Hit` thresholds, including a hat threshold low enough to catch the
+-- |   kick slices' faint top (0.3 against their 0.35);
+-- | - `PerBar` stepping by cycle (cycle 7 out of order reads `values !! 3`);
+-- | - `PerHit` counting firings within the cycle and restarting at the bar.
+conspicillumFixRun :: String
+conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
+  Left errs -> "CONSPICILLUM-FIX-DECODE-FAIL: " <> show errs
+  Right scene ->
+    intercalate "\n" (map (renderCycle scene) conspicillumCycles)
+  where
+  renderCycle scene cyc =
+    let es = CL.cycleOf scene.corpus scene.query scene.spec scene.seed cyc
+    in intercalate "\n" (mapWithIndex (renderEmit cyc) es)
+
+  renderEmit cyc i e =
+    "c" <> show cyc <> " g" <> show i
+      <> " b " <> six e.begin
+      <> " ps " <> six e.fx.pshift
+      <> " rsn " <> six e.fx.rsnpitch
+      <> " pan " <> six e.pan
+
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
+  sixteen f = map f (range 0 15)
+  kick = sixteen (\k -> if k `mod` 4 == 0 then 1.0 else 0.0)
+  snare = sixteen (\k -> if k == 4 || k == 12 then 0.9 else if k == 7 then 0.4 else 0.0)
+  hat = sixteen (\k -> if k `mod` 4 == 2 then 0.8 else if k `mod` 4 == 0 then 0.35 else 0.0)
+
+  tape =
+    { index: 0, secs: 2.0, peak: 0.6, rms: 0.08, zcr: 4000.0, tilt: 0.2, decay: 2.0
+    , cell: [], params: [], notes: [], hits: { kick, snare, hat } }
+
+  fixScene =
+    { corpus: { name: "fd-beat-bar", samples: [ tape ] }
+    , query: CC.emptyQuery
+    , spec:
+        { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
+        , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: { jump: 0.15, hold: 0.1, home: 0.1, grid: 16, reach: 0 }
+        , rules:
+            [ CL.rule (CL.Hit CL.Snare 0.5) (CL.OpPshift 1.5)
+            , { when: CL.Hit CL.Kick 0.5, op: CL.OpRsnPitch 0.0
+              , values: [ 36.0, 36.0, 39.0, 31.0 ], step: CL.PerBar }
+            , { when: CL.Hit CL.Hat 0.3, op: CL.OpPan 0.5
+              , values: [ 0.2, 0.8 ], step: CL.PerHit }
+            ]
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain
+        }
+    , seed: 1357
     }

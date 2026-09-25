@@ -45,8 +45,11 @@
 -- | where a pattern is a function from a time arc to the events in it.
 module Reef.Conspicillum.Cloud
   ( When(..)
+  , Kind(..)
+  , Step(..)
   , Op(..)
   , Rule
+  , rule
   , Fx
   , Chain
   , noFx
@@ -62,12 +65,12 @@ module Reef.Conspicillum.Cloud
 
 import Prelude
 
-import Data.Array (concatMap, foldl, index, length, mapWithIndex, range, snoc)
+import Data.Array (concatMap, foldl, index, length, mapWithIndex, modifyAt, range, replicate, snoc)
 import Data.Int (floor, round, toNumber)
 import Data.Int.Bits (and)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Reef.Bits (xorshift32)
-import Reef.Conspicillum.Corpus (Cloud, Corpus, Query, clampTo, grainAt, pick, wrap01)
+import Reef.Conspicillum.Corpus (Cloud, Corpus, Grainable, Query, clampTo, grainAt, pick, wrap01)
 import Reef.Marbles (Seed, nextRand, seedFrom)
 
 -- ── when a rule applies ──────────────────────────────────────────────────────
@@ -86,8 +89,27 @@ data When
   = Always
   | Every Int Int
   | Chance Number
+  -- | Tidal's `fix`: select a grain by what it READS, not when it falls. The
+  -- | grain fires if the slice under its read head scores at least the
+  -- | threshold for this kind (`Corpus.Grainable.hits`). Read after the walk,
+  -- | before the rules, so a jumped-to snare is still a snare; a sample with
+  -- | no scores never fires. The threshold is the reliability dial: high is
+  -- | "certainly a snare", low lets the clap and the kick's click in.
+  | Hit Kind Number
 
 derive instance eqWhen :: Eq When
+
+-- | What a slice can sound like, as far as the scores go.
+data Kind = Kick | Snare | Hat
+
+derive instance eqKind :: Eq Kind
+
+-- | How a rule's `values` advance — Tidal's two ways of spreading a list over
+-- | time. `PerHit` is `"a b c"`: one value per firing, restarting each cycle.
+-- | `PerBar` is `"<a b c>"`: one value per cycle, whatever fires in it.
+data Step = PerHit | PerBar
+
+derive instance eqStep :: Eq Step
 
 -- | What a rule does to a grain. Multiplicative where multiplication is the
 -- | musical operation (`speed`, `gain`, grain length), absolute where it is not
@@ -142,7 +164,15 @@ data Op
   -- | of their own, so they have no ordinals and no rule can pick them out.
   | OpRatchet Number
 
-type Rule = { when :: When, op :: Op }
+-- | `values`, when not empty, replaces the op's own amount with a sequence
+-- | (a control pattern, in Tidal's terms): kicks through a resonator with
+-- | `values [36, 36, 39, 31]` stepping `PerBar` is a bassline played by the
+-- | kick drum. Empty means the op's amount, as rules always were.
+type Rule = { when :: When, op :: Op, values :: Array Number, step :: Step }
+
+-- | A rule with no sequence: the op's own amount every time.
+rule :: When -> Op -> Rule
+rule when op = { when, op, values: [], step: PerHit }
 
 -- ── effects ──────────────────────────────────────────────────────────────────
 
@@ -436,8 +466,8 @@ cycleSeed base n =
 -- | on how the earlier ones happened to land, so the cycle would stop being
 -- | reproducible from its scene. Fixed draw ORDER is the whole guarantee, and
 -- | it is easy to lose by being clever here.
-applies :: Rule -> Int -> Seed -> { fires :: Boolean, seed :: Seed }
-applies rule ordinal s = case rule.when of
+applies :: Rule -> Int -> Scores -> Seed -> { fires :: Boolean, seed :: Seed }
+applies r ordinal sc s = case r.when of
   Always -> { fires: true, seed: s }
   Every n k ->
     let period = if n < 1 then 1 else n
@@ -445,6 +475,61 @@ applies rule ordinal s = case rule.when of
   Chance p ->
     let { u, seed } = nextRand s
     in { fires: u < p, seed }
+  Hit k t ->
+    let v = case k of
+          Kick -> sc.kick
+          Snare -> sc.snare
+          Hat -> sc.hat
+    in { fires: v >= t && v > 0.0, seed: s }
+
+-- | The hit scores of the slice a grain reads.
+type Scores = { kick :: Number, snare :: Number, hat :: Number }
+
+scoresAt :: Grainable -> Number -> Scores
+scoresAt g read =
+  { kick: at g.hits.kick, snare: at g.hits.snare, hat: at g.hits.hat }
+  where
+  at xs =
+    let n = length xs
+        -- A hair past the slice start: a read placed exactly on a boundary
+        -- must land in the slice it begins, not the one before, whichever
+        -- way the division rounds.
+        i = floor (wrap01 read * toNumber n + 1.0e-6)
+    in if n == 0 then 0.0 else fromMaybe 0.0 (index xs (if i >= n then n - 1 else i))
+
+-- | The op with its amount replaced — how a rule's `values` reach it.
+setAmount :: Op -> Number -> Op
+setAmount op x = case op of
+  OpSpeed _ -> OpSpeed x
+  OpGain _ -> OpGain x
+  OpLength _ -> OpLength x
+  OpPan _ -> OpPan x
+  OpAccelerate _ -> OpAccelerate x
+  OpShape _ -> OpShape x
+  OpCrush _ -> OpCrush x
+  OpCoarse _ -> OpCoarse x
+  OpLpf _ -> OpLpf x
+  OpHpf _ -> OpHpf x
+  OpBpf _ -> OpBpf x
+  OpRes _ -> OpRes x
+  OpVowel _ -> OpVowel x
+  OpPshift _ -> OpPshift x
+  OpTremolo _ -> OpTremolo x
+  OpPhaser _ -> OpPhaser x
+  OpGenv _ -> OpGenv x
+  OpGtilt _ -> OpGtilt x
+  OpGplat _ -> OpGplat x
+  OpAtk _ -> OpAtk x
+  OpHold _ -> OpHold x
+  OpRel _ -> OpRel x
+  OpCurve _ -> OpCurve x
+  OpRsnPitch _ -> OpRsnPitch x
+  OpRsnDecay _ -> OpRsnDecay x
+  OpRsnBright _ -> OpRsnBright x
+  OpRsnMix _ -> OpRsnMix x
+  OpRsnModel _ -> OpRsnModel x
+  OpShift _ -> OpShift x
+  OpRatchet _ -> OpRatchet x
 
 applyOp :: Op -> Emit -> Emit
 applyOp op e = case op of
@@ -507,6 +592,7 @@ cycleOf corpus query spec base cyc =
     (foldl step
        { seed: cycleSeed base cyc
        , head: { offset: 0.0, prevRead: 0.0, first: true, seed: walkSeed }
+       , fired: replicate (length spec.rules) 0
        , out: []
        }
        indexed).out
@@ -530,7 +616,7 @@ cycleOf corpus query spec base cyc =
       read = spec.cloud.follow * o.at + hd.offset
       { chosen, seed: s1 } = pick query corpus acc.seed
     in case chosen of
-      Nothing -> { seed: s1, head: hd, out: acc.out }
+      Nothing -> { seed: s1, head: hd, fired: acc.fired, out: acc.out }
       Just g ->
         let
           { grain, seed: s2 } = grainAt spec.cloud read g s1
@@ -548,8 +634,9 @@ cycleOf corpus query spec base cyc =
             , chain: spec.chain
             , ratchet: 1
             }
-          r = foldl (applyRule ordinal) { e: base', seed: s2 } spec.rules
-        in { seed: r.seed, head: hd, out: snoc acc.out r.e }
+          sc = scoresAt g read
+          r = foldl (applyRule ordinal sc) { e: base', seed: s2, fired: acc.fired, i: 0 } spec.rules
+        in { seed: r.seed, head: hd, fired: r.fired, out: snoc acc.out r.e }
 
   -- A ratcheted grain's slot runs to the next onset (round the bar for the
   -- last), and its repeats share it evenly.
@@ -574,9 +661,29 @@ cycleOf corpus query spec base cyc =
           Nothing -> 0.0
     in later - at
 
-  applyRule ordinal acc rule =
-    let { fires, seed } = applies rule ordinal acc.seed
-    in { e: if fires then applyOp rule.op acc.e else acc.e, seed }
+  -- `fired` counts each rule's firings in THIS cycle, which is what `PerHit`
+  -- indexes by; it starts at zero every cycle, so the sequence restarts on
+  -- the bar the way Tidal's does, and `cycleOf` stays cycle-addressable.
+  applyRule ordinal sc acc r =
+    let
+      { fires, seed } = applies r ordinal sc acc.seed
+      n = fromMaybe 0 (index acc.fired acc.i)
+      op = case length r.values of
+        0 -> r.op
+        len ->
+          let k = case r.step of
+                PerHit -> n
+                PerBar -> cyc
+          in setAmount r.op (fromMaybe 0.0 (index r.values (posMod k len)))
+    in
+      { e: if fires then applyOp op acc.e else acc.e
+      , seed
+      , fired: if fires then fromMaybe acc.fired (modifyAt acc.i (_ + 1) acc.fired) else acc.fired
+      , i: acc.i + 1
+      }
+
+  posMod :: Int -> Int -> Int
+  posMod a m = let r = a `mod` m in if r < 0 then r + m else r
 
 -- ── the walk ─────────────────────────────────────────────────────────────────
 
