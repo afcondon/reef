@@ -415,6 +415,19 @@ echo "== conspicillumWarpRun (tape at another tempo, three modes): node vs erl =
 diff /tmp/reef-conspicillum-warp-node.txt /tmp/reef-conspicillum-warp-erl.txt && echo "  OK conspicillumWarpRun node == erl (repitch, gap and leak identical)"
 diff "$CONSPICILLUM_WARP_GOLDEN" /tmp/reef-conspicillum-warp-node.txt && echo "  OK conspicillumWarpRun matches frozen golden"
 
+# --- Conspicillum notation (Reef.Conformance.conspicillumNotationRun) ---------
+# One-line scenes parsed and printed back, errors included.
+CONSPICILLUM_NOTATION_GOLDEN="$REEF/conformance/conspicillum-notation-golden.txt"
+echo "== conspicillumNotationRun (the one-line notation): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumNotationRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumNotationRun);' \
+  ) > /tmp/reef-conspicillum-notation-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':conspicillumNotationRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-notation-erl.txt
+diff /tmp/reef-conspicillum-notation-node.txt /tmp/reef-conspicillum-notation-erl.txt && echo "  OK conspicillumNotationRun node == erl (parse and print identical)"
+diff "$CONSPICILLUM_NOTATION_GOLDEN" /tmp/reef-conspicillum-notation-node.txt && echo "  OK conspicillumNotationRun matches frozen golden"
+
 # --- Conspicillum harmonic fit (Reef.Conformance.conspicillumHarmonicRun) -----
 # CONSPICILLUM C5. A ii-V-i in D minor scored against a corpus of REAL Quadrat
 # chord hits — the actual MIDI notes struck, pulled from the chord-hits-* sets.

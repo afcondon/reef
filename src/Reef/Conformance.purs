@@ -46,6 +46,7 @@ module Reef.Conformance
   , conspicillumPermuteRun
   , conspicillumVirtualRun
   , conspicillumWarpRun
+  , conspicillumNotationRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -75,6 +76,7 @@ import Reef.Stellatus.Engine (Scene, walk, walkLen, events) as SE
 import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
+import Reef.Conspicillum.Notation as CN
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
@@ -1316,3 +1318,28 @@ conspicillumWarpRun =
         }
     , seed: 4242
     }
+
+
+-- ── 19. Conspicillum: the one-line notation ──────────────────────────────────
+
+-- | Lines parsed and printed back, on both runtimes: every term, numbers
+-- | written as integers, decimals and negatives, sequences per hit and per
+-- | bar, a step table, and three malformed lines whose errors must agree too.
+conspicillumNotationRun :: String
+conspicillumNotationRun = intercalate "\n" (map one lines)
+  where
+  one t = case CN.parse t of
+    Left e -> "ERR " <> e
+    Right l -> CN.print l
+  lines =
+    [ "s \"fd-beat-bar\""
+    , "s \"fd-beat-bar\" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # swing 0.62 # tapeswing 0.6"
+    , "s \"fd-beat-bar\" # fix snare 0.5 (pshift 1.5) # fix kick 0.5 (rsnpitch \"<36 36 39 31>\") # fix hat 0.3 (pan \"0.2 0.8\")"
+    , "s \"prog-g-2bar\" # bars 2 # order \"0 1 1 0\" # steps \"~ ~ 5?0.4 ~ 2?0.35 ~ ~ 7?0.25\" # gain 1.6"
+    , "s \"chord-hits-0924-171929\" # samples \"<4 7 5 0>\" # warp repitch # sendB 0.5"
+    , "s \"chord-hits-0916-185508:3\" # euclid 5 16 # sustain 2 # follow 0 # speed -0.1 # lpf 6850 # res 0.47 # room 0.85 # delaytime 0.375 # every 4 2 (speed -1) # sometimesBy 0.12 (ratchet 3) # seed 42"
+    , "s \"x\" # onsets \"0 0.3 0.55\" # always (send 1) # position 0.25 # accelerate -0.5"
+    , "s \"x\" # walk 0.2 0.1"
+    , "s \"x\" # every 4 (speed -1)"
+    , "s \"x\" # bogus 3"
+    ]

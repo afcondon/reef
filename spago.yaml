@@ -17,6 +17,8 @@ package:
                     # same encode/decode compiles to both Triggerfish (JS) and the BEAM
     - foreign
     - either
+    - strings
+    - numbers
   test:
     main: Test.Main
     dependencies:
