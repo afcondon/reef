@@ -48,7 +48,7 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
-import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Op(..), Rule, Send, Spec, Step(..), Steps, Swing, Tape, Walk, When(..))
+import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Op(..), Rule, Send, Spec, Step(..), Steps, Swing, Tape, Walk, WarpMode(..), When(..))
 import Reef.Conspicillum.Harmonic (Harmonic)
 import Simple.JSON (readJSON, writeJSON)
 
@@ -180,6 +180,9 @@ type WireSpec =
   , swing :: Swing
   , tape :: Tape     -- `oneBar` for a one-bar tape played in order
   , steps :: Steps   -- `noSteps`: no table
+  -- | `{ ratio: 1.0, mode: 1 }` for a tape at its own tempo. Mode 0 repitch,
+  -- | 1 gap, 2 leak (`Cloud.WarpMode`).
+  , warp :: { ratio :: Number, mode :: Int }
   , rules :: Array WireRule
   , speed :: Number
   , gain :: Number
@@ -318,10 +321,25 @@ fromWireRule w =
   , values: w.values, step: if w.step == 1 then PerBar else PerHit }
 
 toWireSpec :: Spec -> WireSpec
-toWireSpec sp = sp { rules = map toWireRule sp.rules }
+toWireSpec sp = sp { rules = map toWireRule sp.rules
+                   , warp = { ratio: sp.warp.ratio, mode: warpModeToInt sp.warp.mode } }
 
 fromWireSpec :: WireSpec -> Spec
-fromWireSpec sp = sp { rules = map fromWireRule sp.rules }
+fromWireSpec sp = sp { rules = map fromWireRule sp.rules
+                     , warp = { ratio: sp.warp.ratio, mode: warpModeFromInt sp.warp.mode } }
+
+warpModeToInt :: WarpMode -> Int
+warpModeToInt = case _ of
+  Repitch -> 0
+  Gap -> 1
+  Leak -> 2
+
+-- | An unknown mode is the default, gap: at ratio 1 every mode is the same.
+warpModeFromInt :: Int -> WarpMode
+warpModeFromInt = case _ of
+  0 -> Repitch
+  2 -> Leak
+  _ -> Gap
 
 toWireQuery :: Query -> WireQuery
 toWireQuery q =

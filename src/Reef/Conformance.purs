@@ -45,6 +45,7 @@ module Reef.Conformance
   , conspicillumFixRun
   , conspicillumPermuteRun
   , conspicillumVirtualRun
+  , conspicillumWarpRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -75,7 +76,7 @@ import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, oneBar, rule) as CL
+import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -883,7 +884,7 @@ conspicillumSpec :: CL.Spec
 conspicillumSpec =
   { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
   , cloud: { sustain: 0.05, position: 0.4, spray: 0.3, follow: 0.0 }
-  , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
+  , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
   , rules:
       -- The headline, and the thing no hardware granulator can express: every
       -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
@@ -1090,7 +1091,7 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
           -- and grain lengths all move, and the ratchet subdivides the swung
           -- slot, which is what the golden pins.
         , swing: { tape: 0.6, play: 0.55, grid: 16 }
-        , tape: CL.oneBar, steps: CL.noSteps
+        , tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
         , rules:
             [ CL.rule (CL.Every 16 14) (CL.OpRatchet 3.0)
             , CL.rule (CL.Every 8 7) (CL.OpShift (-0.0625))
@@ -1160,7 +1161,7 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
         { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.15, hold: 0.1, home: 0.1, grid: 16, reach: 0 }
-        , swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
+        , swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
         , rules:
             [ CL.rule (CL.Hit CL.Snare 0.5) (CL.OpPshift 1.5)
             , { when: CL.Hit CL.Kick 0.5, op: CL.OpRsnPitch 0.0
@@ -1214,6 +1215,7 @@ conspicillumPermuteRun = case CP.decodeScene (CP.encodeScene permuteScene) of
         , swing: CL.noSwing
         , tape: { bars: 2, order: [ 0, 1, 1, 0 ], samples: [] }
         , steps: { grid: 8, to: [ -1, -1, 5, -1, 2, -1, -1, 7 ], p: [ 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.3 ] }
+        , warp: CL.noWarp
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
@@ -1263,9 +1265,54 @@ conspicillumVirtualRun = case CP.decodeScene (CP.encodeScene virtualScene) of
         , swing: CL.noSwing
         , tape: { bars: 0, order: [ 0, 2, 1, 3, 4 ], samples: [ 2, 0, 1, 2, 9 ] }
         , steps: CL.noSteps
+        , warp: CL.noWarp
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
         }
     , seed: 24680
+    }
+
+
+-- ── 18. Conspicillum: a tape at another tempo ───────────────────────────────
+
+-- | A one-bar 120 bpm tape played at 90 and at 150 bpm (ratios 0.75, 1.25)
+-- | in each of the three modes, four grains a cycle with one speed rule on
+-- | top. Pins what each mode does to a grain's speed, sustain and window, and
+-- | that the rules act on the warped grain (the reversed third grain keeps its
+-- | warped speed's magnitude).
+conspicillumWarpRun :: String
+conspicillumWarpRun =
+  intercalate "\n" do
+    { label, mode } <- [ { label: "repitch", mode: CL.Repitch }, { label: "gap", mode: CL.Gap }, { label: "leak", mode: CL.Leak } ]
+    ratio <- [ 0.75, 1.25 ]
+    case CP.decodeScene (CP.encodeScene (scene { ratio, mode })) of
+      Left errs -> [ "CONSPICILLUM-WARP-DECODE-FAIL: " <> show errs ]
+      Right sc -> mapWithIndex (renderEmit label ratio)
+                    (CL.cycleOf sc.corpus sc.query sc.spec sc.seed 0)
+  where
+  renderEmit label ratio i e =
+    label <> " r" <> six ratio <> " g" <> show i <> " b " <> six e.begin <> " e " <> six e.end
+      <> " sus " <> six e.sustain <> " sp " <> six e.speed
+
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
+  tape =
+    { index: 0, secs: 2.0, peak: 0.6, rms: 0.08, zcr: 4000.0, tilt: 0.2, decay: 2.0
+    , cell: [], params: [], notes: [], hits: CC.noHits }
+
+  scene warp =
+    { corpus: { name: "fd-beat-bar", samples: [ tape ] }
+    , query: CC.emptyQuery
+    , spec:
+        { onsets: map (\k -> toNumber k / 4.0) (range 0 3)
+        , cloud: { sustain: 0.5, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
+        , warp
+        , rules: [ CL.rule (CL.Every 4 2) (CL.OpSpeed (-1.0)) ]
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain, sends: []
+        }
+    , seed: 4242
     }

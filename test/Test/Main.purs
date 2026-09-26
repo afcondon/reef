@@ -95,7 +95,7 @@ main = do
       shifted = map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
         { onsets: sixteenths
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
-        , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
+        , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
         , rules: [ CL.rule (CL.Every 16 5) (CL.OpShift (-0.0625)) ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: [] } 1 0)
@@ -113,7 +113,7 @@ main = do
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: CL.noWalk
         , swing: { tape: tapeSw, play: playSw, grid: 16 }
-        , tape: CL.oneBar, steps: CL.noSteps
+        , tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: [] }
@@ -137,7 +137,7 @@ main = do
       barSpec tp st =
         { onsets: sixteenths
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
-        , walk: CL.noWalk, swing: CL.noSwing, tape: tp, steps: st
+        , walk: CL.noWalk, swing: CL.noSwing, tape: tp, steps: st, warp: CL.noWarp
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: [] }

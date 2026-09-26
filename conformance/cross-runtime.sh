@@ -402,6 +402,19 @@ echo "== conspicillumVirtualRun (virtual tape: a sample per bar): node vs erl ==
 diff /tmp/reef-conspicillum-virtual-node.txt /tmp/reef-conspicillum-virtual-erl.txt && echo "  OK conspicillumVirtualRun node == erl (bar samples and windows identical)"
 diff "$CONSPICILLUM_VIRTUAL_GOLDEN" /tmp/reef-conspicillum-virtual-node.txt && echo "  OK conspicillumVirtualRun matches frozen golden"
 
+# --- Conspicillum warp (Reef.Conformance.conspicillumWarpRun) -----------------
+# A 120 bpm tape at 90 and 150 bpm in each mode: repitch, gap, leak.
+CONSPICILLUM_WARP_GOLDEN="$REEF/conformance/conspicillum-warp-golden.txt"
+echo "== conspicillumWarpRun (tape at another tempo, three modes): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumWarpRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumWarpRun);' \
+  ) > /tmp/reef-conspicillum-warp-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumWarpRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-warp-erl.txt
+diff /tmp/reef-conspicillum-warp-node.txt /tmp/reef-conspicillum-warp-erl.txt && echo "  OK conspicillumWarpRun node == erl (repitch, gap and leak identical)"
+diff "$CONSPICILLUM_WARP_GOLDEN" /tmp/reef-conspicillum-warp-node.txt && echo "  OK conspicillumWarpRun matches frozen golden"
+
 # --- Conspicillum harmonic fit (Reef.Conformance.conspicillumHarmonicRun) -----
 # CONSPICILLUM C5. A ii-V-i in D minor scored against a corpus of REAL Quadrat
 # chord hits — the actual MIDI notes struck, pulled from the chord-hits-* sets.

@@ -62,6 +62,10 @@ module Reef.Conspicillum.Cloud
   , oneBar
   , Steps
   , noSteps
+  , Warp
+  , WarpMode(..)
+  , noWarp
+  , warpGrain
   , swingWarp
   , Send
   , Spec
@@ -477,6 +481,7 @@ type Spec =
   , swing :: Swing
   , tape :: Tape
   , steps :: Steps
+  , warp :: Warp
   , rules :: Array Rule
   , speed :: Number
   , gain :: Number
@@ -495,6 +500,44 @@ type Spec =
   -- | is dry and comes out on its own outputs, and the effect is in Ableton.
   , sends :: Array Send
   }
+
+-- | **Playing a tape at a tempo that is not its own.** `ratio` is the play
+-- | tempo over the tape's (1: native), and the mode is Ableton's choice:
+-- |
+-- | - `Repitch`: varispeed. Every slice is read whole, faster or slower, so
+-- |   the groove is exact and the pitch moves with the tempo.
+-- | - `Gap`: Beats with no fill. Every grain plays at its own speed and pitch
+-- |   for its own length; slower leaves a gap after each slice, faster cuts it.
+-- | - `Leak`: Beats reading on. Each grain lasts its slot at the new tempo, so
+-- |   slower reads past its slice into what comes next, and faster cuts it.
+-- |
+-- | The ratio is a number in the spec rather than a clock the engine reads, so
+-- | a cycle stays a pure function of the scene: whoever knows the tempo (the
+-- | page, from Link) says it, and says it again when it changes.
+type Warp = { ratio :: Number, mode :: WarpMode }
+
+data WarpMode = Repitch | Gap | Leak
+
+derive instance eqWarpMode :: Eq WarpMode
+
+noWarp :: Warp
+noWarp = { ratio: 1.0, mode: Gap }
+
+-- | A grain's reading adjusted for the tempo. Applied before the rules, so a
+-- | rule's `speed` or `length` still acts on the grain as warped.
+warpGrain :: Warp -> { begin :: Number, end :: Number, sustain :: Number, speed :: Number }
+  -> { begin :: Number, end :: Number, sustain :: Number, speed :: Number }
+warpGrain w g
+  | w.ratio <= 0.0 || w.ratio == 1.0 = g
+  | otherwise = case w.mode of
+      Repitch -> g { speed = g.speed * w.ratio, sustain = g.sustain / w.ratio }
+      Gap ->
+        let k = max 1.0 w.ratio
+        in g { sustain = g.sustain / k, end = g.begin + (g.end - g.begin) / k }
+      -- Not past the end of the file: the last slice of a slowed bar has
+      -- nothing after it to leak into, so it stops, as a gap would.
+      Leak -> g { sustain = g.sustain / w.ratio
+                , end = min 1.0 (g.begin + (g.end - g.begin) / w.ratio) }
 
 -- | One grain, placed in the cycle and fully resolved: everything
 -- | `/dirt/play` needs and nothing it does not.
@@ -746,13 +789,15 @@ cycleOf corpus query spec base cyc =
           -- the grain's real length: the last short slice of a swung bar sits
           -- nearer the end than a straight sixteenth would be allowed to.
           { grain, seed: s2 } = grainAt (spec.cloud { sustain = spec.cloud.sustain * fit }) readSwung g s1
+          wg = warpGrain spec.warp
+                 { begin: grain.begin, end: grain.end, sustain: grain.sustain, speed: spec.speed }
           base' =
             { at: o.at
             , n: grain.n
-            , begin: grain.begin
-            , end: grain.end
-            , sustain: grain.sustain
-            , speed: spec.speed
+            , begin: wg.begin
+            , end: wg.end
+            , sustain: wg.sustain
+            , speed: wg.speed
             , gain: spec.gain
             , pan: spec.pan
             , accelerate: spec.accelerate
