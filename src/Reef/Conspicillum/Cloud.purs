@@ -73,7 +73,7 @@ module Reef.Conspicillum.Cloud
 
 import Prelude
 
-import Data.Array (concatMap, foldl, index, length, mapWithIndex, modifyAt, range, replicate, snoc)
+import Data.Array (concatMap, find, foldl, index, length, mapWithIndex, modifyAt, null, range, replicate, snoc)
 import Data.Int (floor, round, toNumber)
 import Data.Int.Bits (and)
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -438,10 +438,20 @@ swingStretch m grid x =
 -- | addressable. Everything inside a cycle (the walk, swing, the step table)
 -- | still happens within the one bar being read. Only a following cloud has
 -- | bars; a scanning one reads the whole sample by `position` as it always did.
-type Tape = { bars :: Int, order :: Array Int }
+-- |
+-- | **A virtual tape** is one made of separate samples: `samples` lists, per
+-- | bar, which corpus sample (by `index`) that bar IS, and `bars` is then its
+-- | length. A set of chord hits becomes a progression by naming them —
+-- | `[0, 4, 7, 5]` — with no file rendered, so the progression is a parameter
+-- | rather than a recording, and `order` permutes it like any tape. Each bar
+-- | reads its sample whole across the cycle, so a chord longer than a bar is
+-- | squeezed into it by where the grains read, not by speed: the pitch stays.
+-- | The pick still draws (and is overruled), so the seed stream, and with it
+-- | every other grain's choice, is the same as with the tape a single file.
+type Tape = { bars :: Int, order :: Array Int, samples :: Array Int }
 
 oneBar :: Tape
-oneBar = { bars: 1, order: [] }
+oneBar = { bars: 1, order: [], samples: [] }
 
 -- | Sector's per-step jump table. For step k of `grid` steps in the bar,
 -- | `to !! k` is where the head relocates (-1: nowhere) with probability
@@ -726,7 +736,8 @@ cycleOf corpus query spec base cyc =
       -- Read on the tape's own grid: slice i begins where its hit is.
       readSwung = if spec.cloud.follow == 0.0 then read else onTape (swingWarp sw.tape sw.grid read)
       fit = min (swingStretch sw.play sw.grid o.at) (swingStretch sw.tape sw.grid read)
-      { chosen, seed: s1 } = pick query corpus acc.seed
+      { chosen: picked, seed: s1 } = pick query corpus acc.seed
+      chosen = if spec.cloud.follow == 0.0 || null spec.tape.samples then picked else barSample
     in case chosen of
       Nothing -> { seed: s1, head: hd, stepSeed: ss, fired: acc.fired, out: acc.out }
       Just g ->
@@ -799,11 +810,21 @@ cycleOf corpus query spec base cyc =
       }
 
   -- The bar this cycle reads, and a within-bar read placed on the whole tape.
-  bars = if spec.tape.bars < 1 then 1 else spec.tape.bars
+  virtual = not (null spec.tape.samples)
+  bars
+    | virtual = length spec.tape.samples
+    | spec.tape.bars < 1 = 1
+    | otherwise = spec.tape.bars
   barIx = case length spec.tape.order of
     0 -> posMod cyc bars
     n -> posMod (fromMaybe 0 (index spec.tape.order (posMod cyc n))) bars
-  onTape r = (toNumber barIx + wrapUnit r) / toNumber bars
+  -- A virtual tape's bar is a whole sample, so a read stays inside it.
+  onTape r
+    | virtual = wrapUnit r
+    | otherwise = (toNumber barIx + wrapUnit r) / toNumber bars
+  -- Dropped, like any grain whose choice admits nothing, if the index names
+  -- no sample in the corpus.
+  barSample = index spec.tape.samples barIx >>= \k -> find (\g -> g.index == k) corpus.samples
 
   -- Onsets move last, after ratchet and sends, so everything that was laid
   -- out in straight time lands on the swung grid together.

@@ -44,6 +44,7 @@ module Reef.Conformance
   , conspicillumSectorRun
   , conspicillumFixRun
   , conspicillumPermuteRun
+  , conspicillumVirtualRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -1211,11 +1212,60 @@ conspicillumPermuteRun = case CP.decodeScene (CP.encodeScene permuteScene) of
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.0, hold: 0.1, home: 0.0, grid: 16, reach: 0 }
         , swing: CL.noSwing
-        , tape: { bars: 2, order: [ 0, 1, 1, 0 ] }
+        , tape: { bars: 2, order: [ 0, 1, 1, 0 ], samples: [] }
         , steps: { grid: 8, to: [ -1, -1, 5, -1, 2, -1, -1, 7 ], p: [ 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.3 ] }
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
         }
     , seed: 97531
+    }
+
+
+-- ── 17. Conspicillum: a virtual tape, the progression as a parameter ─────────
+
+-- | Three chord samples of different lengths, named as a progression
+-- | `[2, 0, 1, 2]` with `order` then swapping its middle — so the bar a cycle
+-- | reads is `samples !! (order !! cyc)`. Pins which sample each grain reads
+-- | (`n`), that a read stays inside its own sample (`b` on the sample, not on
+-- | a whole tape), and that an index naming no sample drops its bar rather
+-- | than defaulting it (sample 9, cycle 4 onwards via the order).
+conspicillumVirtualRun :: String
+conspicillumVirtualRun = case CP.decodeScene (CP.encodeScene virtualScene) of
+  Left errs -> "CONSPICILLUM-VIRTUAL-DECODE-FAIL: " <> show errs
+  Right scene ->
+    intercalate "\n" (map (renderCycle scene) (range 0 5))
+  where
+  renderCycle scene cyc =
+    let es = CL.cycleOf scene.corpus scene.query scene.spec scene.seed cyc
+    in "c" <> show cyc <> " grains " <> show (length es)
+       <> (if length es == 0 then "" else "\n")
+       <> intercalate "\n" (mapWithIndex (renderEmit cyc) es)
+
+  renderEmit cyc i e =
+    "c" <> show cyc <> " g" <> show i <> " n " <> show e.n <> " at " <> six e.at
+      <> " b " <> six e.begin <> " e " <> six e.end
+
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
+  chord k secs =
+    { index: k, secs, peak: 0.5, rms: 0.1, zcr: 800.0, tilt: 0.1, decay: 1.5
+    , cell: [], params: [], notes: [], hits: CC.noHits }
+
+  virtualScene =
+    { corpus: { name: "chord-hits", samples: [ chord 0 2.0, chord 1 2.5, chord 2 3.0 ] }
+    , query: CC.emptyQuery
+    , spec:
+        { onsets: map (\k -> toNumber k / 4.0) (range 0 3)
+        , cloud: { sustain: 0.25, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: CL.noWalk
+        , swing: CL.noSwing
+        , tape: { bars: 0, order: [ 0, 2, 1, 3, 4 ], samples: [ 2, 0, 1, 2, 9 ] }
+        , steps: CL.noSteps
+        , rules: []
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain, sends: []
+        }
+    , seed: 24680
     }

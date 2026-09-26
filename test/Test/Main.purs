@@ -144,9 +144,9 @@ main = do
       beginsAt tp st c = map (\e -> e.begin * 32.0) (CL.cycleOf longCorpus CC.emptyQuery (barSpec tp st) 1 c)
       heads c = map (\k -> toNumber (16 * c + k)) (range 0 15)
   assertEqual' "Conspicillum tape: a two-bar tape reads bar 2 on the second cycle"
-    { actual: beginsAt { bars: 2, order: [] } CL.noSteps 1, expected: heads 1 }
+    { actual: beginsAt { bars: 2, order: [], samples: [] } CL.noSteps 1, expected: heads 1 }
   assertEqual' "Conspicillum tape: order [1, 0] plays the bars swapped"
-    { actual: beginsAt { bars: 2, order: [ 1, 0 ] } CL.noSteps 0, expected: heads 1 }
+    { actual: beginsAt { bars: 2, order: [ 1, 0 ], samples: [] } CL.noSteps 0, expected: heads 1 }
   assertEqual' "Conspicillum steps: [2, 3, 0, 1] on a grid of 4 swaps the halves of the bar"
     { actual: map (\e -> e * 4.0) (everyFourth (map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
         (barSpec CL.oneBar { grid: 4, to: [ 2, 3, 0, 1 ], p: [] }) 1 0)))
