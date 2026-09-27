@@ -52,6 +52,7 @@ import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Number as Number
 import Data.String as String
 import Data.String.CodeUnits as SCU
+import Reef.Conspicillum.Decimal (trimmed)
 import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Rule, Spec, WarpMode(..), When(..), noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar)
 import Reef.Conspicillum.Protocol (fromWireRule, toWireRule)
 
@@ -376,26 +377,9 @@ chainFields =
 -- ── printing ─────────────────────────────────────────────────────────────────
 
 -- | A number as a person would write it: `1`, not `1.0`; `0.62`, to six
--- | places at most. Built from integers, because `show` on a Number is the
--- | runtime's: on the BEAM it is `6.19999999999999995559e-01`. The integer
--- | and fractional parts are taken apart first so that `lpf 6850` does not
--- | overflow an Int on its way to six places.
+-- | places at most, identically on both runtimes (see `Decimal`).
 fmt :: Number -> String
-fmt x =
-  let
-    a = if x < 0.0 then -x else x
-    ip0 = floor a
-    fr0 = round ((a - toNumber ip0) * 1000000.0)
-    ip = if fr0 >= 1000000 then ip0 + 1 else ip0
-    fr = if fr0 >= 1000000 then 0 else fr0
-    sign = if x < 0.0 && (ip /= 0 || fr /= 0) then "-" else ""
-    digits = SCU.drop 1 (show (1000000 + fr))
-    trimmed = trimZeros digits
-  in sign <> show ip <> (if trimmed == "" then "" else "." <> trimmed)
-  where
-  trimZeros t = case SCU.charAt (SCU.length t - 1) t of
-    Just '0' -> trimZeros (SCU.take (SCU.length t - 1) t)
-    _ -> t
+fmt = trimmed 6
 
 q :: String -> String
 q s = "\"" <> s <> "\""

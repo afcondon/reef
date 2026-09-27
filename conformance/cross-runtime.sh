@@ -451,3 +451,20 @@ echo "== conspicillumHarmonicRun (ii-V-i over real chord hits): node vs erl =="
   > /tmp/reef-conspicillum-harmonic-erl.txt
 diff /tmp/reef-conspicillum-harmonic-node.txt /tmp/reef-conspicillum-harmonic-erl.txt && echo "  OK conspicillumHarmonicRun node == erl"
 diff "$CONSPICILLUM_HARMONIC_GOLDEN" /tmp/reef-conspicillum-harmonic-node.txt && echo "  OK conspicillumHarmonicRun matches frozen golden"
+
+# --- Conspicillum parameter catalogue (Reef.Conformance.conspicillumParameterRun)
+# Every playable parameter: label, neutral value, a value along its travel and
+# its taper round trip, whether it survives the one-line notation, and whether
+# it is engaged. Numbers are printed by Reef.Conspicillum.Decimal, so the two
+# runtimes must agree to the character. The exponential taper uses log and pow,
+# and the snap to six places is what keeps their last bits from showing.
+CONSPICILLUM_PARAMETER_GOLDEN="$REEF/conformance/conspicillum-parameter-golden.txt"
+echo "== conspicillumParameterRun (the parameter catalogue): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumParameterRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumParameterRun);' \
+  ) > /tmp/reef-conspicillum-parameter-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':conspicillumParameterRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-parameter-erl.txt
+diff /tmp/reef-conspicillum-parameter-node.txt /tmp/reef-conspicillum-parameter-erl.txt && echo "  OK conspicillumParameterRun node == erl"
+diff "$CONSPICILLUM_PARAMETER_GOLDEN" /tmp/reef-conspicillum-parameter-node.txt && echo "  OK conspicillumParameterRun matches frozen golden"

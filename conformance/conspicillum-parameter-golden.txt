@@ -1,0 +1,58 @@
+grainLength | grain length | the grain | neutral 125 ms | mid 70 ms (0.07) | at 0.3673 | line ok | engaged
+readPosition | read position | the read head | neutral 0% | mid 37% (0.37) | at 0.3700 | line ok | engaged
+spray | spray | the read head | neutral 0% | mid 37% (0.37) | at 0.3700 | line ok | engaged
+tapeFollow | tape follow | the read head | neutral 1.00× | mid 0.11× (0.11) | at 0.3700 | line ok | engaged
+walkJump | jump | the walk | neutral 0% | mid 37% (0.37) | at 0.3700 | line ok | engaged
+walkHold | repeat | the walk | neutral 0% | mid 37% (0.37) | at 0.3700 | line ok | engaged
+walkHome | return | the walk | neutral 0% | mid 37% (0.37) | at 0.3700 | line ok | engaged
+walkReach | reach | the walk | neutral 0 | mid 12 (12) | at 0.3750 | line ok | engaged
+playSwing | swing | swing | neutral straight | mid 0.59 (0.59) | at 0.3600 | line ok | engaged
+tapeSwing | tape swing | swing | neutral straight | mid 0.59 (0.59) | at 0.3600 | line ok | engaged
+speed | speed | the voice | neutral 1.00× | mid -0.15× (-0.15) | at 0.3700 | line ok | engaged
+gain | gain | the voice | neutral 1.00 | mid 0.55 (0.55) | at 0.3667 | line ok | engaged
+pan | pan | the voice | neutral centre | mid 26% left (0.37) | at 0.3700 | line ok | engaged
+accelerate | glide | the voice | neutral 0.00 | mid 0.11 (0.11) | at 0.3700 | line ok | engaged
+sendLevelA | send A | the sends | neutral 0.80 | mid 0.37 (0.37) | at 0.3700 | line ok | engaged
+sendLevelB | send B | the sends | neutral 0.80 | mid 0.37 (0.37) | at 0.3700 | line ok | engaged
+grain.waveshape | waveshape | effects on each grain | neutral off | mid 0.37 (0.37) | at 0.3737 | line ok | engaged
+grain.bitCrush | bit crush | effects on each grain | neutral off | mid 6.00 (6) | at 0.3750 | line ok | engaged
+grain.sampleRateReduction | sample-rate reduction | effects on each grain | neutral off | mid 12 (12) | at 0.3750 | line ok | engaged
+grain.lowPassCutoff | low-pass | effects on each grain | neutral off | mid 4450 Hz (4450) | at 0.3708 | line ok | engaged
+grain.highPassCutoff | high-pass | effects on each grain | neutral off | mid 2225 Hz (2225) | at 0.3708 | line ok | engaged
+grain.bandPassCentre | band-pass | effects on each grain | neutral off | mid 2950 Hz (2950) | at 0.3688 | line ok | engaged
+grain.filterResonance | resonance | effects on each grain | neutral 0.00 | mid 0.33 (0.33) | at 0.3667 | line ok | silent
+grain.vowel | vowel | effects on each grain | neutral off | mid e (2) | at 0.4000 | line ok | engaged
+grain.pitchShift | pitch shift | effects on each grain | neutral off | mid 1.11× (1.11) | at 0.3700 | line ok | engaged
+grain.tremoloRate | tremolo | effects on each grain | neutral off | mid 22.2 Hz (22.2) | at 0.3700 | line ok | engaged
+grain.tremoloDepth | tremolo depth | effects on each grain | neutral 50% | mid 37% (0.37) | at 0.3700 | line ok | silent
+grain.phaserRate | phaser | effects on each grain | neutral off | mid 3.7 Hz (3.7) | at 0.3700 | line ok | engaged
+grain.phaserDepth | phaser depth | effects on each grain | neutral 50% | mid 37% (0.37) | at 0.3700 | line ok | silent
+grain.grainEnvelope | grain envelope | effects on each grain | neutral off | mid off (0) | at 0.0000 | line ok | silent
+grain.envelopePeak | envelope peak | effects on each grain | neutral 25% | mid 37% (0.37) | at 0.3700 | line ok | silent
+grain.envelopePlateau | envelope plateau | effects on each grain | neutral 30% | mid 37% (0.37) | at 0.3700 | line ok | silent
+grain.envelopeAttack | attack | effects on each grain | neutral off | mid 185 ms (0.185) | at 0.3700 | line ok | engaged
+grain.envelopeHold | hold | effects on each grain | neutral 0 ms | mid 185 ms (0.185) | at 0.3700 | line ok | silent
+grain.envelopeRelease | release | effects on each grain | neutral off | mid 370 ms (0.37) | at 0.3700 | line ok | engaged
+grain.envelopeCurve | envelope curve | effects on each grain | neutral 0.0 | mid -2.0 (-2) | at 0.3750 | line ok | silent
+grain.resonatorPitch | resonator | effects on each grain | neutral off | mid C2 (36) | at 0.3750 | line ok | engaged
+grain.resonatorDecay | resonator decay | effects on each grain | neutral 1.50 s | mid 2.20 s (2.2) | at 0.3667 | line ok | silent
+grain.resonatorBrightness | resonator brightness | effects on each grain | neutral 0.70 | mid 0.56 (0.56) | at 0.3768 | line ok | silent
+grain.resonatorMix | resonator mix | effects on each grain | neutral 100% | mid 37% (0.37) | at 0.3700 | line ok | silent
+grain.resonatorModel | resonator model | effects on each grain | neutral ringing bank | mid ringing bank (0) | at 0.0000 | line ok | silent
+cloud.reverbAmount | reverb | effects on the whole cloud | neutral off | mid 0.37 (0.37) | at 0.3700 | line ok | engaged
+cloud.reverbSize | reverb size | effects on the whole cloud | neutral 40% | mid 37% (0.37) | at 0.3700 | line ok | silent
+cloud.reverbDry | reverb dry | effects on the whole cloud | neutral 0.00 | mid 0.37 (0.37) | at 0.3700 | line ok | silent
+cloud.delayAmount | delay | effects on the whole cloud | neutral off | mid 0.37 (0.37) | at 0.3700 | line ok | engaged
+cloud.delayTime | delay time | effects on the whole cloud | neutral 250 ms | mid 740 ms (0.74) | at 0.3700 | line ok | silent
+cloud.delayFeedback | delay feedback | effects on the whole cloud | neutral 40% | mid 36% (0.36) | at 0.3673 | line ok | silent
+cloud.delayLockedToCycle | delay locked | effects on the whole cloud | neutral seconds | mid seconds (0) | at 0.0000 | line ok | silent
+cloud.leslieAmount | leslie | effects on the whole cloud | neutral off | mid 0.37 (0.37) | at 0.3700 | line ok | engaged
+cloud.leslieRate | leslie rate | effects on the whole cloud | neutral 6.7 Hz | mid 7.4 Hz (7.4) | at 0.3700 | line ok | silent
+cloud.leslieSize | leslie size | effects on the whole cloud | neutral 30% | mid 37% (0.37) | at 0.3700 | line ok | silent
+cloud.sharedResonatorSend | shared resonator | effects on the whole cloud | neutral off | mid 0.37 (0.37) | at 0.3700 | line ok | engaged
+cloud.sharedResonatorPitch | shared resonator pitch | effects on the whole cloud | neutral A2 | mid C2 (36) | at 0.3750 | line ok | silent
+cloud.sharedResonatorDecay | shared resonator decay | effects on the whole cloud | neutral 3.00 s | mid 4.40 s (4.4) | at 0.3667 | line ok | silent
+cloud.sharedResonatorBrightness | shared resonator brightness | effects on the whole cloud | neutral 0.85 | mid 0.56 (0.56) | at 0.3768 | line ok | silent
+decimal 0.80 0.00 2.00 6850.00 0.00
+decimal 1 -1 12 6850
+decimal 1 0.62 -0.1 0.123457 2

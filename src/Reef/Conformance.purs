@@ -47,6 +47,7 @@ module Reef.Conformance
   , conspicillumVirtualRun
   , conspicillumWarpRun
   , conspicillumNotationRun
+  , conspicillumParameterRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -77,6 +78,8 @@ import Reef.Stellatus.Protocol (decodeScene, encodeScene) as SP
 import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
 import Reef.Conspicillum.Notation as CN
+import Reef.Conspicillum.Parameter as PM
+import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit) as CH
@@ -1342,4 +1345,39 @@ conspicillumNotationRun = intercalate "\n" (map one lines)
     , "s \"x\" # walk 0.2 0.1"
     , "s \"x\" # every 4 (speed -1)"
     , "s \"x\" # bogus 3"
+    ]
+
+
+-- ── Conspicillum parameter catalogue (Reef.Conspicillum.Parameter) ──────────
+-- | One line per parameter: its identifier, label and neutral value; the value
+-- | 37% along its travel, and that position recovered from it; and whether the
+-- | value survives the one-line notation, printed from a scene and parsed back.
+-- | That last column is the catalogue and the notation agreeing about what
+-- | every parameter IS. Then a few edge cases of the shared decimal printer.
+conspicillumParameterRun :: String
+conspicillumParameterRun = intercalate "\n" (map one PM.allParameters <> decimals)
+  where
+  base = CN.defaultLine
+  one p =
+    let
+      d = PM.describe p
+      mid = PM.denormalise p 0.37
+      spec = PM.set p mid base.spec
+      back = case CN.parse (CN.print base { set = "x", spec = spec }) of
+        Left e -> "ERR " <> e
+        Right l -> let got = PM.read p l.spec in
+          if got == PM.read p spec then "ok" else "LOST " <> Decimal.trimmed 6 got
+    in
+      intercalate " | "
+        [ PM.identifier p, d.label, PM.sectionName d.section
+        , "neutral " <> PM.format p d.neutral
+        , "mid " <> PM.format p mid <> " (" <> Decimal.trimmed 6 mid <> ")"
+        , "at " <> Decimal.fixed 4 (PM.normalise p mid)
+        , "line " <> back
+        , if PM.engaged p spec then "engaged" else "silent"
+        ]
+  decimals =
+    [ "decimal " <> intercalate " " (map (Decimal.fixed 2) [ 0.8, -0.004, 1.995, 6850.0, 0.0 ])
+    , "decimal " <> intercalate " " (map (Decimal.fixed 0) [ 0.5, -0.7, 12.49, 6850.0 ])
+    , "decimal " <> intercalate " " (map (Decimal.trimmed 6) [ 1.0, 0.62, -0.1, 0.1234567, 1.9999999 ])
     ]
