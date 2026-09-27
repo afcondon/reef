@@ -514,3 +514,19 @@ echo "== conspicillumProgressionRun (chords played by the engine): node vs erl =
   > /tmp/reef-conspicillum-progression-erl.txt
 diff /tmp/reef-conspicillum-progression-node.txt /tmp/reef-conspicillum-progression-erl.txt && echo "  OK conspicillumProgressionRun node == erl"
 diff "$CONSPICILLUM_PROGRESSION_GOLDEN" /tmp/reef-conspicillum-progression-node.txt && echo "  OK conspicillumProgressionRun matches frozen golden"
+
+# --- Conspicillum reference (Reef.Conspicillum.Reference) ---------------------
+# The generated reference is its own golden: the committed docs file must be
+# exactly what node and the BEAM both print. Change the catalogue, a preset or
+# a chord without regenerating (node tools/conspicillum-reference.mjs) and
+# this fails, so the documentation cannot drift from the instrument.
+CONSPICILLUM_REFERENCE_DOC="$REEF/docs/CONSPICILLUM-REFERENCE.md"
+echo "== Conspicillum reference (generated docs): node vs erl vs committed =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { reference } from "./output/Reef.Conspicillum.Reference/index.js"; process.stdout.write(reference);' \
+  ) > /tmp/reef-conspicillum-reference-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conspicillum_reference@ps'"'"':reference()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-reference-erl.txt
+diff /tmp/reef-conspicillum-reference-node.txt /tmp/reef-conspicillum-reference-erl.txt && echo "  OK Conspicillum reference node == erl"
+diff "$CONSPICILLUM_REFERENCE_DOC" /tmp/reef-conspicillum-reference-node.txt && echo "  OK Conspicillum reference matches docs/CONSPICILLUM-REFERENCE.md"

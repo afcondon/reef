@@ -32,6 +32,7 @@ module Reef.Conspicillum.Parameter
   , describe
   , identifier
   , fromIdentifier
+  , notationTerm
   , sectionName
   , read
   , write
@@ -416,6 +417,69 @@ cloudEffectIdentifier = case _ of
   SharedResonatorPitch -> "sharedResonatorPitch"
   SharedResonatorDecay -> "sharedResonatorDecay"
   SharedResonatorBrightness -> "sharedResonatorBrightness"
+
+-- | How the one-line notation writes it (`Reef.Conspicillum.Notation`). The
+-- | walk's three are the three numbers of one term; the effects keep
+-- | SuperDirt's own names there, since those are what a Tidal user knows.
+notationTerm :: Parameter -> String
+notationTerm = case _ of
+  GrainLength -> "sustain"
+  ReadPosition -> "position"
+  Spray -> "spray"
+  TapeFollow -> "follow"
+  WalkJump -> "walk <jump> _ _"
+  WalkHold -> "walk _ <repeat> _"
+  WalkHome -> "walk _ _ <return>"
+  WalkReach -> "reach"
+  PlaySwing -> "swing"
+  TapeSwing -> "tapeswing"
+  Speed -> "speed"
+  Gain -> "gain"
+  Pan -> "pan"
+  Accelerate -> "accelerate"
+  SendLevel SendA -> "sendA"
+  SendLevel SendB -> "sendB"
+  GrainEffect e -> case e of
+    Waveshape -> "shape"
+    BitCrush -> "crush"
+    SampleRateReduction -> "coarse"
+    LowPassCutoff -> "lpf"
+    HighPassCutoff -> "hpf"
+    BandPassCentre -> "bpf"
+    FilterResonance -> "res"
+    Vowel -> "vowel"
+    PitchShift -> "pshift"
+    TremoloRate -> "tremolo"
+    TremoloDepth -> "tremdepth"
+    PhaserRate -> "phaser"
+    PhaserDepth -> "phdepth"
+    GrainEnvelope -> "genv"
+    EnvelopePeak -> "gtilt"
+    EnvelopePlateau -> "gplat"
+    EnvelopeAttack -> "atk"
+    EnvelopeHold -> "hold"
+    EnvelopeRelease -> "rel"
+    EnvelopeCurve -> "curve"
+    ResonatorPitch -> "rsnpitch"
+    ResonatorDecay -> "rsndecay"
+    ResonatorBrightness -> "rsnbright"
+    ResonatorMix -> "rsnmix"
+    ResonatorModel -> "rsnmodel"
+  CloudEffect e -> case e of
+    ReverbAmount -> "room"
+    ReverbSize -> "size"
+    ReverbDry -> "dry"
+    DelayAmount -> "delay"
+    DelayTime -> "delaytime"
+    DelayFeedback -> "delayfeedback"
+    DelayLockedToCycle -> "lock"
+    LeslieAmount -> "leslie"
+    LeslieRate -> "lrate"
+    LeslieSize -> "lsize"
+    SharedResonatorSend -> "grsn"
+    SharedResonatorPitch -> "grsnpitch"
+    SharedResonatorDecay -> "grsndecay"
+    SharedResonatorBrightness -> "grsnbright"
 
 fromIdentifier :: String -> Maybe Parameter
 fromIdentifier name = find (\p -> identifier p == name) allParameters
