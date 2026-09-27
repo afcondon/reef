@@ -35,6 +35,7 @@ module Reef.Conformance
   , balistesInputRun, balistesInputSteps
   , fixedRun, fixedRunSteps
   , trigRun, trigRunSteps
+  , routingRun
   , vetulaRun, vetulaRunSteps
   , vetulaMidiRun
   , chordRun
@@ -66,6 +67,7 @@ import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encode
 import Reef.Balistes.Trig (TrigKit, renderTrigStep) as RTrig
 import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
 import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
+import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encodeDrumRouting) as RR
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (stepTick)
@@ -608,6 +610,58 @@ trigDig i fires =
   pad4 i <> " | " <> (if null fires then "-" else intercalate "  " (map one fires))
   where
   one f = show f.note <> "@" <> show (round (f.frac * 1000000.0))
+
+-- ── 7¾. the drum routing net (the table on the rig) ─────────────────────────
+
+-- | A table that exercises every kind of leg the rig can play: a lane doubled
+-- | across two ports with a trim on one (the flam case), FH-2 gate selectors, a
+-- | Rample voice whose pitch travels as a control ahead of its trigger, a
+-- | Rample that does NOT hold a lane's pitch, and an empty lane. The kit notes
+-- | are canonKit's first six.
+routingTestTable :: RR.DrumRouting
+routingTestTable =
+  { notes: [ 36, 38, 39, 37, 42, 44 ]
+  , lanes:
+      [ [ midi "IAC Driver Tidal" 10 (-1) 0.0, midi "FH-2" 10 36 3.5 ]
+      , [ midi "FH-2" 10 38 0.0, rample "Rample" 1 2 64 36 40 ]
+      , [ rample "Rample" 1 3 16 60 40 ]
+      , []
+      , [ midi "FH-2" 10 42 (-2.25) ]
+      , [ midi "IAC Driver Tidal" 10 (-1) 0.0 ]
+      ]
+  }
+  where
+  midi port channel note offsetMs = { port, channel, note, offsetMs, rample: [] }
+  rample port channel voice slots pitchOfSlot0 settleMs =
+    { port, channel, note: 60 + voice, offsetMs: 0.0, rample: [ { voice, slots, pitchOfSlot0, settleMs } ] }
+
+-- | The drum routing net. The table is round-tripped THROUGH the codec, then
+-- | every hit is resolved by the shared `drumSends`: each kit note, one outside
+-- | the kit (70: borrows lane 0's own-note legs only, never its gate), and a
+-- | lane with no legs. Byte-identical node ↔ BEAM = `reef_balistes_voice` sends
+-- | what the browser sends for the same table.
+routingRun :: String
+routingRun = case RR.decodeDrumRouting (RR.encodeDrumRouting routingTestTable) of
+  Left errs -> "ROUTING-DECODE-FAIL: " <> show errs
+  Right table -> intercalate "\n" (mapWithIndex (\i hit -> pad4 i <> " | " <> show hit.note <> " -> " <> sends (RR.drumSends table hit)) hits)
+  where
+  hits =
+    [ { note: 36, velocity: 110, atMs: 0.0, durMs: 20.0 }
+    , { note: 38, velocity: 90, atMs: 12.5, durMs: 20.0 }
+    , { note: 39, velocity: 100, atMs: 125.0, durMs: 15.0 }
+    , { note: 37, velocity: 64, atMs: 0.0, durMs: 20.0 }
+    , { note: 42, velocity: 127, atMs: 3.0, durMs: 10.0 }
+    , { note: 44, velocity: 1, atMs: 0.0, durMs: 20.0 }
+    , { note: 70, velocity: 100, atMs: 0.0, durMs: 20.0 }
+    ]
+  sends xs = if null xs then "-" else intercalate "  " (map one xs)
+  one = case _ of
+    RR.Note n -> "note " <> n.port <> "/" <> show n.channel <> " " <> show n.note <> " v" <> show n.velocity
+      <> " @" <> micro n.atMs <> " d" <> micro n.durMs
+    RR.Control c -> "cc " <> c.port <> "/" <> show c.channel <> " " <> show c.controller <> "=" <> show c.value
+      <> " @" <> micro c.atMs
+  -- Rounded to whole microseconds: purerl and JS `show` a Number differently.
+  micro ms = show (round (ms * 1000.0))
 
 -- ── 8. the Vetula performance-scheduler net (Vetula lockstep V1) ──────────────
 

@@ -232,6 +232,24 @@ echo "== trigRun (32-step POLYTRIG rack slice): node vs erl =="
 diff /tmp/reef-trig-node.txt /tmp/reef-trig-erl.txt && echo "  ✅ trigRun node == erl (rack slicing + fractional-onset multiply + codec identical over 32 steps)"
 diff "$TRIG_GOLDEN" /tmp/reef-trig-node.txt && echo "  ✅ trigRun matches frozen golden"
 
+# --- drum routing net (Reef.Conformance.routingRun) ---------------------------
+# The routing table on the rig. A table with every kind of leg the rig plays (a
+# kick doubled across two ports with a trim, FH-2 gate selectors, a Rample voice
+# whose pitch is a start-point CC ahead of its trigger, a Rample that refuses a
+# pitch it does not hold) round-tripped through Reef.Routing's codec, then every
+# hit resolved by the shared drumSends. Byte-identical here = reef_balistes_voice
+# sends what the browser sends for the same table. Codec -> jsx.
+ROUTING_GOLDEN="$REEF/conformance/routing-golden.txt"
+echo "== routingRun (drum hits through the routing table): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { routingRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(routingRun);' \
+  ) > /tmp/reef-routing-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':routingRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-routing-erl.txt
+diff /tmp/reef-routing-node.txt /tmp/reef-routing-erl.txt && echo "  ✅ routingRun node == erl (every leg kind, the Rample control, the out-of-kit rule, codec)"
+diff "$ROUTING_GOLDEN" /tmp/reef-routing-node.txt && echo "  ✅ routingRun matches frozen golden"
+
 # --- Vetula performance-scheduler net (Reef.Conformance.vetulaRun) ------------
 # VETULA LOCKSTEP V1. The shared Reef.Vetula.Perf scheduler — a saved chord
 # progression fanned to voices with different per-chord dwell schedules (bars per

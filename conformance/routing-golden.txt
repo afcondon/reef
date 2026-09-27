@@ -1,0 +1,7 @@
+   0 | 36 -> note IAC Driver Tidal/10 36 v110 @0 d20000  note FH-2/10 36 v110 @3500 d20000
+   1 | 38 -> note FH-2/10 38 v90 @12500 d20000  cc Rample/1 24=5 @-27500  note Rample/1 62 v90 @12500 d20000
+   2 | 39 -> -
+   3 | 37 -> -
+   4 | 42 -> note FH-2/10 42 v127 @750 d10000
+   5 | 44 -> note IAC Driver Tidal/10 44 v1 @0 d20000
+   6 | 70 -> note IAC Driver Tidal/10 70 v100 @0 d20000
