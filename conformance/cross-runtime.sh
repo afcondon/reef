@@ -483,3 +483,18 @@ echo "== conspicillumPresetRun (every preset resolved): node vs erl =="
   > /tmp/reef-conspicillum-preset-erl.txt
 diff /tmp/reef-conspicillum-preset-node.txt /tmp/reef-conspicillum-preset-erl.txt && echo "  OK conspicillumPresetRun node == erl"
 diff "$CONSPICILLUM_PRESET_GOLDEN" /tmp/reef-conspicillum-preset-node.txt && echo "  OK conspicillumPresetRun matches frozen golden"
+
+# --- Conspicillum display and sentence (Reef.Conformance.conspicillumDisplayRun)
+# Every preset in words, as the module says it, and small drawings from made-up
+# grains: wedges on the ring, lanes under the strip, and colours. What the
+# module shows is computed here, so the page and anything on the BEAM agree.
+CONSPICILLUM_DISPLAY_GOLDEN="$REEF/conformance/conspicillum-display-golden.txt"
+echo "== conspicillumDisplayRun (sentences and drawing): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumDisplayRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumDisplayRun);' \
+  ) > /tmp/reef-conspicillum-display-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':conspicillumDisplayRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-display-erl.txt
+diff /tmp/reef-conspicillum-display-node.txt /tmp/reef-conspicillum-display-erl.txt && echo "  OK conspicillumDisplayRun node == erl"
+diff "$CONSPICILLUM_DISPLAY_GOLDEN" /tmp/reef-conspicillum-display-node.txt && echo "  OK conspicillumDisplayRun matches frozen golden"

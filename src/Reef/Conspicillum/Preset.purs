@@ -33,7 +33,7 @@ import Prelude
 
 import Data.Array (find)
 import Data.Either (Either(..), note)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe)
 import Data.Traversable (traverse)
 import Reef.Conspicillum.Corpus (Query)
 import Reef.Conspicillum.Harmonic (Target)

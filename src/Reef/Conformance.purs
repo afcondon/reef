@@ -49,16 +49,17 @@ module Reef.Conformance
   , conspicillumNotationRun
   , conspicillumParameterRun
   , conspicillumPresetRun
+  , conspicillumDisplayRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
 import Prelude
 
-import Data.Array (filter, length, null, range, snoc, mapWithIndex, (!!))
+import Data.Array (filter, find, length, null, range, snoc, mapWithIndex, (!!))
 import Data.Either (Either(..))
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round, toNumber)
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
 import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed, decodeTrigKit, encodeTrigKit) as BSim
@@ -82,6 +83,8 @@ import Reef.Conspicillum.Notation as CN
 import Reef.Conspicillum.Parameter as PM
 import Reef.Conspicillum.Preset as PR
 import Reef.Conspicillum.Presets as PS
+import Reef.Conspicillum.Display (Material(..), SampleFacts, TapeFacts, colourAt, colourCss, lanes, locate, materialName, materialOf, segments, wedges) as DI
+import Reef.Conspicillum.Sentence (plainText, ruleRows, sentences) as SE
 import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar, rule) as CL
@@ -1408,3 +1411,75 @@ conspicillumPresetRun = intercalate "\n" (map one PS.presetSources <> [ total ])
   total = case PS.presets of
     Left problem -> "presets: ERR " <> problem
     Right ps -> "presets: " <> show (length ps) <> " resolved"
+
+
+-- ── Conspicillum display and sentence (Reef.Conspicillum.Display, .Sentence)
+-- | Every preset in words, as the module says it, with its material and how
+-- | many segments its strip has, and its rules as rows. Then three small
+-- | drawings from made-up grains: a straight tape, a walk that reads one place
+-- | twice, and a cloud over three samples — each grain's wedge on the ring,
+-- | its lane under the strip, and its colour.
+conspicillumDisplayRun :: String
+conspicillumDisplayRun = intercalate "\n" (presetLines <> drawings)
+  where
+  presetLines = case PS.presets of
+    Left problem -> [ "ERR " <> problem ]
+    Right ps -> map describe ps
+  describe p =
+    let
+      facts = fromMaybe { name: p.line.set, tape: Nothing, samples: [] } (find (\f -> f.name == p.line.set) displaySets)
+      material = DI.materialOf { line: p.line, samples: facts.samples, tape: facts.tape }
+      said = SE.plainText p.line.spec
+        (SE.sentences { line: p.line, material, knobs: map _.parameter p.knobs, progression: p.progression })
+      rows = map (\r -> "[" <> r.which <> " / " <> r.what <> " / " <> r.amount <> "]") (SE.ruleRows p.line.spec.rules)
+    in
+      intercalate " | " ([ p.name, DI.materialName material, show (length (DI.segments material)) <> " segments", said ] <> rows)
+
+  drawings =
+    drawing "straight tape" (DI.WholeTape { sample: { index: 0, seconds: 2.0 }, bars: 1, bpm: Just 120.0 })
+      (map (\k -> grain (toNumber k / 16.0) 0 (toNumber k / 16.0) 0.125 1.0) (range 0 15))
+    <> drawing "a walk" (DI.WholeTape { sample: { index: 0, seconds: 2.0 }, bars: 1, bpm: Just 120.0 })
+      [ grain 0.0 0 0.0 0.125 1.0, grain 0.25 0 0.0 0.125 1.0, grain 0.5 0 0.5 0.125 (-1.0), grain 0.75 0 0.0625 0.125 1.0 ]
+    <> drawing "a cloud" (DI.ManySamples [ { index: 3, seconds: 0.4 }, { index: 5, seconds: 2.0 }, { index: 9, seconds: 11.0 } ])
+      [ grain 0.0 5 0.2 0.9 1.0, grain 0.1 9 0.25 0.9 1.0, grain 0.3 3 0.5 0.9 1.0, grain 0.55 5 0.6 0.9 0.5 ]
+
+  drawing label material emits =
+    let
+      ws = DI.wedges { cycleSeconds: 2.0, orbit: 0 } emits
+      spans = map (\w -> { from: (DI.locate material w.emit.n w.emit.begin).along, to: (DI.locate material w.emit.n w.emit.end).along }) ws
+      ls = DI.lanes (2.0 / 784.0) spans
+      one i w =
+        let at = DI.locate material w.emit.n w.emit.begin
+        in "  " <> Decimal.fixed 4 w.from <> "-" <> Decimal.fixed 4 w.to
+          <> " lane " <> maybe "?" show (ls !! i)
+          <> " reads " <> Decimal.fixed 4 at.along
+          <> " " <> DI.colourCss (DI.colourAt material at)
+    in
+      [ label <> ": " <> DI.materialName material <> ", " <> show (length (DI.segments material)) <> " segments" ]
+        <> mapWithIndex one ws
+
+  grain at n begin sustain speed =
+    { at, n, begin, end: begin + sustain / 2.0, sustain, speed, gain: 1.0, pan: 0.5, accelerate: 0.0
+    , fx: CL.noFx, chain: CL.noChain, ratchet: 1, send: 0 }
+
+-- | The sets the presets play from, as far as drawing them goes: taken from
+-- | the real corpora on 2026-09-27, so the sentences read as they do at the rig.
+displaySets :: Array { name :: String, tape :: Maybe DI.TapeFacts, samples :: Array DI.SampleFacts }
+displaySets =
+  [{ name: "chord-hits-0916-185508", tape: Nothing
+    , samples: [ { index: 0, seconds: 11.33 }, { index: 1, seconds: 10.905 }, { index: 2, seconds: 10.961 }, { index: 3, seconds: 11.381 }, { index: 4, seconds: 10.979 }, { index: 5, seconds: 11.439 }, { index: 6, seconds: 11.434 }, { index: 7, seconds: 11.811 }, { index: 8, seconds: 11.126 }, { index: 9, seconds: 11.07 }, { index: 10, seconds: 11.503 }, { index: 11, seconds: 11.345 }, { index: 12, seconds: 10.993 }, { index: 13, seconds: 10.701 }, { index: 14, seconds: 16.948 } ] }
+  ,  { name: "chord-hits-0915-232247", tape: Nothing
+    , samples: [ { index: 0, seconds: 13.208 }, { index: 1, seconds: 12.618 }, { index: 2, seconds: 13.98 }, { index: 3, seconds: 13.977 }, { index: 4, seconds: 13.89 }, { index: 5, seconds: 13.981 }, { index: 6, seconds: 13.972 }, { index: 7, seconds: 13.962 }, { index: 8, seconds: 13.801 }, { index: 9, seconds: 13.306 }, { index: 10, seconds: 13.379 }, { index: 11, seconds: 13.9 }, { index: 12, seconds: 13.629 }, { index: 13, seconds: 13.97 }, { index: 14, seconds: 13.796 }, { index: 15, seconds: 13.893 }, { index: 16, seconds: 13.804 }, { index: 17, seconds: 13.975 }, { index: 18, seconds: 13.966 }, { index: 19, seconds: 13.979 }, { index: 20, seconds: 13.979 }, { index: 21, seconds: 13.975 }, { index: 22, seconds: 13.973 }, { index: 23, seconds: 21.014 } ] }
+  ,  { name: "drum-hits-0912-121546", tape: Nothing
+    , samples: [ { index: 0, seconds: 0.404 }, { index: 1, seconds: 0.411 }, { index: 2, seconds: 0.445 }, { index: 3, seconds: 0.412 }, { index: 4, seconds: 0.432 }, { index: 5, seconds: 0.395 }, { index: 6, seconds: 0.418 }, { index: 7, seconds: 0.406 }, { index: 8, seconds: 0.409 }, { index: 9, seconds: 0.419 }, { index: 10, seconds: 0.407 }, { index: 11, seconds: 0.436 }, { index: 12, seconds: 0.914 }, { index: 13, seconds: 0.934 }, { index: 14, seconds: 0.916 }, { index: 15, seconds: 0.927 }, { index: 16, seconds: 0.907 }, { index: 17, seconds: 0.931 }, { index: 18, seconds: 0.906 }, { index: 19, seconds: 0.933 }, { index: 20, seconds: 0.919 }, { index: 21, seconds: 0.92 }, { index: 22, seconds: 0.947 }, { index: 23, seconds: 0.933 }, { index: 24, seconds: 1.047 }, { index: 25, seconds: 1.05 }, { index: 26, seconds: 1.022 }, { index: 27, seconds: 1.013 }, { index: 28, seconds: 1.041 }, { index: 29, seconds: 1.033 }, { index: 30, seconds: 1.04 }, { index: 31, seconds: 1.073 }, { index: 32, seconds: 1.03 }, { index: 33, seconds: 1.024 }, { index: 34, seconds: 1.03 }, { index: 35, seconds: 1.011 }, { index: 36, seconds: 1.885 }, { index: 37, seconds: 1.877 }, { index: 38, seconds: 1.809 }, { index: 39, seconds: 1.821 }, { index: 40, seconds: 1.88 }, { index: 41, seconds: 1.81 }, { index: 42, seconds: 1.865 }, { index: 43, seconds: 1.837 }, { index: 44, seconds: 1.851 }, { index: 45, seconds: 1.843 }, { index: 46, seconds: 1.831 }, { index: 47, seconds: 1.802 } ] }
+  ,  { name: "burroughs-junky", tape: Nothing
+    , samples: [ { index: 0, seconds: 116.299 } ] }
+  ,  { name: "chord-hits-0924-171929", tape: Nothing
+    , samples: [ { index: 0, seconds: 2.488 }, { index: 1, seconds: 2.541 }, { index: 2, seconds: 2.523 }, { index: 3, seconds: 2.53 }, { index: 4, seconds: 2.573 }, { index: 5, seconds: 2.543 }, { index: 6, seconds: 2.566 }, { index: 7, seconds: 2.563 }, { index: 8, seconds: 2.545 }, { index: 9, seconds: 2.581 }, { index: 10, seconds: 2.563 }, { index: 11, seconds: 3.665 } ] }
+  ,  { name: "fd-beat-bar", tape: Nothing
+    , samples: [ { index: 0, seconds: 2.0 } ] }
+  ,  { name: "fd-beat-bar-swung", tape: Nothing
+    , samples: [ { index: 0, seconds: 2.0 } ] }
+  ,  { name: "prog-g-2bar", tape: Nothing
+    , samples: [ { index: 0, seconds: 4.0 } ] }
+  ]

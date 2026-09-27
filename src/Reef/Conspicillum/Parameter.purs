@@ -42,6 +42,7 @@ module Reef.Conspicillum.Parameter
   , format
   , neutral
   , opParameter
+  , opAmount
   , engaged
   ) where
 
@@ -210,8 +211,8 @@ allParameters =
 
 -- | A linear parameter with a plain description.
 plain :: String -> Section -> Number -> Number -> Number -> Measure -> Number -> String -> Description
-plain label section low high step measure neutral about =
-  { label, section, low, high, step, taper: Linear, measure, neutral
+plain label section low high step measure atRest about =
+  { label, section, low, high, step, taper: Linear, measure, neutral: atRest
   , engagedBy: [], zeroMeans: false, about }
 
 -- | An effect setting that only matters while another is engaged.
@@ -740,6 +741,7 @@ engaged parameter spec = case parameter of
     && (d.engagedBy == [] || any above (filter (_ /= parameter) by))
     && (d.engagedBy /= [] || above parameter)
 
+-- | The amount a rule's op carries.
 opAmount :: Op -> Number
 opAmount = case _ of
   OpSpeed x -> x

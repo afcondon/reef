@@ -38,6 +38,9 @@ module Reef.Conspicillum.Notation
   , parse
   , print
   , opNames
+  , OnsetLayout(..)
+  , onsetLayout
+  , stepsText
   ) where
 
 import Prelude
@@ -428,14 +431,26 @@ print l = intercalate " # " (filter (_ /= "") parts)
   level i s = maybe 0.0 _.level (index s.sends i)
   onsetsTerm
     | sp.onsets == d.onsets = ""
-    | sp.onsets == even (length sp.onsets) = "grains " <> show (length sp.onsets)
-    | otherwise = case euclidOf sp.onsets of
-        Just { k, n } -> "euclid " <> show k <> " " <> show n
-        Nothing -> "onsets " <> q (intercalate " " (map fmt sp.onsets))
-  -- Which even or euclidean layout this is, if any: tried against every
-  -- grid up to 64, since a line should print as the shortest thing that
-  -- makes it.
-  euclidOf os = Array.head do
+    | otherwise = case onsetLayout sp.onsets of
+        EvenGrains k -> "grains " <> show k
+        Euclidean k n -> "euclid " <> show k <> " " <> show n
+        Placed os -> "onsets " <> q (intercalate " " (map fmt os))
+
+-- | How a cycle's onsets are laid out, as the shortest thing that makes them:
+-- | `k` even grains, `k` hits spread euclidean over `n` steps (tried against
+-- | every grid up to 64), or placed by hand.
+data OnsetLayout = EvenGrains Int | Euclidean Int Int | Placed (Array Number)
+
+derive instance eqOnsetLayout :: Eq OnsetLayout
+
+onsetLayout :: Array Number -> OnsetLayout
+onsetLayout os
+  | os == even (length os) = EvenGrains (length os)
+  | otherwise = case euclidOf of
+      Just { k, n } -> Euclidean k n
+      Nothing -> Placed os
+  where
+  euclidOf = Array.head do
     n <- range 1 64
     k <- range 1 n
     if euclid k n == os then [ { k, n } ] else []
