@@ -20,16 +20,17 @@
 -- |
 -- | The parser lives in purerl-tidal, which depends on reef and not the other
 -- | way round, and pulling it down here to chase a string would be the tail
--- | wagging the dog. The house pattern is the one Stellatus set: the frontend
+-- | wagging the dog. The house pattern is the one Stellatus set (the ring
+-- | re-sequencer this replaced, retired 2026-09-27): the frontend
 -- | resolves its text to a fully-determined scene and pushes it ONCE
 -- | (`Triggerfish.Tidal.Lane.onsetsOf` already returns exactly these fractional
 -- | times). Reef consumes the resolved form. A cloud is then a pure function of
 -- | its scene, which is what lets the browser draw it and the BEAM sound it
 -- | from the same definition.
 -- |
--- | ## Why this is cycle-addressed, where Stellatus loops
+-- | ## Why this is cycle-addressed, where Stellatus looped
 -- |
--- | `Reef.Stellatus.Engine.walk` precomputes a finite walk and repeats it,
+-- | Stellatus's `walk` precomputed a finite walk and repeated it,
 -- | threading the seed left to right. That is right for a ring of a dozen
 -- | slots and wrong here, for two reasons.
 -- |
