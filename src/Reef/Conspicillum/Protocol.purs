@@ -38,6 +38,7 @@ module Reef.Conspicillum.Protocol
   , fromWireScene
   , toWireSpec
   , toWireQuery
+  , fromWireQuery
   , encodeScene
   , decodeScene
   ) where

@@ -41,6 +41,10 @@ module Reef.Conspicillum.Notation
   , parse
   , print
   , opNames
+  , even
+  , euclid
+  , chordList
+  , stepTable
   , OnsetLayout(..)
   , onsetLayout
   , stepsText
