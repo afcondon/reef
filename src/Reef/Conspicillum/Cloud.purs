@@ -65,6 +65,10 @@ module Reef.Conspicillum.Cloud
   , Warp
   , WarpMode(..)
   , noWarp
+  , Progression
+  , ResonatorFollow(..)
+  , noProgression
+  , chordOf
   , warpGrain
   , swingWarp
   , Send
@@ -77,12 +81,13 @@ module Reef.Conspicillum.Cloud
 
 import Prelude
 
-import Data.Array (concatMap, find, foldl, index, length, mapWithIndex, modifyAt, null, range, replicate, snoc)
+import Data.Array (concatMap, find, foldl, head, index, length, mapWithIndex, modifyAt, null, range, replicate, snoc)
 import Data.Int (floor, round, toNumber)
 import Data.Int.Bits (and)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Reef.Bits (xorshift32)
 import Reef.Conspicillum.Corpus (Cloud, Corpus, Grainable, Query, clampTo, grainAt, pick, wrap01)
+import Reef.Conspicillum.Harmonic (Target)
 import Reef.Marbles (Seed, nextRand, seedFrom)
 
 -- ── when a rule applies ──────────────────────────────────────────────────────
@@ -499,6 +504,9 @@ type Spec =
   -- | copying the grain to an orbit already set up for it. Usually that orbit
   -- | is dry and comes out on its own outputs, and the effect is in Ableton.
   , sends :: Array Send
+  -- | A chord a cycle. Empty is no progression, and then the query's own
+  -- | harmonic target (if any) holds for every cycle, as before.
+  , progression :: Progression
   }
 
 -- | **Playing a tape at a tempo that is not its own.** `ratio` is the play
@@ -538,6 +546,62 @@ warpGrain w g
       -- nothing after it to leak into, so it stops, as a gap would.
       Leak -> g { sustain = g.sustain / w.ratio
                 , end = min 1.0 (g.begin + (g.end - g.begin) / w.ratio) }
+
+-- | **A chord progression, played by the engine.** Cycle `c` is under chord
+-- | `c mod length chords`, as the query's harmonic target: the cloud admits
+-- | samples that fit it at least `minimumFit` and leans toward the best by
+-- | `strength` (`Reef.Conspicillum.Harmonic`). Because the chord is a function
+-- | of the cycle number, a scene with a progression is still a pure function of
+-- | the scene and the cycle, and no page has to keep time to change chords.
+-- | (Until 2026-09-27 the workshop did, pushing a new scene per chord.)
+-- |
+-- | `follow` retunes the resonators to the chord as it changes, keeping each
+-- | resonator's octave and replacing its pitch class: `FollowRoot` and
+-- | `FollowBass` tune both to the root or bass; `FollowChordTones` gives
+-- | successive grains successive chord tones on the per-grain resonator (as
+-- | rules appended after the scene's own, so it engages the resonator even
+-- | when the scene leaves it off) and tunes the shared one to the root, since
+-- | one body can have one pitch.
+type Progression =
+  { chords :: Array Target
+  , minimumFit :: Number
+  , strength :: Number
+  , follow :: ResonatorFollow
+  }
+
+data ResonatorFollow = NoFollow | FollowRoot | FollowBass | FollowChordTones
+
+derive instance eqResonatorFollow :: Eq ResonatorFollow
+
+noProgression :: Progression
+noProgression = { chords: [], minimumFit: 0.5, strength: 0.9, follow: NoFollow }
+
+-- | The chord cycle `c` is under, if there is a progression.
+chordOf :: Progression -> Int -> Maybe Target
+chordOf p cyc
+  | null p.chords = Nothing
+  | otherwise = index p.chords (cyc `mod` length p.chords)
+
+-- | The spec as the chord retunes it.
+retune :: Target -> Spec -> Spec
+retune chord spec = case spec.progression.follow of
+  NoFollow -> spec
+  follow ->
+    let
+      octave x = toNumber (floor (x / 12.0)) * 12.0
+      pitchClass perGrain = toNumber case follow of
+        FollowBass -> chord.bass
+        FollowChordTones | perGrain -> fromMaybe chord.root (head chord.pcs)
+        _ -> chord.root
+      fx = if spec.fx.rsnpitch > 0.0 then spec.fx { rsnpitch = octave spec.fx.rsnpitch + pitchClass true } else spec.fx
+      chain = if spec.chain.grsn > 0.0 then spec.chain { grsnpitch = octave spec.chain.grsnpitch + pitchClass false } else spec.chain
+      register = octave (if spec.fx.rsnpitch > 0.0 then spec.fx.rsnpitch else 48.0)
+      tones =
+        if follow == FollowChordTones then
+          mapWithIndex (\i pc -> rule (Every (length chord.pcs) i) (OpRsnPitch (register + toNumber pc))) chord.pcs
+        else []
+    in
+      spec { fx = fx, chain = chain, rules = spec.rules <> tones }
 
 -- | One grain, placed in the cycle and fully resolved: everything
 -- | `/dirt/play` needs and nothing it does not.
@@ -745,7 +809,18 @@ applyOp op e = case op of
 -- | same. Note that the seed still advances for a dropped grain, so a query
 -- | narrowing does not reshuffle the grains that do survive.
 cycleOf :: Corpus -> Query -> Spec -> Int -> Int -> Array Emit
-cycleOf corpus query spec base cyc =
+cycleOf corpus query spec base cyc = case chordOf spec.progression cyc of
+  Nothing -> cycleUnder corpus query spec base cyc
+  Just chord ->
+    cycleUnder corpus
+      (query { harmonic = Just { target: chord, minFit: spec.progression.minimumFit, strength: spec.progression.strength } })
+      (retune chord spec)
+      base
+      cyc
+
+-- | One cycle under a fixed query: `cycleOf` once the chord is decided.
+cycleUnder :: Corpus -> Query -> Spec -> Int -> Int -> Array Emit
+cycleUnder corpus query spec base cyc =
   map landSwung $ concatMap sendCopies $ concatMap expand
     (foldl step
        { seed: cycleSeed base cyc

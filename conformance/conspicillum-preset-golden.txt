@@ -73,15 +73,15 @@ Tape saturation | Effects | grain=grainLength, position=readPosition, spray=spra
 Tremolo bed | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Struck bar | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Dull thud | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
-Plucked chord | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | F#m(maj7) B7 E E (follow chord tones) | canonical
-Answer the chord | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | Bm Bm(maj7) Bdim F#m (follow root) | canonical
+Plucked chord | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
+Answer the chord | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
 One body, many strikes | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Reverse swell | Envelope | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Burst grains | Envelope | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Struck every fourth | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
-ii – V – I in E | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | F#m(maj7) B7 E E (follow off) | canonical
-Chromatic descent | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | Bm Bm(maj7) Bdim F#m (follow off) | canonical
-Diminished drift | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | C#dim F#dim D#m B7 (follow off) | canonical
-Wet progression | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | F#m(maj7) B7 E E (follow off) | canonical
-Everything at once | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | E D Bm E F#m(maj7) B7 E E (follow off) | canonical
+ii – V – I in E | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
+Chromatic descent | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
+Diminished drift | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
+Wet progression | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
+Everything at once | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 8 chords | canonical
 presets: 86 resolved

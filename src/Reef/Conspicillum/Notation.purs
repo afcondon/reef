@@ -25,6 +25,9 @@
 -- | - `swing play`, `tapeswing x`, `swinggrid n`
 -- | - `bars n`, `order "0 1 1 0"`, `samples "<4 7 5 0>"`, `steps "~ ~ 5?0.4"`
 -- | - `warp repitch|gap|leak`
+-- | - `chords "<Bm Bm(maj7) Bdim F#m>"` — a chord a cycle, by name;
+-- |   `fit 0.5 0.9` — how hard the cloud holds to it (minimum fit, strength);
+-- |   `tune root|bass|tones` — the resonators follow the chord
 -- | - `speed`, `gain`, `pan`, `accelerate`
 -- | - any effect by its name (`lpf 800`, `rsnpitch 36`), any chain setting
 -- |   (`room 0.3`, `delay 0.5`), `sendA 0.8`, `sendB 0.8`
@@ -56,7 +59,8 @@ import Data.Number as Number
 import Data.String as String
 import Data.String.CodeUnits as SCU
 import Reef.Conspicillum.Decimal (trimmed)
-import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Rule, Spec, WarpMode(..), When(..), noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar)
+import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), ResonatorFollow(..), Rule, Spec, WarpMode(..), When(..), noChain, noFx, noProgression, noSteps, noSwing, noWalk, noWarp, oneBar)
+import Reef.Conspicillum.Harmonic (Target, chordNamed, nameOfChord)
 import Reef.Conspicillum.Protocol (fromWireRule, toWireRule)
 
 type Line = { set :: String, n :: Maybe Int, seed :: Int, spec :: Spec }
@@ -76,6 +80,7 @@ defaultLine =
       , tape: oneBar
       , steps: noSteps
       , warp: noWarp
+      , progression: noProgression
       , rules: []
       , speed: 1.0
       , gain: 1.0
@@ -243,6 +248,19 @@ term l toks = case uncons toks of
       TWord "gap" -> withSpec _ { warp { mode = Gap } }
       TWord "leak" -> withSpec _ { warp { mode = Leak } }
       _ -> Left "warp is repitch, gap or leak"
+    "chords" -> one w \a -> str w a >>= chordList >>= \cs -> withSpec _ { progression { chords = cs } }
+    "fit" -> case args of
+      [ a, b ] -> do
+        minimumFit <- num w a
+        strength <- num w b
+        withSpec _ { progression { minimumFit = minimumFit, strength = strength } }
+      _ -> Left "fit takes a minimum fit and a strength"
+    "tune" -> one w \a -> case a of
+      TWord "off" -> withSpec _ { progression { follow = NoFollow } }
+      TWord "root" -> withSpec _ { progression { follow = FollowRoot } }
+      TWord "bass" -> withSpec _ { progression { follow = FollowBass } }
+      TWord "tones" -> withSpec _ { progression { follow = FollowChordTones } }
+      _ -> Left "tune is root, bass, tones or off"
     "speed" -> one w \a -> num w a >>= \x -> withSpec _ { speed = x }
     "gain" -> one w \a -> num w a >>= \x -> withSpec _ { gain = x }
     "pan" -> one w \a -> num w a >>= \x -> withSpec _ { pan = x }
@@ -299,6 +317,16 @@ opOf = case _ of
                            , amount: seq.amount, values: seq.values, step: seq.step }
       in r { when = wh }
   _ -> Left "a rule's op is written (name amount)"
+
+-- | `"<Bm Bm(maj7) Bdim F#m>"`: a chord a cycle, by name (`Harmonic.namedChords`).
+chordList :: String -> Either String (Array Target)
+chordList s =
+  let
+    bare = String.replaceAll (String.Pattern "<") (String.Replacement " ")
+      (String.replaceAll (String.Pattern ">") (String.Replacement " ") s)
+    names = filter (_ /= "") (String.split (String.Pattern " ") bare)
+  in
+    Array.foldM (\acc name -> note ("no chord called " <> name) (chordNamed name) <#> snoc acc) [] names
 
 -- | `~ ~ 5?0.4 ~ 2` — one token a step; `~` stays.
 stepTable :: String -> Either String { grid :: Int, to :: Array Int, p :: Array Number }
@@ -416,6 +444,16 @@ print l = intercalate " # " (filter (_ /= "") parts)
              Gap -> ""
              Repitch -> "warp repitch"
              Leak -> "warp leak"
+         , if null sp.progression.chords then ""
+           else "chords " <> q ("<" <> intercalate " " (map (\c -> fromMaybe "?" (nameOfChord c)) sp.progression.chords) <> ">")
+         , if null sp.progression.chords
+             || (sp.progression.minimumFit == d.progression.minimumFit && sp.progression.strength == d.progression.strength) then ""
+           else "fit " <> fmt sp.progression.minimumFit <> " " <> fmt sp.progression.strength
+         , case sp.progression.follow of
+             NoFollow -> ""
+             FollowRoot -> "tune root"
+             FollowBass -> "tune bass"
+             FollowChordTones -> "tune tones"
          , num1 "speed" sp.speed d.speed
          , num1 "gain" sp.gain d.gain
          , num1 "pan" sp.pan d.pan

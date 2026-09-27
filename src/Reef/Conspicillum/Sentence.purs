@@ -25,14 +25,13 @@ import Prelude
 import Data.Array (elem, filter, index, length, null)
 import Data.Foldable (intercalate)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), maybe)
-import Reef.Conspicillum.Cloud (Kind(..), Op(..), Rule, Spec, Step(..), When(..))
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Reef.Conspicillum.Cloud (Kind(..), Op(..), ResonatorFollow(..), Rule, Spec, Step(..), When(..))
 import Reef.Conspicillum.Decimal (fixed, trimmed)
 import Reef.Conspicillum.Display (Material(..))
 import Reef.Conspicillum.Notation (Line, OnsetLayout(..), onsetLayout, stepsText)
 import Reef.Conspicillum.Parameter (CloudEffect(..), GrainEffect(..), Parameter(..), SendBus(..), describe, format, neutral, opAmount, opParameter, read)
-import Reef.Conspicillum.Preset (Progression, resonatorFollowName)
-import Reef.Conspicillum.Preset as Preset
+import Reef.Conspicillum.Harmonic (nameOfChord)
 
 data Fragment
   = Words String
@@ -48,9 +47,9 @@ data Fragment
 type Sentence = Array Fragment
 
 sentences
-  :: { line :: Line, material :: Material, knobs :: Array Parameter, progression :: Maybe Progression }
+  :: { line :: Line, material :: Material, knobs :: Array Parameter }
   -> Array Sentence
-sentences { line, material, knobs, progression } =
+sentences { line, material, knobs } =
   filter (not <<< null)
     [ what <> onsets <> grain
     , reading
@@ -147,12 +146,18 @@ sentences { line, material, knobs, progression } =
     , Value Gain, Words "."
     ]
 
-  chords = case progression of
-    Nothing -> []
-    Just p ->
-      [ Words "Its chord changes each cycle: ", Code (intercalate " → " (map _.name p.chords)) ]
-        <> (if p.resonatorFollows == Preset.NoFollow then [] else [ Words (", and the resonators follow the " <> resonatorFollowName p.resonatorFollows) ])
-        <> [ Words "." ]
+  chords =
+    let p = spec.progression
+    in
+      if null p.chords then []
+      else
+        [ Words "Its chord changes each cycle: ", Code (intercalate " → " (map (\c -> fromMaybe "?" (nameOfChord c)) p.chords)) ]
+          <> (case p.follow of
+                NoFollow -> []
+                FollowRoot -> [ Words ", and the resonators follow its root" ]
+                FollowBass -> [ Words ", and the resonators follow its bass" ]
+                FollowChordTones -> [ Words ", and the resonators play its tones" ])
+          <> [ Words "." ]
 
 joinWith :: String -> Array Sentence -> Sentence
 joinWith separator parts = intercalate [ Words separator ] parts

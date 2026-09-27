@@ -498,3 +498,19 @@ echo "== conspicillumDisplayRun (sentences and drawing): node vs erl =="
   > /tmp/reef-conspicillum-display-erl.txt
 diff /tmp/reef-conspicillum-display-node.txt /tmp/reef-conspicillum-display-erl.txt && echo "  OK conspicillumDisplayRun node == erl"
 diff "$CONSPICILLUM_DISPLAY_GOLDEN" /tmp/reef-conspicillum-display-node.txt && echo "  OK conspicillumDisplayRun matches frozen golden"
+
+# --- Conspicillum progressions (Reef.Conformance.conspicillumProgressionRun) -
+# A chord progression played by the engine: which chord each cycle is under,
+# what the cloud chose, how the resonator was retuned. And, cycle by cycle, the
+# proof that moving the progression into the engine changed nothing: each cycle
+# equals the scene the workshop used to push for that chord.
+CONSPICILLUM_PROGRESSION_GOLDEN="$REEF/conformance/conspicillum-progression-golden.txt"
+echo "== conspicillumProgressionRun (chords played by the engine): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumProgressionRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumProgressionRun);' \
+  ) > /tmp/reef-conspicillum-progression-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':conspicillumProgressionRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-progression-erl.txt
+diff /tmp/reef-conspicillum-progression-node.txt /tmp/reef-conspicillum-progression-erl.txt && echo "  OK conspicillumProgressionRun node == erl"
+diff "$CONSPICILLUM_PROGRESSION_GOLDEN" /tmp/reef-conspicillum-progression-node.txt && echo "  OK conspicillumProgressionRun matches frozen golden"

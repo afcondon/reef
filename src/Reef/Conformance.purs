@@ -50,6 +50,7 @@ module Reef.Conformance
   , conspicillumParameterRun
   , conspicillumPresetRun
   , conspicillumDisplayRun
+  , conspicillumProgressionRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -87,8 +88,8 @@ import Reef.Conspicillum.Display (Material(..), SampleFacts, TapeFacts, colourAt
 import Reef.Conspicillum.Sentence (plainText, ruleRows, sentences) as SE
 import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar, rule) as CL
-import Reef.Conspicillum.Harmonic (Target, fit) as CH
+import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
+import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -895,7 +896,7 @@ conspicillumSpec :: CL.Spec
 conspicillumSpec =
   { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
   , cloud: { sustain: 0.05, position: 0.4, spray: 0.3, follow: 0.0 }
-  , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
+  , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression
   , rules:
       -- The headline, and the thing no hardware granulator can express: every
       -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
@@ -1102,7 +1103,7 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
           -- and grain lengths all move, and the ratchet subdivides the swung
           -- slot, which is what the golden pins.
         , swing: { tape: 0.6, play: 0.55, grid: 16 }
-        , tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
+        , tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression
         , rules:
             [ CL.rule (CL.Every 16 14) (CL.OpRatchet 3.0)
             , CL.rule (CL.Every 8 7) (CL.OpShift (-0.0625))
@@ -1172,7 +1173,7 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
         { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.15, hold: 0.1, home: 0.1, grid: 16, reach: 0 }
-        , swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp
+        , swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression
         , rules:
             [ CL.rule (CL.Hit CL.Snare 0.5) (CL.OpPshift 1.5)
             , { when: CL.Hit CL.Kick 0.5, op: CL.OpRsnPitch 0.0
@@ -1226,7 +1227,7 @@ conspicillumPermuteRun = case CP.decodeScene (CP.encodeScene permuteScene) of
         , swing: CL.noSwing
         , tape: { bars: 2, order: [ 0, 1, 1, 0 ], samples: [] }
         , steps: { grid: 8, to: [ -1, -1, 5, -1, 2, -1, -1, 7 ], p: [ 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.3 ] }
-        , warp: CL.noWarp
+        , warp: CL.noWarp, progression: CL.noProgression
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
@@ -1276,7 +1277,7 @@ conspicillumVirtualRun = case CP.decodeScene (CP.encodeScene virtualScene) of
         , swing: CL.noSwing
         , tape: { bars: 0, order: [ 0, 2, 1, 3, 4 ], samples: [ 2, 0, 1, 2, 9 ] }
         , steps: CL.noSteps
-        , warp: CL.noWarp
+        , warp: CL.noWarp, progression: CL.noProgression
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
@@ -1321,6 +1322,7 @@ conspicillumWarpRun =
         , cloud: { sustain: 0.5, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
         , warp
+        , progression: CL.noProgression
         , rules: [ CL.rule (CL.Every 4 2) (CL.OpSpeed (-1.0)) ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
@@ -1403,9 +1405,8 @@ conspicillumPresetRun = intercalate "\n" (map one PS.presetSources <> [ total ])
       [ p.name
       , PR.bankName p.bank
       , intercalate ", " (map (\k -> k.label <> "=" <> PM.identifier k.parameter) p.knobs)
-      , case p.progression of
-          Nothing -> "no progression"
-          Just pr -> intercalate " " (map _.name pr.chords) <> " (follow " <> PR.resonatorFollowName pr.resonatorFollows <> ")"
+      , if null p.line.spec.progression.chords then "no progression"
+        else show (length p.line.spec.progression.chords) <> " chords"
       , if CN.print p.line == source.line then "canonical" else "REPRINTS AS " <> CN.print p.line
       ]
   total = case PS.presets of
@@ -1430,7 +1431,7 @@ conspicillumDisplayRun = intercalate "\n" (presetLines <> drawings)
       facts = fromMaybe { name: p.line.set, tape: Nothing, samples: [] } (find (\f -> f.name == p.line.set) displaySets)
       material = DI.materialOf { line: p.line, samples: facts.samples, tape: facts.tape }
       said = SE.plainText p.line.spec
-        (SE.sentences { line: p.line, material, knobs: map _.parameter p.knobs, progression: p.progression })
+        (SE.sentences { line: p.line, material, knobs: map _.parameter p.knobs })
       rows = map (\r -> "[" <> r.which <> " / " <> r.what <> " / " <> r.amount <> "]") (SE.ruleRows p.line.spec.rules)
     in
       intercalate " | " ([ p.name, DI.materialName material, show (length (DI.segments material)) <> " segments", said ] <> rows)
@@ -1483,3 +1484,40 @@ displaySets =
   ,  { name: "prog-g-2bar", tape: Nothing
     , samples: [ { index: 0, seconds: 4.0 } ] }
   ]
+
+
+-- ── Conspicillum progressions (Cloud.cycleOf with Spec.progression) ─────────
+-- | Eight cycles of a four-chord progression over the real chord hits: the
+-- | chord each cycle is under, which samples the cloud chose, and what the
+-- | per-grain resonator was tuned to (the chord's tones, one a grain). Then
+-- | the check that matters for moving the progression into the engine: with
+-- | the resonators left alone, every cycle is exactly the scene the workshop
+-- | used to push for that chord, a fixed harmonic target and no progression.
+conspicillumProgressionRun :: String
+conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressionLine <> " # tune off") of
+  Right tuned, Right untuned -> intercalate "\n" (map (cycleLine tuned) cycles <> map (samePush untuned) cycles)
+  Left e, _ -> "ERR " <> e
+  _, Left e -> "ERR " <> e
+  where
+  progressionLine = "s \"x\" # grains 8 # follow 0 # position 0.1 # spray 0.3 # rsnpitch 48 # chords \"<G Em7b5 D Bm>\" # fit 0.3 0.9 # tune tones"
+  corpus = { name: "chord-hits", samples: conspicillumChordCorpus }
+  cycles = range 0 7
+  emitsOf spec query c = CL.cycleOf corpus query spec 1 c
+  cycleLine l c =
+    let es = emitsOf l.spec CC.emptyQuery c
+    in intercalate " | "
+      [ "cycle " <> show c
+      , "chord " <> maybe "none" (\t -> fromMaybe "?" (CH.nameOfChord t)) (CL.chordOf l.spec.progression c)
+      , "samples " <> intercalate " " (map (show <<< _.n) es)
+      , "resonator " <> intercalate " " (map (Decimal.trimmed 0 <<< _.fx.rsnpitch) es)
+      ]
+  samePush l c =
+    let
+      byEngine = emitsOf l.spec CC.emptyQuery c
+      pushed = case CL.chordOf l.spec.progression c of
+        Nothing -> []
+        Just t -> emitsOf (l.spec { progression = CL.noProgression })
+          (CC.emptyQuery { harmonic = Just { target: t, minFit: l.spec.progression.minimumFit, strength: l.spec.progression.strength } }) c
+      render es = intercalate " " (map (\e -> show e.n <> "@" <> Decimal.fixed 4 e.at <> ":" <> Decimal.fixed 4 e.begin <> "-" <> Decimal.fixed 4 e.end) es)
+    in
+      "cycle " <> show c <> " as a pushed scene: " <> (if render byEngine == render pushed then "same" else "DIFFERENT")

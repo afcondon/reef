@@ -48,8 +48,8 @@ import Data.Maybe (Maybe(..))
 import Foreign (MultipleErrors)
 import Reef.Conspicillum.Corpus
   (Axis(..), Cloud, Cmp(..), Corpus, Query, Toward(..), Weighting)
-import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Op(..), Rule, Send, Spec, Step(..), Steps, Swing, Tape, Walk, WarpMode(..), When(..))
-import Reef.Conspicillum.Harmonic (Harmonic)
+import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), Op(..), ResonatorFollow(..), Rule, Send, Spec, Step(..), Steps, Swing, Tape, Walk, WarpMode(..), When(..))
+import Reef.Conspicillum.Harmonic (Harmonic, Target)
 import Simple.JSON (readJSON, writeJSON)
 
 -- | Everything the rig needs to run a cloud, pushed once.
@@ -191,6 +191,10 @@ type WireSpec =
   , fx :: Fx
   , chain :: Chain
   , sends :: Array Send    -- empty: no send buses, and OpSend is inert
+  -- | `{ chords: [], minimumFit: 0.5, strength: 0.9, follow: 0 }` for none.
+  -- | A chord is `{ pcs, root, bass }`; follow is 0 off, 1 root, 2 bass,
+  -- | 3 chord tones (`Cloud.ResonatorFollow`).
+  , progression :: { chords :: Array Target, minimumFit :: Number, strength :: Number, follow :: Int }
   }
 
 type WireScene =
@@ -322,11 +326,28 @@ fromWireRule w =
 
 toWireSpec :: Spec -> WireSpec
 toWireSpec sp = sp { rules = map toWireRule sp.rules
-                   , warp = { ratio: sp.warp.ratio, mode: warpModeToInt sp.warp.mode } }
+                   , warp = { ratio: sp.warp.ratio, mode: warpModeToInt sp.warp.mode }
+                   , progression = sp.progression { follow = followToInt sp.progression.follow } }
 
 fromWireSpec :: WireSpec -> Spec
 fromWireSpec sp = sp { rules = map fromWireRule sp.rules
-                     , warp = { ratio: sp.warp.ratio, mode: warpModeFromInt sp.warp.mode } }
+                     , warp = { ratio: sp.warp.ratio, mode: warpModeFromInt sp.warp.mode }
+                     , progression = sp.progression { follow = followFromInt sp.progression.follow } }
+
+followToInt :: ResonatorFollow -> Int
+followToInt = case _ of
+  NoFollow -> 0
+  FollowRoot -> 1
+  FollowBass -> 2
+  FollowChordTones -> 3
+
+-- | Unknown reads as no following: the scene still plays, untuned.
+followFromInt :: Int -> ResonatorFollow
+followFromInt = case _ of
+  1 -> FollowRoot
+  2 -> FollowBass
+  3 -> FollowChordTones
+  _ -> NoFollow
 
 warpModeToInt :: WarpMode -> Int
 warpModeToInt = case _ of

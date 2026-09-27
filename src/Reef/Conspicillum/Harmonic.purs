@@ -42,6 +42,10 @@
 module Reef.Conspicillum.Harmonic
   ( Target
   , Harmonic
+  , NamedChord
+  , namedChords
+  , chordNamed
+  , nameOfChord
   , pitchClasses
   , bassPitchClass
   , intervalWeight
@@ -51,7 +55,7 @@ module Reef.Conspicillum.Harmonic
 
 import Prelude
 
-import Data.Array (elem, foldl, length, nub, null, sort)
+import Data.Array (elem, find, foldl, length, nub, null, sort)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..))
 
@@ -178,3 +182,44 @@ ringDistance a b =
 
 clamp01 :: Number -> Number
 clamp01 x = if x < 0.0 then 0.0 else if x > 1.0 then 1.0 else x
+
+
+-- ── chords by name ───────────────────────────────────────────────────────────
+
+type NamedChord = { name :: String, target :: Target }
+
+-- | The chords a progression is written in, by name. Named for what the two
+-- | chord-hit corpora actually contain, which sit around E, B and F# and are
+-- | full of minor-majors, augmented and half-diminished chords: every
+-- | progression the presets use was scored against the material before it was
+-- | written, and none goes silent. A chord not here cannot be written in a line
+-- | yet; the harmonia join (chord symbols parsed rather than listed) is the way
+-- | to lift that.
+namedChords :: Array NamedChord
+namedChords =
+  [ chord "Em(maj7)" [ 4, 7, 11, 3 ] 4 4
+  , chord "Bm" [ 11, 2, 6 ] 11 11
+  , chord "F#m7b5" [ 6, 9, 0, 4 ] 6 6
+  , chord "Em7b5" [ 4, 7, 10, 2 ] 4 4
+  , chord "F#m" [ 6, 9, 1 ] 6 6
+  , chord "Bdim" [ 11, 2, 5 ] 11 11
+  , chord "Bm(maj7)" [ 11, 2, 6, 10 ] 11 11
+  , chord "Daug" [ 2, 6, 10 ] 2 6
+  , chord "E" [ 4, 8, 11 ] 4 4
+  , chord "B7" [ 11, 3, 6, 9 ] 11 11
+  , chord "C#dim" [ 1, 4, 7 ] 1 1
+  , chord "F#dim" [ 6, 9, 0 ] 6 6
+  , chord "F#m(maj7)" [ 6, 9, 1, 5 ] 6 6
+  , chord "D" [ 2, 6, 9 ] 2 2
+  , chord "D#m" [ 3, 6, 10 ] 3 3
+  , chord "G" [ 7, 11, 2 ] 7 7
+  ]
+  where
+  chord name pcs root bass = { name, target: { pcs, root, bass } }
+
+chordNamed :: String -> Maybe Target
+chordNamed name = map _.target (find (\c -> c.name == name) namedChords)
+
+-- | The name a chord is written as, if it is one of `namedChords`.
+nameOfChord :: Target -> Maybe String
+nameOfChord t = map _.name (find (\c -> c.target.pcs == t.pcs && c.target.root == t.root && c.target.bass == t.bass) namedChords)

@@ -1,0 +1,16 @@
+cycle 0 | chord G | samples 0 1 1 1 0 1 1 7 | resonator 55 59 50 55 59 50 55 59
+cycle 1 | chord Em7b5 | samples 1 0 0 0 1 1 0 1 | resonator 52 55 58 50 52 55 58 50
+cycle 2 | chord D | samples 6 7 7 0 0 0 7 6 | resonator 54 57 50 54 57 50 54 57
+cycle 3 | chord Bm | samples 7 7 7 7 7 7 7 7 | resonator 59 50 54 59 50 54 59 50
+cycle 4 | chord G | samples 0 1 1 1 7 1 7 7 | resonator 50 55 59 50 55 59 50 55
+cycle 5 | chord Em7b5 | samples 1 0 1 0 0 1 0 0 | resonator 52 55 58 50 52 55 58 50
+cycle 6 | chord D | samples 6 0 7 7 7 7 7 6 | resonator 50 54 57 50 54 57 50 54
+cycle 7 | chord Bm | samples 7 7 7 7 7 7 7 7 | resonator 54 59 50 54 59 50 54 59
+cycle 0 as a pushed scene: same
+cycle 1 as a pushed scene: same
+cycle 2 as a pushed scene: same
+cycle 3 as a pushed scene: same
+cycle 4 as a pushed scene: same
+cycle 5 as a pushed scene: same
+cycle 6 as a pushed scene: same
+cycle 7 as a pushed scene: same
