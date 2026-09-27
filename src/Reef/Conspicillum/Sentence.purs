@@ -240,7 +240,15 @@ ordinal n = case n of
   6 -> "sixth"
   7 -> "seventh"
   8 -> "eighth"
-  _ -> show n <> "th"
+  _ -> show n <> suffix
+  where
+  -- 11th, 12th and 13th break the rule of their last digit.
+  suffix
+    | n `mod` 100 >= 11 && n `mod` 100 <= 13 = "th"
+    | n `mod` 10 == 1 = "st"
+    | n `mod` 10 == 2 = "nd"
+    | n `mod` 10 == 3 = "rd"
+    | otherwise = "th"
 
 nth :: Int -> String
 nth n = case n of

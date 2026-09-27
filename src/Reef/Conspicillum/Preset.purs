@@ -19,14 +19,18 @@ module Reef.Conspicillum.Preset
   , Preset
   , resolve
   , bankName
+  , PresetOnWire
+  , presetOnWire
   ) where
 
 import Prelude
 
 import Data.Either (Either(..))
 import Reef.Conspicillum.Corpus (Query)
-import Reef.Conspicillum.Notation (Line, parse)
-import Reef.Conspicillum.Parameter (Parameter)
+import Reef.Conspicillum.Notation (Line, parse, print)
+import Data.Maybe (Maybe(..))
+import Reef.Conspicillum.Parameter (Parameter, identifier)
+import Reef.Conspicillum.Protocol (WireQuery, WireSpec, toWireQuery, toWireSpec)
 
 -- | Presets come in banks, by what they are a study of.
 data Bank
@@ -99,3 +103,42 @@ resolve source = case parse source.line of
     , query: source.query
     , knobs: source.knobs
     }
+
+-- ── for pages ────────────────────────────────────────────────────────────────
+
+-- | A preset as plain data for a page written in JavaScript: the scene's wire
+-- | spec (the same shape `conspicillum-scene` sends), its wire query, and the
+-- | knobs by their stable identifiers. The pages read their presets from this,
+-- | so reef is the only copy. `sample` is -1 when the scene plays the whole set.
+type PresetOnWire =
+  { name :: String
+  , bank :: String
+  , about :: String
+  , line :: String
+  , set :: String
+  , sample :: Int
+  , whole :: Boolean
+  , seed :: Int
+  , spec :: WireSpec
+  , query :: WireQuery
+  , knobs :: Array { parameter :: String, label :: String }
+  }
+
+presetOnWire :: Preset -> PresetOnWire
+presetOnWire p =
+  { name: p.name
+  , bank: bankName p.bank
+  , about: p.about
+  , line: print p.line
+  , set: p.line.set
+  , sample: case p.line.n of
+      Just k -> k
+      Nothing -> -1
+  , whole: case p.line.n of
+      Just _ -> false
+      Nothing -> true
+  , seed: p.line.seed
+  , spec: toWireSpec p.line.spec
+  , query: toWireQuery p.query
+  , knobs: map (\k -> { parameter: identifier k.parameter, label: k.label }) p.knobs
+  }
