@@ -1,0 +1,87 @@
+Single hit | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Read head walk | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Cloud | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Every third backwards | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Stutter cascade | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Chance rain | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Only the bright | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Mostly the long ones | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Deep drone | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Transect sweep | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Andrew's chord | Found | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Brion Gysin cut-ups | Found | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Brion Gysin Daleks | Found | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Brion Gysin Speeding | Found | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Polychord pairs | Polychords | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Tape | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Repeat | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Relocate | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Eighth hops | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Fill | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Stutter | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Beat echo | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Drag | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Half-speed tape | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Double time | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Reverse bar | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Tape sag | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Cloud at the head | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Breakdown | Sector | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Every 4th downbeat back | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Snare up a fifth | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Kick bassline | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Kick bassline, per bar | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Snare roll build | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Hat ping-pong | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Creative errors | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Fix under the walk | Fix | chaos=walkJump, grain=grainLength, throw=sendLevelA | no progression | canonical
+Snare to the return | Dub | send A=sendLevelA, send B=sendLevelB, chaos=walkJump | no progression | canonical
+Throw the last hit | Dub | send A=sendLevelA, send B=sendLevelB, chaos=walkJump | no progression | canonical
+Hats to the room | Dub | send A=sendLevelA, send B=sendLevelB, chaos=walkJump | no progression | canonical
+Random throws | Dub | send A=sendLevelA, send B=sendLevelB, chaos=walkJump | no progression | canonical
+Echo out every 4th bar | Dub | send A=sendLevelA, send B=sendLevelB, chaos=walkJump | no progression | canonical
+Dub breakdown | Dub | send A=sendLevelA, send B=sendLevelB, chaos=walkJump | no progression | canonical
+Swing it | Swing | swing=playSwing, chaos=walkJump, repeat=walkHold | no progression | canonical
+Heavy shuffle | Swing | swing=playSwing, chaos=walkJump, repeat=walkHold | no progression | canonical
+Eighth swing | Swing | swing=playSwing, chaos=walkJump, repeat=walkHold | no progression | canonical
+Swung tape, as it was | Swing | swing=playSwing, chaos=walkJump, repeat=walkHold | no progression | canonical
+Swung breakdown, kept | Swing | swing=playSwing, chaos=walkJump, repeat=walkHold | no progression | canonical
+Swung breakdown, broken | Swing | swing=playSwing, chaos=walkJump, repeat=walkHold | no progression | canonical
+Straighten it | Swing | swing=playSwing, chaos=walkJump, repeat=walkHold | no progression | canonical
+Progression from hits | Harmony | tape rate=tapeFollow, swing=playSwing, space=sendLevelB | no progression | canonical
+ii–V–I–vi from hits | Harmony | chaos=walkJump, swing=playSwing, space=sendLevelB | no progression | canonical
+Hits, Sector'd | Harmony | chaos=walkJump, repeat=walkHold, throw=sendLevelA | no progression | canonical
+Progression as tape | Harmony | tape rate=tapeFollow, swing=playSwing, space=sendLevelB | no progression | canonical
+Chords swapped | Harmony | chaos=walkJump, swing=playSwing, space=sendLevelB | no progression | canonical
+Bar order 0 1 1 0 | Harmony | chaos=walkJump, swing=playSwing, space=sendLevelB | no progression | canonical
+Harmonic Sector | Harmony | repeat=walkHold, chaos=walkJump, space=sendLevelB | no progression | canonical
+Chord hops | Harmony | chaos=walkJump, home=walkHome, space=sendLevelB | no progression | canonical
+Comping stutter | Harmony | chaos=walkJump, repeat=walkHold, throw=sendLevelA | no progression | canonical
+Swung comping | Harmony | swing=playSwing, chaos=walkJump, space=sendLevelB | no progression | canonical
+Stabs to the room | Harmony | space=sendLevelB, chaos=walkJump, swing=playSwing | no progression | canonical
+Progression breakdown | Harmony | chaos=walkJump, repeat=walkHold, space=sendLevelB | no progression | canonical
+Attack wave | Envelope | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Crushed every fifth | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Pitch shadow | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Formant choir | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Cathedral | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Dub chamber | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Shredder | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Filter rain | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Leslie drift | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Tape saturation | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Tremolo bed | Effects | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Struck bar | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Dull thud | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Plucked chord | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | F#m(maj7) B7 E E (follow chord tones) | canonical
+Answer the chord | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | Bm Bm(maj7) Bdim F#m (follow root) | canonical
+One body, many strikes | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Reverse swell | Envelope | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Burst grains | Envelope | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Struck every fourth | Resonator | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+ii – V – I in E | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | F#m(maj7) B7 E E (follow off) | canonical
+Chromatic descent | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | Bm Bm(maj7) Bdim F#m (follow off) | canonical
+Diminished drift | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | C#dim F#dim D#m B7 (follow off) | canonical
+Wet progression | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | F#m(maj7) B7 E E (follow off) | canonical
+Everything at once | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | E D Bm E F#m(maj7) B7 E E (follow off) | canonical
+presets: 86 resolved

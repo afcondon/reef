@@ -468,3 +468,18 @@ echo "== conspicillumParameterRun (the parameter catalogue): node vs erl =="
   > /tmp/reef-conspicillum-parameter-erl.txt
 diff /tmp/reef-conspicillum-parameter-node.txt /tmp/reef-conspicillum-parameter-erl.txt && echo "  OK conspicillumParameterRun node == erl"
 diff "$CONSPICILLUM_PARAMETER_GOLDEN" /tmp/reef-conspicillum-parameter-node.txt && echo "  OK conspicillumParameterRun matches frozen golden"
+
+# --- Conspicillum presets (Reef.Conformance.conspicillumPresetRun) -----------
+# All the presets, resolved: each line parsed, each chord looked up, each knob
+# named. The presets are data in PureScript now, so this is also the check that
+# the BEAM can recall every one the page can.
+CONSPICILLUM_PRESET_GOLDEN="$REEF/conformance/conspicillum-preset-golden.txt"
+echo "== conspicillumPresetRun (every preset resolved): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumPresetRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumPresetRun);' \
+  ) > /tmp/reef-conspicillum-preset-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':conspicillumPresetRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-preset-erl.txt
+diff /tmp/reef-conspicillum-preset-node.txt /tmp/reef-conspicillum-preset-erl.txt && echo "  OK conspicillumPresetRun node == erl"
+diff "$CONSPICILLUM_PRESET_GOLDEN" /tmp/reef-conspicillum-preset-node.txt && echo "  OK conspicillumPresetRun matches frozen golden"

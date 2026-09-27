@@ -48,6 +48,7 @@ module Reef.Conformance
   , conspicillumWarpRun
   , conspicillumNotationRun
   , conspicillumParameterRun
+  , conspicillumPresetRun
   , conspicillumHarmonicRun, conspicillumProgression
   ) where
 
@@ -79,6 +80,8 @@ import Reef.Conspicillum.Corpus
   (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
 import Reef.Conspicillum.Notation as CN
 import Reef.Conspicillum.Parameter as PM
+import Reef.Conspicillum.Preset as PR
+import Reef.Conspicillum.Presets as PS
 import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noWarp, oneBar, rule) as CL
@@ -1381,3 +1384,27 @@ conspicillumParameterRun = intercalate "\n" (map one PM.allParameters <> decimal
     , "decimal " <> intercalate " " (map (Decimal.fixed 0) [ 0.5, -0.7, 12.49, 6850.0 ])
     , "decimal " <> intercalate " " (map (Decimal.trimmed 6) [ 1.0, 0.62, -0.1, 0.1234567, 1.9999999 ])
     ]
+
+
+-- ── Conspicillum presets (Reef.Conspicillum.Presets) ────────────────────────
+-- | Every preset resolved: its bank, its knobs by identifier, its progression,
+-- | and whether its line is already canonical (printing it back gives the text
+-- | it was written as). Then how many resolved. A line that will not parse or
+-- | a chord that does not exist shows as ERR, on both runtimes alike.
+conspicillumPresetRun :: String
+conspicillumPresetRun = intercalate "\n" (map one PS.presetSources <> [ total ])
+  where
+  one source = case PR.resolve source of
+    Left problem -> "ERR " <> problem
+    Right p -> intercalate " | "
+      [ p.name
+      , PR.bankName p.bank
+      , intercalate ", " (map (\k -> k.label <> "=" <> PM.identifier k.parameter) p.knobs)
+      , case p.progression of
+          Nothing -> "no progression"
+          Just pr -> intercalate " " (map _.name pr.chords) <> " (follow " <> PR.resonatorFollowName pr.resonatorFollows <> ")"
+      , if CN.print p.line == source.line then "canonical" else "REPRINTS AS " <> CN.print p.line
+      ]
+  total = case PS.presets of
+    Left problem -> "presets: ERR " <> problem
+    Right ps -> "presets: " <> show (length ps) <> " resolved"
