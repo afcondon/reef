@@ -8,15 +8,8 @@ module Reef.Odonus
   ( Cell
   , Head
   , Odonus
-  , ChordSeq
   , currentChordPCs
-  , setChordFeed
   , followChord
-  , tickChord
-  , toggleChord
-  , setChordPeriod
-  , chordPeriodMin
-  , chordPeriodMax
   , Pattern
   , patternLibrary
   , orderOf
@@ -151,21 +144,6 @@ type Head =
   , esteps :: Int   -- Euclidean step-count: the n in E(pulses, n) — INDEPENDENT of len, so E(5,12) etc.
   }
 
--- | A chord-progression quantiser overlay. When `on`, the output is snapped a
--- | second time — past the scale — to the tones of the current chord, across
--- | octaves. The progression is four chords drawn from Joe McMullen's Plaits
--- | "Yellow" table (`picks` = indices into `mcmullenYellow`), realised against
--- | the current root in Ionian — so it transposes with the key. It advances on
--- | its own clock: `phase` counts model steps and rolls `ix` every `period`.
-type ChordSeq =
-  { on :: Boolean
-  , feed :: Array (Array Int) -- the progression as explicit PC sets (0-11), the
-                              -- Vetula feed; empty when the overlay is off
-  , ix :: Int               -- current position in the progression
-  , phase :: Int            -- model steps since the chord last advanced
-  , period :: Int           -- steps per chord (its own clock, related to main)
-  }
-
 type Odonus =
   { cells :: Array Cell   -- length 16
   , heads :: Array Head
@@ -177,7 +155,9 @@ type Odonus =
   , octaveShift :: Int    -- global ± periods (coarse), applied in index space
   , degShift :: Int       -- global ± indices (fine scalar transpose)
   , gatePct :: Int        -- gated-note length as % of step spacing (>100 = legato)
-  , chord :: ChordSeq     -- the chord-progression quantiser overlay
+  , chord :: Maybe (Array Int) -- the chord the output snaps to past the scale (pitch
+                                -- classes, 0-11); filled each step from `harmony`
+                                -- by followHarmony. Nothing = the scale alone
   , harmony :: Maybe String -- a Tidal note pattern (`"<c'maj7 a'min7>/2"`) the
                             -- overlay follows; sampled by the host, see followHarmony
   }
@@ -223,9 +203,9 @@ renderCell o hd c =
         home = PS.realizeEqualShift scaleSet o.span knobMax o.degShift c.note
         target = home + hd.transp
         snapped =
-          if o.chord.on
-            then quantiseToChordPCs (currentChordPCs o) target
-            else quantiseToScale (scaleOf o) target
+          case o.chord of
+            Just pcs -> quantiseToChordPCs pcs target
+            Nothing -> quantiseToScale (scaleOf o) target
     in snapped + o.octaveShift * 12
 
 -- | The raw NOTE-knob ceiling. Cells hold a value in `0..knobMax`, shown on the
@@ -270,35 +250,18 @@ cellLabel :: Odonus -> Int -> Int
 cellLabel o knob =
   let
     h = PS.realizeEqualShift (effectivePitchSet o) o.span knobMax o.degShift (clampI 0 knobMax knob)
-    coloured = if o.chord.on then quantiseToChordPCs (currentChordPCs o) h else h
+    coloured = maybe h (\pcs -> quantiseToChordPCs pcs h) o.chord
   in coloured + o.octaveShift * 12
 
--- | The pitch classes (0..11) of the chord at the feed's current position. The
--- | feed (a Vetula progression) is absolute and used verbatim; an empty feed
--- | means no colour (the overlay is off).
+-- | The pitch classes (0..11) of the chord the output is snapping to; none
+-- | while it follows the scale alone.
 currentChordPCs :: Odonus -> Array Int
-currentChordPCs o = fromMaybe [] (o.chord.feed !! o.chord.ix)
+currentChordPCs o = fromMaybe [] o.chord
 
--- | How long the active progression (the Vetula feed) is.
-chordSeqLen :: ChordSeq -> Int
-chordSeqLen c = length c.feed
-
--- | Drive the quantiser from an external progression of explicit PC sets (the
--- | Vetula feed): adopt it, restart at its head, and switch the overlay on so
--- | it's audible immediately. An empty feed clears it and turns the overlay off.
-setChordFeed :: Array (Array Int) -> Odonus -> Odonus
-setChordFeed pcs o =
-  o { chord = o.chord { feed = pcs, ix = 0, phase = 0, on = not (null pcs) || o.chord.on } }
-
--- | Follow a single live chord from a Vetula voice (the live-follow bridge). A
--- | `Just pcs` installs it as a one-element feed with the overlay ON, so the
--- | output snaps to that chord; the shell overwrites it every poll as the voice
--- | advances. A `Nothing` (no voice followed) clears the feed and turns the
--- | overlay OFF — back to plain scale quantisation.
+-- | Snap to this chord past the scale (`Just pcs`), or to the scale alone.
+-- | `followHarmony` calls it each step with what the harmony pattern gives.
 followChord :: Maybe (Array Int) -> Odonus -> Odonus
-followChord mpcs o = case mpcs of
-  Just pcs -> o { chord = o.chord { feed = [ pcs ], ix = 0, phase = 0, on = true } }
-  Nothing -> o { chord = o.chord { feed = [], ix = 0, phase = 0, on = false } }
+followChord mpcs o = o { chord = mpcs }
 
 -- | Set (or, with `Nothing`, clear) the Tidal pattern the chord overlay
 -- | follows. Clearing turns the overlay off, back to the scale; setting leaves
@@ -322,37 +285,10 @@ followHarmony sample o = case o.harmony of
     [] -> followChord Nothing o
     pcs -> followChord (Just pcs) o
 
--- | The pitch classes the current harmony admits: the live chord if the chord
--- | overlay is running, else the whole scale. Used to seed a melodic line.
+-- | The pitch classes the current harmony admits: the chord if one is
+-- | sounding, else the whole scale. Used to seed a melodic line.
 harmonyPCs :: Odonus -> Array Int
-harmonyPCs o = if o.chord.on then currentChordPCs o else pitchClassesOf (scaleOf o)
-
-chordPeriodMin :: Int
-chordPeriodMin = 1
-
-chordPeriodMax :: Int
-chordPeriodMax = 64
-
--- | Advance the chord clock one model step: roll to the next chord when this
--- | one has held for `period` steps.
-tickChord :: Odonus -> Odonus
-tickChord o =
-  let
-    per = clampI chordPeriodMin chordPeriodMax o.chord.period
-    nCh = chordSeqLen o.chord
-    ph = o.chord.phase + 1
-  in
-    if nCh <= 0 then o
-    else if ph >= per then o { chord = o.chord { phase = 0, ix = (o.chord.ix + 1) `mod` nCh } }
-    else o { chord = o.chord { phase = ph } }
-
--- | Enable/disable the chord overlay, restarting the progression from its head.
-toggleChord :: Odonus -> Odonus
-toggleChord o = o { chord = o.chord { on = not o.chord.on, ix = 0, phase = 0 } }
-
--- | Set the chord clock's period (steps per chord), clamped to the musical range.
-setChordPeriod :: Int -> Odonus -> Odonus
-setChordPeriod v o = o { chord = o.chord { period = clampI chordPeriodMin chordPeriodMax v } }
+harmonyPCs o = fromMaybe (pitchClassesOf (scaleOf o)) o.chord
 
 speedTable :: Array Number
 speedTable = [ 0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 ]
@@ -400,11 +336,6 @@ defaultCells =
   mapWithIndex (\i _ -> { note: (i * knobMax) / 15, skip: false, gate: true, glide: false, dur: 1, ratchet: 1, vel: 100 })
     (replicate 16 unit)
 
--- | The chord overlay starts off, with an empty feed (a Vetula progression fills
--- | it). `period` is the feed's own advance clock (steps per chord).
-defaultChord :: ChordSeq
-defaultChord = { on: false, feed: [], ix: 0, phase: 0, period: 16 }
-
 defaultOdonus :: Odonus
 defaultOdonus =
   { cells: defaultCells, heads: defaultHeads
@@ -413,7 +344,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, chord: defaultChord, harmony: Nothing }
+  , octaveShift: 0, degShift: 0, gatePct: 90, chord: Nothing, harmony: Nothing }
 
 -- ---------------------------------------------------------------------------
 -- traversal — walk the head's pattern ordering, skip-aware

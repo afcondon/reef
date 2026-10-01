@@ -28,7 +28,6 @@ module Reef.Input
   , SimState
   , applyInput
   , applyInputs
-  , mkFollowChord
   , Tagged
   , WireInput
   , w0
@@ -51,13 +50,13 @@ import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, seedMelody, setAmt,
 import Reef.Marbles (Seed)
 import Reef.Odonus
   ( Odonus
-  , clearPitchSet, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets, followChord
+  , clearPitchSet, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
-  , setAllNotes, setCellDur, setCellRatchet, setCellVel, setChordFeed
-  , setChordPeriod, setDegShift, setHarmony, setGatePct, setHeadDir, setHeadEuclidSteps
+  , setAllNotes, setCellDur, setCellRatchet, setCellVel
+  , setDegShift, setHarmony, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
-  , spreadOctaves, staggerLengths, toggleChord, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
+  , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
   , toggleScaleNote, toggleSkip, unifyHeads
   )
 import Reef.PitchSet (PitchSet)
@@ -120,12 +119,10 @@ data Input
   | SetGatePct Int
   | SetPitchSet PitchSet
   | ClearPitchSet
-  -- chord overlay (the Vetula feed)
-  | SetChordFeed (Array (Array Int))
-  | FollowChord (Maybe (Array Int))
-  | ToggleChord
-  | SetChordPeriod Int
-  | SetHarmony (Maybe String) -- a Tidal note pattern the overlay follows (Reef.Move's `harmony`)
+  -- harmony: a Tidal note pattern the output snaps to past the scale (Reef.Move's
+  -- `harmony`, and Vetula's harmonic context). Replaced the chord overlay's feed,
+  -- period clock and FollowChord on 2026-10-01; their wire tags now decode to nothing.
+  | SetHarmony (Maybe String)
   -- Reichian phase macros
   | UnifyHeads
   | FanOffsets Int
@@ -149,15 +146,6 @@ data Input
 -- | this tick → identical evolution. The frontend tags with `currentTick + buffer`
 -- | (a small lookahead so both sides receive it first); see the plan, P4.
 type Tagged = { tick :: Int, input :: Input }
-
--- | Build the `FollowChord` input a → odo Vetula voice feeds Odonus's chord overlay
--- | (a single pitch-class set turning the overlay on). A tiny constructor helper so
--- | the BEAM `reef_vetula_voice` can mint the input to send `reef_voice` without
--- | knowing the ADT's Erlang representation — it just calls
--- | `reef_input@ps:mkFollowChord(Pcs)` with a reef `Array Int` and hands the result
--- | to `{apply_input, Tick, Input}`.
-mkFollowChord :: Array Int -> Input
-mkFollowChord pcs = FollowChord (Just pcs)
 
 -- ── the interpreter ──────────────────────────────────────────────────────────
 
@@ -206,10 +194,6 @@ applyInput = case _ of
   SetGatePct n -> onOdo (setGatePct n)
   SetPitchSet ps -> onOdo (setPitchSet ps)
   ClearPitchSet -> onOdo clearPitchSet
-  SetChordFeed pcs -> onOdo (setChordFeed pcs)
-  FollowChord mpcs -> onOdo (followChord mpcs)
-  ToggleChord -> onOdo toggleChord
-  SetChordPeriod v -> onOdo (setChordPeriod v)
   SetHarmony h -> onOdo (setHarmony h)
   UnifyHeads -> onOdo unifyHeads
   FanOffsets n -> onOdo (fanOffsets n)
@@ -246,13 +230,12 @@ type WireInput =
   , a :: Int                   -- first int arg / GenKind code / pitch-class / direction
   , b :: Int                   -- second int arg (value)
   , ns :: Array Int            -- SetNotes / SetChordPicks payload
-  , pcs :: Array (Array Int)   -- SetChordFeed; FollowChord uses [theSet] / [] for Just/Nothing
   , ps :: Maybe PitchSet       -- SetPitchSet payload
   , txt :: Maybe String        -- SetHarmony payload; absent on older frames
   }
 
 w0 :: WireInput
-w0 = { tag: "", a: 0, b: 0, ns: [], pcs: [], ps: Nothing, txt: Nothing }
+w0 = { tag: "", a: 0, b: 0, ns: [], ps: Nothing, txt: Nothing }
 
 -- GenKind ↔ Int via its position in `genKinds` (stable, the UI's own order).
 kindCode :: GenKind -> Int
@@ -297,12 +280,6 @@ toWire = case _ of
   SetGatePct n -> w0 { tag = "SetGatePct", a = n }
   SetPitchSet ps -> w0 { tag = "SetPitchSet", ps = Just ps }
   ClearPitchSet -> w0 { tag = "ClearPitchSet" }
-  SetChordFeed pcs -> w0 { tag = "SetChordFeed", pcs = pcs }
-  FollowChord mpcs -> w0 { tag = "FollowChord", pcs = case mpcs of
-                                                         Just pcs -> [ pcs ]
-                                                         Nothing -> [] }
-  ToggleChord -> w0 { tag = "ToggleChord" }
-  SetChordPeriod v -> w0 { tag = "SetChordPeriod", a = v }
   SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
@@ -358,10 +335,6 @@ fromWire w = case w.tag of
   "SetGatePct" -> Just (SetGatePct w.a)
   "SetPitchSet" -> map SetPitchSet w.ps
   "ClearPitchSet" -> Just ClearPitchSet
-  "SetChordFeed" -> Just (SetChordFeed w.pcs)
-  "FollowChord" -> Just (FollowChord (w.pcs !! 0))
-  "ToggleChord" -> Just ToggleChord
-  "SetChordPeriod" -> Just (SetChordPeriod w.a)
   "SetHarmony" -> Just (SetHarmony w.txt)
   "UnifyHeads" -> Just UnifyHeads
   "FanOffsets" -> Just (FanOffsets w.a)

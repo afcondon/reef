@@ -72,7 +72,7 @@ import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encode
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, stepTick)
-import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, mkFollowChord, toWire)
+import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
 import Reef.PitchSet (PitchSet(..))
 import Reef.Protocol (decodeInput, decodeSim, encodeInput)
 import Reef.Marbles (Seed, seedFrom, rollValue)
@@ -126,21 +126,22 @@ renderFired f =
 -- | The chord-quantised render golden — the coverage gap that let a wrong-octave
 -- | bug through (the chord overlay path renders pitches, but no golden exercised it:
 -- | `run` is chord-off, `inputRun` digests cell INDICES not sounding pitches). A → odo
--- | Vetula feed is simulated with `mkFollowChord` (turning the chord overlay on), then
+-- | Vetula feed is simulated by a harmony of one chord (`SetHarmony`, sampled by a
+-- | stub that always answers C major, as Littorina would for "c'maj"), then
 -- | 32 steps are rendered showing the SOUNDING pitch. This pins that the chord path
 -- | realizes the cell index to a melodic pitch and snaps it to the nearest chord tone
 -- | (sane octaves), and — via cross-runtime.sh — that node and the BEAM agree on it.
 chordRun :: String
 chordRun =
   let
-    s0 = applyInput (mkFollowChord [ 0, 4, 7 ])
+    s0 = applyInput (SetHarmony (Just "c'maj"))
       { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
     final = foldl advance { st: s0, out: [] } (range 1 steps)
   in
     intercalate "\n" final.out
   where
   advance acc i =
-    let r = stepTick acc.st
+    let r = stepTick (followHarmony (const [ 0, 4, 7 ]) acc.st)
     in { st: r.sim, out: snoc acc.out (renderStep i r.fired) }
 
 -- | Harmony as a Tidal pattern (`Reef.Odonus.followHarmony`). Reef cannot read
@@ -249,7 +250,7 @@ inputSteps :: Int
 inputSteps = 400
 
 -- | A scripted lockstep session: a tick-tagged stream of user actions covering
--- | every `Input` family — cell/head setters, the quantizer, the chord overlay,
+-- | every `Input` family — cell/head setters, the quantizer, the harmony,
 -- | the Reichian macros, gen-source config + the Marbles pad, and the three
 -- | seed-threading rolls (RollAllNotes / SeedMelody). Several land on
 -- | the same tick (a batch). Enabling GNotes at tick 30 also folds the one
@@ -269,9 +270,9 @@ inputScript =
   , { tick: 45, input: RollAllNotes }
   , { tick: 60, input: SetPitchSet (PitchSet { offsets: [ 0, 2, 4, 7, 9 ], root: 50, period: Just 12 }) }
   , { tick: 75, input: CyclePattern 0 }
-  , { tick: 90, input: SetChordFeed [ [ 0, 4, 7 ], [ 2, 5, 9 ] ] }
-  , { tick: 90, input: ToggleChord }
-  , { tick: 130, input: FollowChord (Just [ 0, 3, 7 ]) }
+  , { tick: 90, input: SetHarmony (Just "<c'maj d'min>") }
+  , { tick: 130, input: SetHarmony (Just "c'min") }
+  , { tick: 170, input: SetHarmony Nothing }
   , { tick: 150, input: ClearPitchSet }
   , { tick: 150, input: SeedMelody }
   , { tick: 175, input: FanOffsets 2 }
@@ -312,12 +313,20 @@ inputRun =
   advance acc i =
     let
       due = filter (\t -> t.tick == i) inputScript
-      s1 = foldl applyEncoded acc.st due
+      s1 = followHarmony (stubHarmony i) (foldl applyEncoded acc.st due)
       r = stepTick s1
       s2 = r.sim
       out' = if i `mod` sampleEvery == 0 then snoc acc.out (inputDigest i s2) else acc.out
     in
       { st: s2, out: out' }
+
+-- | What Littorina would sample at step `i` from the two harmonies the input
+-- | script sets (16 steps to the cycle): reef cannot read Tidal, so a stub.
+stubHarmony :: Int -> String -> Array Int
+stubHarmony i = case _ of
+  "<c'maj d'min>" -> if (i / 16) `mod` 2 == 0 then [ 0, 4, 7 ] else [ 2, 5, 9 ]
+  "c'min" -> [ 0, 3, 7 ]
+  _ -> []
 
 -- | A SimState digest: the Odonus fields (as in `digest`) plus the gen-source
 -- | config and the Marbles pad, so the gen-config inputs (ToggleGen / SetRate /
@@ -329,9 +338,8 @@ inputDigest i s =
   pad4 i <> " | k" <> show s.odo.rootPc <> " [" <> intercalate "," (map show s.odo.scaleIvls) <> "]"
     <> " s" <> show (round s.seed)
     <> " sp" <> show (round (s.spread * 1000.0)) <> " bi" <> show (round (s.bias * 1000.0))
-    -- chord clock: on-flag, position, and phase — makes the tickChord step in the
-    -- shared stepTick composite observable (it advances only when the overlay is on).
-    <> " ch" <> (if s.odo.chord.on then "1" else "0") <> show s.odo.chord.ix <> ":" <> show s.odo.chord.phase
+    -- the harmony and the chord it gives this step (followHarmony, before the step)
+    <> " h" <> maybe "-" identity s.odo.harmony <> " ch" <> maybe "-" (intercalate "," <<< map show) s.odo.chord
     <> " | " <> intercalate "," (map cellDig s.odo.cells)
     <> " | " <> intercalate "  " (mapWithIndex headDig s.odo.heads)
     <> " | " <> intercalate "," (map genDig s.gen)
@@ -351,8 +359,10 @@ simSteps = 400
 -- | `stepTick` from the reconstructed state. Byte-identical node ↔ BEAM proves the
 -- | BEAM's `decodeSim` rebuilds exactly the state the browser encoded AND evolves it
 -- | identically — i.e. the lockstep handoff lands the rig on the frontend's state.
+-- | (Its `chord` was the overlay's old record, off; since the feed/period clock
+-- | retired, 2026-10-01, the same state encodes it as `null`, no chord.)
 handoffJson :: String
-handoffJson = """{"spreadMille":500,"seedInt":7,"odo":{"span":3,"scaleIvls":[0,2,3,5,7,8,10],"rootPc":0,"octaveShift":0,"heads":[{"transp":0,"speedIx":4,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":0,"offset":0,"mute":false,"len":16,"esteps":16,"direction":0,"cursor":0,"accumulator":0,"etick":0},{"transp":7,"speedIx":2,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":1,"offset":0,"mute":true,"len":16,"esteps":16,"direction":0,"cursor":0,"accumulator":0,"etick":0},{"transp":-12,"speedIx":6,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":3,"offset":0,"mute":true,"len":16,"esteps":16,"direction":1,"cursor":0,"accumulator":0,"etick":0},{"transp":3,"speedIx":3,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":2,"offset":0,"mute":true,"len":16,"esteps":16,"direction":2,"cursor":0,"accumulator":0,"etick":0}],"gatePct":90,"dist":"natural","degShift":0,"chord":{"picks":[15,10,12,13],"phase":0,"period":16,"on":false,"ix":0,"feed":[]},"cells":[{"vel":100,"skip":false,"ratchet":1,"note":0,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":1,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":2,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":3,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":4,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":5,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":6,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":7,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":8,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":9,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":10,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":11,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":12,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":13,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":14,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":15,"glide":false,"gate":true,"dur":1}]},"gen":[{"rate":96,"on":false,"kind":0,"amt":20},{"rate":96,"on":true,"kind":1,"amt":30},{"rate":96,"on":true,"kind":2,"amt":30},{"rate":96,"on":true,"kind":3,"amt":30},{"rate":72,"on":true,"kind":4,"amt":25},{"rate":72,"on":true,"kind":5,"amt":25},{"rate":96,"on":true,"kind":6,"amt":30},{"rate":96,"on":true,"kind":7,"amt":40},{"rate":96,"on":true,"kind":8,"amt":30},{"rate":96,"on":true,"kind":9,"amt":30},{"rate":96,"on":true,"kind":10,"amt":25}],"biasMille":500,"frozen":false}"""
+handoffJson = """{"spreadMille":500,"seedInt":7,"odo":{"span":3,"scaleIvls":[0,2,3,5,7,8,10],"rootPc":0,"octaveShift":0,"heads":[{"transp":0,"speedIx":4,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":0,"offset":0,"mute":false,"len":16,"esteps":16,"direction":0,"cursor":0,"accumulator":0,"etick":0},{"transp":7,"speedIx":2,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":1,"offset":0,"mute":true,"len":16,"esteps":16,"direction":0,"cursor":0,"accumulator":0,"etick":0},{"transp":-12,"speedIx":6,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":3,"offset":0,"mute":true,"len":16,"esteps":16,"direction":1,"cursor":0,"accumulator":0,"etick":0},{"transp":3,"speedIx":3,"seqPos":0,"pulses":16,"pendStep":1,"patternIx":2,"offset":0,"mute":true,"len":16,"esteps":16,"direction":2,"cursor":0,"accumulator":0,"etick":0}],"gatePct":90,"dist":"natural","degShift":0,"chord":null,"cells":[{"vel":100,"skip":false,"ratchet":1,"note":0,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":1,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":2,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":3,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":4,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":5,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":6,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":7,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":8,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":9,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":10,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":11,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":12,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":13,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":14,"glide":false,"gate":true,"dur":1},{"vel":100,"skip":false,"ratchet":1,"note":15,"glide":false,"gate":true,"dur":1}]},"gen":[{"rate":96,"on":false,"kind":0,"amt":20},{"rate":96,"on":true,"kind":1,"amt":30},{"rate":96,"on":true,"kind":2,"amt":30},{"rate":96,"on":true,"kind":3,"amt":30},{"rate":72,"on":true,"kind":4,"amt":25},{"rate":72,"on":true,"kind":5,"amt":25},{"rate":96,"on":true,"kind":6,"amt":30},{"rate":96,"on":true,"kind":7,"amt":40},{"rate":96,"on":true,"kind":8,"amt":30},{"rate":96,"on":true,"kind":9,"amt":30},{"rate":96,"on":true,"kind":10,"amt":25}],"biasMille":500,"frozen":false}"""
 
 -- | Decode the handoff, then step it. A decode failure surfaces as a single
 -- | screaming line (so the golden/cross-runtime catches it) rather than silently
