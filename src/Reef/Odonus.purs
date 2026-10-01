@@ -53,6 +53,7 @@ module Reef.Odonus
   , headMask
   , setHeadMask
   , cyclePattern
+  , setHeadPattern
   , unifyHeads
   , fanOffsets
   , staggerLengths
@@ -648,6 +649,13 @@ setHeadMask :: Int -> Odonus -> Odonus
 setHeadMask mask o = o { heads = mapWithIndex setOne o.heads }
   where
   setOne i hd = hd { mute = and (shr mask i) 1 == 0 }
+
+-- | Set a head's access pattern by library index, clamped (resets its
+-- | position, as `cyclePattern` does). Idempotent, where cycling is not.
+setHeadPattern :: Int -> Int -> Odonus -> Odonus
+setHeadPattern h ix = editHead h \hd ->
+  let ni = max 0 (min (length patternLibrary - 1) ix)
+  in hd { patternIx = ni, seqPos = 0, cursor = gridAt (orderOf ni) 0 }
 
 -- | Advance a head to the next pattern in the library (resets its position).
 cyclePattern :: Int -> Odonus -> Odonus

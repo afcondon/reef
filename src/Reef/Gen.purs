@@ -27,6 +27,7 @@ module Reef.Gen
   , rateMax
   , periodOf
   , toggleGen
+  , setOn
   , setRate
   , setAmt
   , GenInput
@@ -130,6 +131,11 @@ quantizePeriod p
 -- | Flip a source's enable.
 toggleGen :: GenKind -> Array GenSource -> Array GenSource
 toggleGen k = map \s -> if s.kind == k then s { on = not s.on } else s
+
+-- | Switch a source on or off. Idempotent, where `toggleGen` is not, so a
+-- | line evaluated twice (`Reef.Move`) leaves it as the line says.
+setOn :: GenKind -> Boolean -> Array GenSource -> Array GenSource
+setOn k b = map \s -> if s.kind == k then s { on = b } else s
 
 -- | Set a source's rate index (from a drag on its bare-number control).
 setRate :: GenKind -> Int -> Array GenSource -> Array GenSource

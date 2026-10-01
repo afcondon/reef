@@ -47,11 +47,11 @@ import Data.Foldable (foldl)
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Traversable (traverse)
-import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, seedMelody, setAmt, setRate, toggleGen)
+import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, seedMelody, setAmt, setOn, setRate, toggleGen)
 import Reef.Marbles (Seed)
 import Reef.Odonus
   ( Odonus
-  , clearPitchSet, cyclePattern, cycleRoot, cycleScaleType, fanOffsets, followChord
+  , clearPitchSet, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets, followChord
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel, setChordFeed
   , setChordPeriod, setDegShift, setGatePct, setHeadDir, setHeadEuclidSteps
@@ -106,6 +106,7 @@ data Input
   | ToggleHeadMute Int
   | SetHeadMask Int
   | CyclePattern Int
+  | SetHeadPattern Int Int  -- head, library index (idempotent, for Reef.Move)
   -- quantizer
   | CycleRoot Int            -- direction
   | CycleScaleType Int
@@ -132,6 +133,7 @@ data Input
   | NudgeOffsets Int
   -- gen-source config (mutates the synced gen array)
   | ToggleGen GenKind
+  | SetGenOn GenKind Boolean -- idempotent, for Reef.Move
   | SetRate GenKind Int
   | SetAmt GenKind Int
   -- Marbles pad (per-mille on the wire → Number in state)
@@ -190,6 +192,7 @@ applyInput = case _ of
   ToggleHeadMute h -> onOdo (toggleHeadMute h)
   SetHeadMask m -> onOdo (setHeadMask m)
   CyclePattern h -> onOdo (cyclePattern h)
+  SetHeadPattern h ix -> onOdo (setHeadPattern h ix)
   CycleRoot d -> onOdo (cycleRoot d)
   CycleScaleType d -> onOdo (cycleScaleType d)
   SetRandScale ix -> onOdo (setRandScale ix)
@@ -212,6 +215,7 @@ applyInput = case _ of
   SpreadOctaves n -> onOdo (spreadOctaves n)
   NudgeOffsets d -> onOdo (nudgeOffsets d)
   ToggleGen k -> onGen (toggleGen k)
+  SetGenOn k b -> onGen (setOn k b)
   SetRate k v -> onGen (setRate k v)
   SetAmt k v -> onGen (setAmt k v)
   SetGenSpread m -> \s -> s { spread = toNumber m / 1000.0 }
@@ -277,6 +281,7 @@ toWire = case _ of
   ToggleHeadMute h -> w0 { tag = "ToggleHeadMute", a = h }
   SetHeadMask m -> w0 { tag = "SetHeadMask", a = m }
   CyclePattern h -> w0 { tag = "CyclePattern", a = h }
+  SetHeadPattern h ix -> w0 { tag = "SetHeadPattern", a = h, b = ix }
   CycleRoot d -> w0 { tag = "CycleRoot", a = d }
   CycleScaleType d -> w0 { tag = "CycleScaleType", a = d }
   SetRandScale ix -> w0 { tag = "SetRandScale", a = ix }
@@ -301,6 +306,7 @@ toWire = case _ of
   SpreadOctaves n -> w0 { tag = "SpreadOctaves", a = n }
   NudgeOffsets d -> w0 { tag = "NudgeOffsets", a = d }
   ToggleGen k -> w0 { tag = "ToggleGen", a = kindCode k }
+  SetGenOn k b -> w0 { tag = "SetGenOn", a = kindCode k, b = if b then 1 else 0 }
   SetRate k v -> w0 { tag = "SetRate", a = kindCode k, b = v }
   SetAmt k v -> w0 { tag = "SetAmt", a = kindCode k, b = v }
   SetGenSpread m -> w0 { tag = "SetGenSpread", a = m }
@@ -335,6 +341,7 @@ fromWire w = case w.tag of
   "ToggleHeadMute" -> Just (ToggleHeadMute w.a)
   "SetHeadMask" -> Just (SetHeadMask w.a)
   "CyclePattern" -> Just (CyclePattern w.a)
+  "SetHeadPattern" -> Just (SetHeadPattern w.a w.b)
   "CycleRoot" -> Just (CycleRoot w.a)
   "CycleScaleType" -> Just (CycleScaleType w.a)
   "SetRandScale" -> Just (SetRandScale w.a)
@@ -357,6 +364,7 @@ fromWire w = case w.tag of
   "SpreadOctaves" -> Just (SpreadOctaves w.a)
   "NudgeOffsets" -> Just (NudgeOffsets w.a)
   "ToggleGen" -> map ToggleGen (kindOf w.a)
+  "SetGenOn" -> map (\k -> SetGenOn k (w.b /= 0)) (kindOf w.a)
   "SetRate" -> map (\k -> SetRate k w.b) (kindOf w.a)
   "SetAmt" -> map (\k -> SetAmt k w.b) (kindOf w.a)
   "SetGenSpread" -> Just (SetGenSpread w.a)
