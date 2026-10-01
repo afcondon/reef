@@ -54,7 +54,7 @@ import Reef.Odonus
   , clearPitchSet, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets, followChord
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel, setChordFeed
-  , setChordPeriod, setDegShift, setGatePct, setHeadDir, setHeadEuclidSteps
+  , setChordPeriod, setDegShift, setHarmony, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleChord, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
@@ -125,6 +125,7 @@ data Input
   | FollowChord (Maybe (Array Int))
   | ToggleChord
   | SetChordPeriod Int
+  | SetHarmony (Maybe String) -- a Tidal note pattern the overlay follows (Reef.Move's `harmony`)
   -- Reichian phase macros
   | UnifyHeads
   | FanOffsets Int
@@ -209,6 +210,7 @@ applyInput = case _ of
   FollowChord mpcs -> onOdo (followChord mpcs)
   ToggleChord -> onOdo toggleChord
   SetChordPeriod v -> onOdo (setChordPeriod v)
+  SetHarmony h -> onOdo (setHarmony h)
   UnifyHeads -> onOdo unifyHeads
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
@@ -246,10 +248,11 @@ type WireInput =
   , ns :: Array Int            -- SetNotes / SetChordPicks payload
   , pcs :: Array (Array Int)   -- SetChordFeed; FollowChord uses [theSet] / [] for Just/Nothing
   , ps :: Maybe PitchSet       -- SetPitchSet payload
+  , txt :: Maybe String        -- SetHarmony payload; absent on older frames
   }
 
 w0 :: WireInput
-w0 = { tag: "", a: 0, b: 0, ns: [], pcs: [], ps: Nothing }
+w0 = { tag: "", a: 0, b: 0, ns: [], pcs: [], ps: Nothing, txt: Nothing }
 
 -- GenKind ↔ Int via its position in `genKinds` (stable, the UI's own order).
 kindCode :: GenKind -> Int
@@ -300,6 +303,7 @@ toWire = case _ of
                                                          Nothing -> [] }
   ToggleChord -> w0 { tag = "ToggleChord" }
   SetChordPeriod v -> w0 { tag = "SetChordPeriod", a = v }
+  SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
@@ -358,6 +362,7 @@ fromWire w = case w.tag of
   "FollowChord" -> Just (FollowChord (w.pcs !! 0))
   "ToggleChord" -> Just ToggleChord
   "SetChordPeriod" -> Just (SetChordPeriod w.a)
+  "SetHarmony" -> Just (SetHarmony w.txt)
   "UnifyHeads" -> Just UnifyHeads
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)

@@ -12,7 +12,7 @@ import Data.Int (toNumber)
 import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -178,6 +178,12 @@ main = do
   assertEqual' "Odonus chord-quantised render golden (FollowChord + pitch, 32 steps)"
     { actual: chordRun, expected: chordGolden }
   log "Reef Odonus chord-quantised render golden: OK"
+  -- Harmony as a Tidal pattern: the overlay follows what the host's sampler
+  -- reads at each step (a stub here; Littorina in the hosts), rests on the
+  -- scale, and lets go when cleared. SetHarmony crosses the wire codec.
+  assertEqual' "Odonus harmony golden (followHarmony, 40 steps)"
+    { actual: harmonyRun, expected: harmonyGolden }
+  log "Reef Odonus harmony golden: OK"
   -- Protocol round-trip: encode -> decode -> re-encode must reproduce the
   -- original JSON, proving the wire codec is faithful for the full Odonus
   -- record. (Odonus has no Show, so we compare the canonical JSON form.)
@@ -1436,6 +1442,50 @@ vetulaGolden = """   0 | 0 0 0 0 0 | odo0 [0,4,7]
  125 | 3 3 3 3 0 | odo3 [11,2,6]
  126 | 3 3 3 3 0 | odo3 [11,2,6]
  127 | 3 3 3 3 0 | odo3 [11,2,6]"""
+
+-- | The frozen harmony golden (`harmonyRun`): C major and E minor alternating
+-- | every eight steps, a rest on the C-minor scale at 20-25, cleared from 34.
+harmonyGolden :: String
+harmonyGolden = """  1 | h0 p52 d1 r1 v100
+  2 | h0 p52 d1 r1 v100
+  3 | h0 p55 d1 r1 v100
+  4 | h0 p55 d1 r1 v100
+  5 | h0 p60 d1 r1 v100
+  6 | h0 p64 d1 r1 v100
+  7 | h0 p64 d1 r1 v100
+  8 | h0 p67 d1 r1 v100
+  9 | h0 p67 d1 r1 v100
+ 10 | h0 p71 d1 r1 v100
+ 11 | h0 p76 d1 r1 v100
+ 12 | h0 p76 d1 r1 v100
+ 13 | h0 p79 d1 r1 v100
+ 14 | h0 p79 d1 r1 v100
+ 15 | h0 p83 d1 r1 v100
+ 16 | h0 p48 d1 r1 v100
+ 17 | h0 p52 d1 r1 v100
+ 18 | h0 p52 d1 r1 v100
+ 19 | h0 p55 d1 r1 v100
+ 20 | h0 p56 d1 r1 v100
+ 21 | h0 p58 d1 r1 v100
+ 22 | h0 p62 d1 r1 v100
+ 23 | h0 p63 d1 r1 v100
+ 24 | h0 p67 d1 r1 v100
+ 25 | h0 p68 d1 r1 v100
+ 26 | h0 p71 d1 r1 v100
+ 27 | h0 p76 d1 r1 v100
+ 28 | h0 p76 d1 r1 v100
+ 29 | h0 p79 d1 r1 v100
+ 30 | h0 p79 d1 r1 v100
+ 31 | h0 p83 d1 r1 v100
+ 32 | h0 p48 d1 r1 v100
+ 33 | h0 p52 d1 r1 v100
+ 34 | h0 p51 d1 r1 v100
+ 35 | h0 p55 d1 r1 v100
+ 36 | h0 p56 d1 r1 v100
+ 37 | h0 p58 d1 r1 v100
+ 38 | h0 p62 d1 r1 v100
+ 39 | h0 p63 d1 r1 v100
+ 40 | h0 p67 d1 r1 v100"""
 
 -- | The frozen chord-quantised render golden. `chordRun` feeds a C-major triad via
 -- | mkFollowChord (chord overlay on) and renders 32 steps of sounding pitch. Sane

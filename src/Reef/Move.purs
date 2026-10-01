@@ -4,6 +4,7 @@
 -- |     odonus $ unison # phase 2
 -- |     odonus $ notes low # mutate notes 30
 -- |     odonus $ for 4 (mutate notes 30)
+-- |     odonus $ harmony "<c'maj7 a'min7>/2" # mutate notes 20
 -- |
 -- | Clicking the same controls one at a time is a sequence of small
 -- | modulations, each heard as it happens; a move changes them together, on
@@ -24,6 +25,12 @@
 -- | notes a mutation produced, or a unison, stay. That is the point of
 -- | "mutate for a bit": the line evolves out of where it was and keeps what it
 -- | found.
+-- |
+-- | **Harmony.** `harmony "PATTERN"` gives Odonus a Tidal note pattern to
+-- | quantise to, as `note` would read it; `harmony off` returns it to its
+-- | scale. Reef stores the text and never reads it: the host samples it each
+-- | step with Littorina (`Reef.Odonus.followHarmony`), and rejects a pattern
+-- | Tidal would refuse before the move is sent.
 module Reef.Move
   ( Move(..)
   , parse
@@ -35,7 +42,7 @@ module Reef.Move
 
 import Prelude
 
-import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, null, reverse, snoc, uncons, (!!))
+import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, null, reverse, snoc, takeWhile, uncons, (!!))
 import Data.Either (Either(..))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -93,6 +100,7 @@ restore is s = concatMap undo is
     SetHeadPattern i _ -> catMaybes [ (\h -> SetHeadPattern i h.patternIx) <$> heads !! i ]
     SetHeadTransp i _ -> catMaybes [ (\h -> SetHeadTransp i h.transp) <$> heads !! i ]
     SetGatePct _ -> [ SetGatePct s.odo.gatePct ]
+    SetHarmony _ -> [ SetHarmony s.odo.harmony ]
     _ -> []
   genBack k = case gen k of
     Just g -> [ SetGenOn k g.on, SetAmt k g.amt, SetRate k g.rate ]
@@ -117,6 +125,7 @@ verbs =
   , "transp N N N N"
   , "len N N N N"
   , "offset N N N N"
+  , "harmony \"PATTERN\" | off"
   , "for BARS (MOVE)"
   ]
 
@@ -179,16 +188,26 @@ traverseInts ws = go [] ws
 
 -- ── the line ─────────────────────────────────────────────────────────────────
 
-data Token = Word String | Dot | Hash | Open | Close
+data Token = Word String | Quoted String | Dot | Hash | Open | Close
 
 derive instance Eq Token
 
-tokenize :: String -> Array Token
+-- | Words and operators; a `"..."` is one token whatever it holds, so a
+-- | pattern's `.` and spaces stay its own.
+tokenize :: String -> Either String (Array Token)
 tokenize src = go [] (CU.toCharArray src) ""
   where
   go acc cs w = case uncons cs of
-    Nothing -> flush acc w
+    Nothing -> Right (flush acc w)
     Just { head: c, tail } -> case c of
+      '"' ->
+        let
+          body = CU.fromCharArray (takeWhile (_ /= '"') tail)
+          after = drop (CU.length body) tail
+        in
+          case uncons after of
+            Just { tail: rest } -> go (snoc (flush acc w) (Quoted body)) rest ""
+            Nothing -> Left "unclosed '\"'"
       '.' -> go (snoc (flush acc w) Dot) tail ""
       '#' -> go (snoc (flush acc w) Hash) tail ""
       '(' -> go (snoc (flush acc w) Open) tail ""
@@ -204,7 +223,8 @@ parse src = do
     body = case String.stripPrefix (String.Pattern "odonus") (String.trim src) of
       Just rest -> fromMaybe rest (String.stripPrefix (String.Pattern "$") (String.trim rest))
       Nothing -> src
-  { move, rest } <- hashChain (tokenize body)
+  tokens <- tokenize body
+  { move, rest } <- hashChain tokens
   if null rest then Right move else Left "unexpected ')' or trailing words"
 
 type P = Array Token -> Either String { move :: Move, rest :: Array Token }
@@ -244,6 +264,10 @@ term ts = case uncons ts of
       r <- term after
       Right { move: For bars r.move, rest: r.rest }
     _ -> Left "for BARS (MOVE)"
+  Just { head: Word "harmony", tail } -> case uncons tail of
+    Just { head: Quoted p, tail: after } -> Right { move: Gestures [ SetHarmony (Just p) ], rest: after }
+    Just { head: Word "off", tail: after } -> Right { move: Gestures [ SetHarmony Nothing ], rest: after }
+    _ -> Left "harmony takes a pattern in quotes (\"<c'maj7 a'min7>/2\") or off"
   Just { head: Word name, tail } ->
     let
       args = wordsWhile tail

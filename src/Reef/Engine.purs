@@ -24,10 +24,12 @@
 module Reef.Engine
   ( SimState
   , stepTick
+  , followHarmony
   ) where
 
 import Reef.Gen (GenInput, runGen)
 import Reef.Odonus (Fired, stepEmit, tickChord)
+import Reef.Odonus (followHarmony) as Odonus
 
 -- | The whole synced state a tick advances: the Odonus record, the gen-source
 -- | config, the Marbles pad (spread/bias), and the shared PRNG seed. Structurally
@@ -48,3 +50,10 @@ stepTick s =
     r = stepEmit o1
   in
     { sim: s { odo = r.odo, seed = g.seed }, fired: r.fired }
+
+-- | The host's half of harmony-as-a-pattern (`Reef.Odonus.followHarmony`):
+-- | before `stepTick`, let the chord overlay follow the harmony pattern as the
+-- | host's Tidal reader samples it at this step. Both hosts call it at the same
+-- | place in the step, after the step's inputs, so lockstep holds.
+followHarmony :: (String -> Array Int) -> SimState -> SimState
+followHarmony sample s = s { odo = Odonus.followHarmony sample s.odo }

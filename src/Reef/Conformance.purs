@@ -39,6 +39,7 @@ module Reef.Conformance
   , vetulaRun, vetulaRunSteps
   , vetulaMidiRun
   , chordRun
+  , harmonyRun
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
@@ -70,8 +71,8 @@ import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
 import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encodeDrumRouting) as RR
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
-import Reef.Engine (stepTick)
-import Reef.Input (Input(..), SimState, Tagged, applyInput, mkFollowChord)
+import Reef.Engine (followHarmony, stepTick)
+import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, mkFollowChord, toWire)
 import Reef.PitchSet (PitchSet(..))
 import Reef.Protocol (decodeInput, decodeSim, encodeInput)
 import Reef.Marbles (Seed, seedFrom, rollValue)
@@ -141,6 +142,38 @@ chordRun =
   advance acc i =
     let r = stepTick acc.st
     in { st: r.sim, out: snoc acc.out (renderStep i r.fired) }
+
+-- | Harmony as a Tidal pattern (`Reef.Odonus.followHarmony`). Reef cannot read
+-- | Tidal, so a stub stands in for the host's Littorina sampler: the pattern
+-- | `"<c'maj e'min>"` gives C major for eight steps, then E minor; anything
+-- | else reads as a rest (no pitch classes), which falls back to the scale.
+-- | Each `SetHarmony` passes through the wire codec first. Steps 1-19 follow
+-- | the pattern, 20-25 rest on the scale, 26-33 follow again, and from 34 the
+-- | harmony is cleared.
+harmonyRun :: String
+harmonyRun =
+  let
+    s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 1 40)
+  in
+    intercalate "\n" final.out
+  where
+  script i = case i of
+    1 -> [ SetHarmony (Just "<c'maj e'min>") ]
+    20 -> [ SetHarmony (Just "~") ]
+    26 -> [ SetHarmony (Just "<c'maj e'min>") ]
+    34 -> [ SetHarmony Nothing ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  sample i txt
+    | txt == "<c'maj e'min>" = if (i / 8) `mod` 2 == 0 then [ 0, 4, 7 ] else [ 4, 7, 11 ]
+    | otherwise = []
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick (followHarmony (sample i) st1)
+    in
+      { st: r.sim, out: snoc acc.out (renderStep i r.fired) }
 
 -- ── 2. the long generative determinism net ───────────────────────────────────
 

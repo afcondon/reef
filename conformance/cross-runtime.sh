@@ -48,6 +48,20 @@ echo "== chordRun (32-step chord-quantised render): node vs erl =="
 diff /tmp/reef-chord-node.txt /tmp/reef-chord-erl.txt && echo "  \u2705 chordRun node == erl (chord-quantise render identical over 32 steps)"
 diff "$CHORD_GOLDEN" /tmp/reef-chord-node.txt && echo "  \u2705 chordRun matches frozen golden"
 
+# --- harmony as a Tidal pattern (Reef.Conformance.harmonyRun) ----------------
+# The chord overlay following a host-sampled harmony (a stub sampler stands in
+# for Littorina), SetHarmony through the wire codec, 40 steps of sounding pitch.
+HARMONY_GOLDEN="$REEF/conformance/harmony-golden.txt"
+echo "== harmonyRun (40-step harmony-following render): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { harmonyRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(harmonyRun);' \
+  ) > /tmp/reef-harmony-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':harmonyRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-harmony-erl.txt
+diff /tmp/reef-harmony-node.txt /tmp/reef-harmony-erl.txt && echo "  \u2705 harmonyRun node == erl"
+diff "$HARMONY_GOLDEN" /tmp/reef-harmony-node.txt && echo "  \u2705 harmonyRun matches frozen golden"
+
 # --- PitchSet quantisation table (Reef.PitchSetGolden.tableRender) -----------
 # The agreed quantisation examples — literal offsets, flat-equal mapping, finite
 # vs periodic, octave vs period-19. Pure, so it must render identically on both

@@ -64,6 +64,8 @@ module Reef.Odonus
   , renderCell
   , knobMax
   , effectivePitchSet
+  , setHarmony
+  , followHarmony
   , setPitchSet
   , clearPitchSet
   , cellIndexMax
@@ -176,6 +178,8 @@ type Odonus =
   , degShift :: Int       -- global ± indices (fine scalar transpose)
   , gatePct :: Int        -- gated-note length as % of step spacing (>100 = legato)
   , chord :: ChordSeq     -- the chord-progression quantiser overlay
+  , harmony :: Maybe String -- a Tidal note pattern (`"<c'maj7 a'min7>/2"`) the
+                            -- overlay follows; sampled by the host, see followHarmony
   }
 
 -- | The active scale built from the root + interval mask.
@@ -296,6 +300,28 @@ followChord mpcs o = case mpcs of
   Just pcs -> o { chord = o.chord { feed = [ pcs ], ix = 0, phase = 0, on = true } }
   Nothing -> o { chord = o.chord { feed = [], ix = 0, phase = 0, on = false } }
 
+-- | Set (or, with `Nothing`, clear) the Tidal pattern the chord overlay
+-- | follows. Clearing turns the overlay off, back to the scale; setting leaves
+-- | it for `followHarmony` to fill on the next step.
+setHarmony :: Maybe String -> Odonus -> Odonus
+setHarmony h o = case h of
+  Just _ -> o { harmony = h }
+  Nothing -> followChord Nothing o { harmony = Nothing }
+
+-- | **Harmony as a Tidal pattern.** Reef cannot read Tidal (Littorina is GPL
+-- | and reef is not), so the host that steps the machine supplies the reader:
+-- | `sample` turns the pattern text into the pitch classes sounding at this
+-- | step (`Tidal.Harmony.harmonyAt` in purerl-tidal and Triggerfish alike,
+-- | which run the same engine on the BEAM and JS). The overlay follows that
+-- | chord; an empty set (a rest, or text the host cannot read) falls back to
+-- | the scale. No harmony set: unchanged. Called before each step.
+followHarmony :: (String -> Array Int) -> Odonus -> Odonus
+followHarmony sample o = case o.harmony of
+  Nothing -> o
+  Just txt -> case sample txt of
+    [] -> followChord Nothing o
+    pcs -> followChord (Just pcs) o
+
 -- | The pitch classes the current harmony admits: the live chord if the chord
 -- | overlay is running, else the whole scale. Used to seed a melodic line.
 harmonyPCs :: Odonus -> Array Int
@@ -387,7 +413,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, chord: defaultChord }
+  , octaveShift: 0, degShift: 0, gatePct: 90, chord: defaultChord, harmony: Nothing }
 
 -- ---------------------------------------------------------------------------
 -- traversal — walk the head's pattern ordering, skip-aware
