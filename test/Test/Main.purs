@@ -12,6 +12,8 @@ import Data.Int (toNumber)
 import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
+import Data.Maybe (Maybe(..))
+import Reef.Balistes.Kit (laneOfName)
 import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
@@ -272,6 +274,11 @@ main = do
   assertEqual' "Balistes fixed-rhythm golden (codec + renderFixed, 128 steps)"
     { actual: fixedRun, expected: fixedGolden }
   log "Reef Balistes fixed-rhythm golden: OK"
+  -- The drum kit's lane names, as a Tidal `drums $ s "…"` line addresses them.
+  assertEqual' "Balistes kit: lanes by name and Dirt-Samples alias"
+    { actual: map laneOfName [ "bd", "BD", "sn", "sd", "hh", "oh", "rim", "cb", "arpy" ]
+    , expected: [ Just 0, Just 0, Just 1, Just 1, Just 4, Just 6, Just 3, Just 13, Nothing ] }
+  log "Reef Balistes kit names: OK"
   -- The Vetula performance-scheduler net (Vetula lockstep V1). A representative
   -- performance (one progression fanned to voices with different per-chord dwell
   -- schedules + skips + phase offsets) round-tripped through Reef.Vetula.Protocol,
