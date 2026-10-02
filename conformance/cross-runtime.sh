@@ -62,6 +62,20 @@ echo "== harmonyRun (40-step harmony-following render): node vs erl =="
 diff /tmp/reef-harmony-node.txt /tmp/reef-harmony-erl.txt && echo "  \u2705 harmonyRun node == erl"
 diff "$HARMONY_GOLDEN" /tmp/reef-harmony-node.txt && echo "  \u2705 harmonyRun matches frozen golden"
 
+# --- scales by name (Reef.Conformance.scaleRun) -----------------------------
+# The scale following a host-sampled pattern of scale names (a stub sampler
+# stands in for Littorina), SetScalePattern through the wire codec, 40 steps.
+SCALE_GOLDEN="$REEF/conformance/scale-golden.txt"
+echo "== scaleRun (40-step scale-pattern render): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { scaleRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(scaleRun);' \
+  ) > /tmp/reef-scale-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':scaleRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-scale-erl.txt
+diff /tmp/reef-scale-node.txt /tmp/reef-scale-erl.txt && echo "  \u2705 scaleRun node == erl"
+diff "$SCALE_GOLDEN" /tmp/reef-scale-node.txt && echo "  \u2705 scaleRun matches frozen golden"
+
 # --- PitchSet quantisation table (Reef.PitchSetGolden.tableRender) -----------
 # The agreed quantisation examples — literal offsets, flat-equal mapping, finite
 # vs periodic, octave vs period-19. Pure, so it must render identically on both

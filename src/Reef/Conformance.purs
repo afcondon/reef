@@ -40,6 +40,7 @@ module Reef.Conformance
   , vetulaMidiRun
   , chordRun
   , harmonyRun
+  , scaleRun
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
@@ -71,7 +72,7 @@ import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
 import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encodeDrumRouting) as RR
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
-import Reef.Engine (followHarmony, stepTick)
+import Reef.Engine (followHarmony, followScale, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
 import Reef.PitchSet (PitchSet(..))
 import Reef.Protocol (decodeInput, decodeSim, encodeInput)
@@ -175,6 +176,44 @@ harmonyRun =
       r = stepTick (followHarmony (sample i) st1)
     in
       { st: r.sim, out: snoc acc.out (renderStep i r.fired) }
+
+-- | Scales by name (`Reef.Odonus.followScale`). A stub stands in for the
+-- | host's Littorina sampler: `"<dorian lydian>"` gives dorian for eight
+-- | steps, then lydian; anything else is a rest, which keeps the scale. Each
+-- | input passes through the wire codec. Step 1 takes the pattern, 12 moves
+-- | the root, 20 rests, 26 toggles a note by hand (which takes the scale from
+-- | the pattern), 30 takes it again, 36 lets go (back to the toggled scale).
+scaleRun :: String
+scaleRun =
+  let
+    s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 1 40)
+  in
+    intercalate "\n" final.out
+  where
+  script i = case i of
+    1 -> [ SetScalePattern (Just "<dorian lydian>") ]
+    12 -> [ SetRoot 2 ]
+    20 -> [ SetScalePattern (Just "~") ]
+    26 -> [ ToggleScaleNote 1 ]
+    30 -> [ SetScalePattern (Just "<dorian lydian>") ]
+    36 -> [ SetScalePattern Nothing ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  sample i txt
+    | txt == "<dorian lydian>" = if (i / 8) `mod` 2 == 0 then [ 0, 2, 3, 5, 7, 9, 10 ] else [ 0, 2, 4, 6, 7, 9, 11 ]
+    | otherwise = []
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick (followScale (sample i) st1)
+      o = r.sim.odo
+    in
+      { st: r.sim
+      , out: snoc acc.out (renderStep i r.fired <> " | k" <> show o.rootPc
+          <> " [" <> intercalate "," (map show o.scaleIvls) <> "] "
+          <> maybe "-" identity o.scalePattern)
+      }
 
 -- ── 2. the long generative determinism net ───────────────────────────────────
 

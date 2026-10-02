@@ -59,6 +59,9 @@ module Reef.Odonus
   , effectivePitchSet
   , setHarmony
   , followHarmony
+  , setScalePattern
+  , followScale
+  , releaseScale
   , setPitchSet
   , clearPitchSet
   , cellIndexMax
@@ -160,6 +163,11 @@ type Odonus =
                                 -- by followHarmony. Nothing = the scale alone
   , harmony :: Maybe String -- a Tidal note pattern (`"<c'maj7 a'min7>/2"`) the
                             -- overlay follows; sampled by the host, see followHarmony
+  , scalePattern :: Maybe String -- a pattern of Tidal scale names (`"<dorian
+                                 -- mixolydian>/4"`) scaleIvls follows; sampled
+                                 -- by the host, see followScale
+  , scaleHeld :: Maybe (Array Int) -- the authored scale, kept while a pattern
+                                   -- plays it; `scale off` puts it back
   }
 
 -- | The active scale built from the root + interval mask.
@@ -285,6 +293,35 @@ followHarmony sample o = case o.harmony of
     [] -> followChord Nothing o
     pcs -> followChord (Just pcs) o
 
+-- | **Scales by name, as a Tidal pattern.** `setScalePattern (Just "<dorian
+-- | mixolydian>/4")` hands the scale to a pattern of Tidal's scale names: the
+-- | host samples it each step (`Tidal.Scales.scaleSampler`, Littorina) and
+-- | `followScale` writes the steps into `scaleIvls`, so the grid re-indexes
+-- | as a hand-picked scale would. The root stays Odonus's own (`rootPc`), as
+-- | Tidal adds a root to `scale` as a note. The scale authored before is kept
+-- | (`scaleHeld`) and `Nothing` puts it back. Taking the pattern also drops an
+-- | explicit pitch set (a Vetula feed), which would otherwise mask it: the
+-- | last writer wins.
+setScalePattern :: Maybe String -> Odonus -> Odonus
+setScalePattern p o = case p of
+  Just _ -> o { scalePattern = p, scaleHeld = Just (fromMaybe o.scaleIvls o.scaleHeld), pitchSet = Nothing }
+  Nothing -> o { scalePattern = Nothing, scaleIvls = fromMaybe o.scaleIvls o.scaleHeld, scaleHeld = Nothing }
+
+-- | The host's sample of the scale pattern for this step: the steps of the
+-- | scale named there (0 first). Empty (a rest, or text the host cannot
+-- | read) keeps the scale as it is. Called before each step.
+followScale :: (String -> Array Int) -> Odonus -> Odonus
+followScale sample o = case o.scalePattern of
+  Nothing -> o
+  Just txt -> case sample txt of
+    [] -> o
+    ivls -> o { scaleIvls = normaliseIvls ivls }
+
+-- | A hand on the scale (cycle, toggle, spread, randomise) takes it from the
+-- | pattern: the scale it is playing now becomes the authored one.
+releaseScale :: Odonus -> Odonus
+releaseScale o = o { scalePattern = Nothing, scaleHeld = Nothing }
+
 -- | The pitch classes the current harmony admits: the chord if one is
 -- | sounding, else the whole scale. Used to seed a melodic line.
 harmonyPCs :: Odonus -> Array Int
@@ -344,7 +381,8 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, chord: Nothing, harmony: Nothing }
+  , octaveShift: 0, degShift: 0, gatePct: 90, chord: Nothing, harmony: Nothing
+  , scalePattern: Nothing, scaleHeld: Nothing }
 
 -- ---------------------------------------------------------------------------
 -- traversal — walk the head's pattern ordering, skip-aware

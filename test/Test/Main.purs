@@ -12,7 +12,7 @@ import Data.Int (toNumber)
 import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -184,6 +184,12 @@ main = do
   assertEqual' "Odonus harmony golden (followHarmony, 40 steps)"
     { actual: harmonyRun, expected: harmonyGolden }
   log "Reef Odonus harmony golden: OK"
+  -- Scales by name: the scale follows the host-sampled pattern of names,
+  -- holds through a rest, yields to a hand on the scale, and lets go back
+  -- to the authored scale. SetScalePattern crosses the wire codec.
+  assertEqual' "Odonus scale-pattern golden (followScale, 40 steps)"
+    { actual: scaleRun, expected: scaleGolden }
+  log "Reef Odonus scale-pattern golden: OK"
   -- Protocol round-trip: encode -> decode -> re-encode must reproduce the
   -- original JSON, proving the wire codec is faithful for the full Odonus
   -- record. (Odonus has no Show, so we compare the canonical JSON form.)
@@ -1442,6 +1448,51 @@ vetulaGolden = """   0 | 0 0 0 0 0 | odo0 [0,4,7]
  125 | 3 3 3 3 0 | odo3 [11,2,6]
  126 | 3 3 3 3 0 | odo3 [11,2,6]
  127 | 3 3 3 3 0 | odo3 [11,2,6]"""
+
+-- | The frozen scale-pattern golden (`scaleRun`): dorian and lydian alternating
+-- | every eight steps, the root to D at 12, a rest from 20, a hand toggle at 26
+-- | (adds the 11), the pattern again at 30, let go at 36.
+scaleGolden :: String
+scaleGolden = """  1 | h0 p50 d1 r1 v100 | k0 [0,2,3,5,7,9,10] <dorian lydian>
+  2 | h0 p51 d1 r1 v100 | k0 [0,2,3,5,7,9,10] <dorian lydian>
+  3 | h0 p55 d1 r1 v100 | k0 [0,2,3,5,7,9,10] <dorian lydian>
+  4 | h0 p57 d1 r1 v100 | k0 [0,2,3,5,7,9,10] <dorian lydian>
+  5 | h0 p58 d1 r1 v100 | k0 [0,2,3,5,7,9,10] <dorian lydian>
+  6 | h0 p62 d1 r1 v100 | k0 [0,2,3,5,7,9,10] <dorian lydian>
+  7 | h0 p63 d1 r1 v100 | k0 [0,2,3,5,7,9,10] <dorian lydian>
+  8 | h0 p67 d1 r1 v100 | k0 [0,2,4,6,7,9,11] <dorian lydian>
+  9 | h0 p69 d1 r1 v100 | k0 [0,2,4,6,7,9,11] <dorian lydian>
+ 10 | h0 p71 d1 r1 v100 | k0 [0,2,4,6,7,9,11] <dorian lydian>
+ 11 | h0 p74 d1 r1 v100 | k0 [0,2,4,6,7,9,11] <dorian lydian>
+ 12 | h0 p78 d1 r1 v100 | k2 [0,2,4,6,7,9,11] <dorian lydian>
+ 13 | h0 p81 d1 r1 v100 | k2 [0,2,4,6,7,9,11] <dorian lydian>
+ 14 | h0 p83 d1 r1 v100 | k2 [0,2,4,6,7,9,11] <dorian lydian>
+ 15 | h0 p85 d1 r1 v100 | k2 [0,2,4,6,7,9,11] <dorian lydian>
+ 16 | h0 p50 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 17 | h0 p52 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 18 | h0 p53 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 19 | h0 p57 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 20 | h0 p59 d1 r1 v100 | k2 [0,2,3,5,7,9,10] ~
+ 21 | h0 p60 d1 r1 v100 | k2 [0,2,3,5,7,9,10] ~
+ 22 | h0 p64 d1 r1 v100 | k2 [0,2,3,5,7,9,10] ~
+ 23 | h0 p65 d1 r1 v100 | k2 [0,2,3,5,7,9,10] ~
+ 24 | h0 p69 d1 r1 v100 | k2 [0,2,3,5,7,9,10] ~
+ 25 | h0 p71 d1 r1 v100 | k2 [0,2,3,5,7,9,10] ~
+ 26 | h0 p73 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 27 | h0 p76 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 28 | h0 p79 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 29 | h0 p81 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 30 | h0 p83 d1 r1 v100 | k2 [0,2,4,6,7,9,11] <dorian lydian>
+ 31 | h0 p85 d1 r1 v100 | k2 [0,2,4,6,7,9,11] <dorian lydian>
+ 32 | h0 p50 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 33 | h0 p52 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 34 | h0 p53 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 35 | h0 p57 d1 r1 v100 | k2 [0,2,3,5,7,9,10] <dorian lydian>
+ 36 | h0 p60 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 37 | h0 p61 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 38 | h0 p64 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 39 | h0 p67 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -
+ 40 | h0 p69 d1 r1 v100 | k2 [0,2,3,5,7,9,10,11] -"""
 
 -- | The frozen harmony golden (`harmonyRun`): C major and E minor alternating
 -- | every eight steps, a rest on the C-minor scale at 20-25, cleared from 34.

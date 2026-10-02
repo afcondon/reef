@@ -31,6 +31,12 @@
 -- | scale. Reef stores the text and never reads it: the host samples it each
 -- | step with Littorina (`Reef.Odonus.followHarmony`), and rejects a pattern
 -- | Tidal would refuse before the move is sent.
+-- |
+-- | **Scales by name.** `scale "<dorian mixolydian>/4"` gives the grid's scale
+-- | to a pattern of Tidal's scale names (`Tidal.Scales`), sampled by the host
+-- | the same way; `scale off` returns to the scale set by hand. The root is
+-- | separate, as in Tidal, where it is added as a note: `root d`, `root fs`,
+-- | `root 2` (a pitch class, C = 0).
 module Reef.Move
   ( Move(..)
   , parse
@@ -42,6 +48,7 @@ module Reef.Move
 
 import Prelude
 
+import Data.Foldable (foldl)
 import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, null, reverse, snoc, takeWhile, uncons, (!!))
 import Data.Either (Either(..))
 import Data.Int as Int
@@ -101,6 +108,8 @@ restore is s = concatMap undo is
     SetHeadTransp i _ -> catMaybes [ (\h -> SetHeadTransp i h.transp) <$> heads !! i ]
     SetGatePct _ -> [ SetGatePct s.odo.gatePct ]
     SetHarmony _ -> [ SetHarmony s.odo.harmony ]
+    SetScalePattern _ -> [ SetScalePattern s.odo.scalePattern ]
+    SetRoot _ -> [ SetRoot s.odo.rootPc ]
     _ -> []
   genBack k = case gen k of
     Just g -> [ SetGenOn k g.on, SetAmt k g.amt, SetRate k g.rate ]
@@ -126,6 +135,8 @@ verbs =
   , "len N N N N"
   , "offset N N N N"
   , "harmony \"PATTERN\" | off"
+  , "scale \"PATTERN\" | off"
+  , "root NOTE"
   , "for BARS (MOVE)"
   ]
 
@@ -164,6 +175,7 @@ verb name args = case name, args of
   "transp", ns | not (null ns) -> perHead SetHeadTransp ns
   "len", ns | not (null ns) -> perHead SetHeadLen ns
   "offset", ns | not (null ns) -> perHead SetHeadOffset ns
+  "root", [ w ] -> one SetRoot <$> pitchClass w
   _, _ ->
     if isVerb name then Left ("'" <> name <> "' takes: " <> usage name)
     else Left ("no verb '" <> name <> "' (try " <> String.joinWith ", " verbs <> ")")
@@ -178,6 +190,33 @@ int :: String -> Either String Int
 int w = case Int.fromString w of
   Just n -> Right n
   Nothing -> Left ("'" <> w <> "' is not a whole number")
+
+-- | A root: a pitch class (`2`), or a note name as Tidal spells one, a
+-- | letter then any of `s` (sharp), `f` (flat), `n` (natural), and an octave,
+-- | which a pitch class ignores (`d`, `fs`, `bf`, `c5`).
+pitchClass :: String -> Either String Int
+pitchClass w = case Int.fromString w of
+  Just n -> Right (((n `mod` 12) + 12) `mod` 12)
+  Nothing -> case CU.uncons w of
+    Just { head: l, tail } | Just base <- letter l ->
+      let
+        mods = CU.takeWhile (\c -> c == 's' || c == 'f' || c == 'n') tail
+        octave = CU.drop (CU.length mods) tail
+        shift = foldl (\acc c -> acc + (if c == 's' then 1 else if c == 'f' then -1 else 0)) 0 (CU.toCharArray mods)
+      in
+        if octave == "" || Int.fromString octave /= Nothing then Right ((((base + shift) `mod` 12) + 12) `mod` 12)
+        else Left ("'" <> w <> "' is not a note name")
+    _ -> Left ("'" <> w <> "' is not a note name or a pitch class")
+  where
+  letter = case _ of
+    'c' -> Just 0
+    'd' -> Just 2
+    'e' -> Just 4
+    'f' -> Just 5
+    'g' -> Just 7
+    'a' -> Just 9
+    'b' -> Just 11
+    _ -> Nothing
 
 traverseInts :: Array String -> Either String (Array Int)
 traverseInts ws = go [] ws
@@ -268,6 +307,10 @@ term ts = case uncons ts of
     Just { head: Quoted p, tail: after } -> Right { move: Gestures [ SetHarmony (Just p) ], rest: after }
     Just { head: Word "off", tail: after } -> Right { move: Gestures [ SetHarmony Nothing ], rest: after }
     _ -> Left "harmony takes a pattern in quotes (\"<c'maj7 a'min7>/2\") or off"
+  Just { head: Word "scale", tail } -> case uncons tail of
+    Just { head: Quoted p, tail: after } -> Right { move: Gestures [ SetScalePattern (Just p) ], rest: after }
+    Just { head: Word "off", tail: after } -> Right { move: Gestures [ SetScalePattern Nothing ], rest: after }
+    _ -> Left "scale takes a pattern of scale names in quotes (\"<dorian mixolydian>/4\") or off"
   Just { head: Word name, tail } ->
     let
       args = wordsWhile tail

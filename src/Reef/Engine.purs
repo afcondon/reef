@@ -27,11 +27,12 @@ module Reef.Engine
   ( SimState
   , stepTick
   , followHarmony
+  , followScale
   ) where
 
 import Reef.Gen (GenInput, runGen)
 import Reef.Odonus (Fired, stepEmit)
-import Reef.Odonus (followHarmony) as Odonus
+import Reef.Odonus (followHarmony, followScale) as Odonus
 
 -- | The whole synced state a tick advances: the Odonus record, the gen-source
 -- | config, the Marbles pad (spread/bias), and the shared PRNG seed. Structurally
@@ -58,3 +59,9 @@ stepTick s =
 -- | place in the step, after the step's inputs, so lockstep holds.
 followHarmony :: (String -> Array Int) -> SimState -> SimState
 followHarmony sample s = s { odo = Odonus.followHarmony sample s.odo }
+
+-- | The same for the scale pattern (`Reef.Odonus.followScale`): `sample`
+-- | gives the steps of the scale named at this step. Before `followHarmony`,
+-- | which snaps past the scale.
+followScale :: (String -> Array Int) -> SimState -> SimState
+followScale sample s = s { odo = Odonus.followScale sample s.odo }

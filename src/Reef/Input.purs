@@ -53,7 +53,7 @@ import Reef.Odonus
   , clearPitchSet, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
-  , setDegShift, setHarmony, setGatePct, setHeadDir, setHeadEuclidSteps
+  , setDegShift, setHarmony, setScalePattern, releaseScale, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
@@ -123,6 +123,9 @@ data Input
   -- `harmony`, and Vetula's harmonic context). Replaced the chord overlay's feed,
   -- period clock and FollowChord on 2026-10-01; their wire tags now decode to nothing.
   | SetHarmony (Maybe String)
+  -- a pattern of Tidal scale names the scale follows (Reef.Move's `scale`);
+  -- Nothing returns to the authored scale. Shares the `txt` wire field.
+  | SetScalePattern (Maybe String)
   -- Reichian phase macros
   | UnifyHeads
   | FanOffsets Int
@@ -183,18 +186,20 @@ applyInput = case _ of
   CyclePattern h -> onOdo (cyclePattern h)
   SetHeadPattern h ix -> onOdo (setHeadPattern h ix)
   CycleRoot d -> onOdo (cycleRoot d)
-  CycleScaleType d -> onOdo (cycleScaleType d)
-  SetRandScale ix -> onOdo (setRandScale ix)
-  ToggleScaleNote pc -> onOdo (toggleScaleNote pc)
-  SetSpread k -> onOdo (setSpread k)
+  -- a hand on the scale takes it from a scale pattern (releaseScale)
+  CycleScaleType d -> onOdo (cycleScaleType d <<< releaseScale)
+  SetRandScale ix -> onOdo (setRandScale ix <<< releaseScale)
+  ToggleScaleNote pc -> onOdo (toggleScaleNote pc <<< releaseScale)
+  SetSpread k -> onOdo (setSpread k <<< releaseScale)
   ToggleDistribution -> onOdo toggleDistribution
   SetRoot pc -> onOdo (setRoot pc)
   SetOctaveShift n -> onOdo (setOctaveShift n)
   SetDegShift n -> onOdo (setDegShift n)
   SetGatePct n -> onOdo (setGatePct n)
-  SetPitchSet ps -> onOdo (setPitchSet ps)
+  SetPitchSet ps -> onOdo (setPitchSet ps <<< releaseScale)
   ClearPitchSet -> onOdo clearPitchSet
   SetHarmony h -> onOdo (setHarmony h)
+  SetScalePattern p -> onOdo (setScalePattern p)
   UnifyHeads -> onOdo unifyHeads
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
@@ -231,7 +236,7 @@ type WireInput =
   , b :: Int                   -- second int arg (value)
   , ns :: Array Int            -- SetNotes / SetChordPicks payload
   , ps :: Maybe PitchSet       -- SetPitchSet payload
-  , txt :: Maybe String        -- SetHarmony payload; absent on older frames
+  , txt :: Maybe String        -- SetHarmony / SetScalePattern payload; absent on older frames
   }
 
 w0 :: WireInput
@@ -281,6 +286,7 @@ toWire = case _ of
   SetPitchSet ps -> w0 { tag = "SetPitchSet", ps = Just ps }
   ClearPitchSet -> w0 { tag = "ClearPitchSet" }
   SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
+  SetScalePattern p -> w0 { tag = "SetScalePattern", txt = p }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
@@ -336,6 +342,7 @@ fromWire w = case w.tag of
   "SetPitchSet" -> map SetPitchSet w.ps
   "ClearPitchSet" -> Just ClearPitchSet
   "SetHarmony" -> Just (SetHarmony w.txt)
+  "SetScalePattern" -> Just (SetScalePattern w.txt)
   "UnifyHeads" -> Just UnifyHeads
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)
