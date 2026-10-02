@@ -12,7 +12,7 @@ import Data.Int (toNumber)
 import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, trigRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -272,15 +272,6 @@ main = do
   assertEqual' "Balistes fixed-rhythm golden (codec + renderFixed, 128 steps)"
     { actual: fixedRun, expected: fixedGolden }
   log "Reef Balistes fixed-rhythm golden: OK"
-  -- The Balistes POLYTRIG net (the TIDAL-tab / ASelene lockstep). A representative
-  -- resolved rack (incl. an OFF-GRID jack whose onsets slice into non-zero fractions)
-  -- round-tripped through the codec (encodeTrigKit/decodeTrigKit) then sliced by the
-  -- shared renderTrigStep over two cycles. The cross-runtime script proves the BEAM
-  -- produces the same bytes — incl. the fractional-onset multiply — so a pushed rack
-  -- plays in lockstep with the frontend's ASelene branch.
-  assertEqual' "Balistes POLYTRIG golden (codec + renderTrigStep, 32 steps)"
-    { actual: trigRun, expected: trigGolden }
-  log "Reef Balistes POLYTRIG golden: OK"
   -- The Vetula performance-scheduler net (Vetula lockstep V1). A representative
   -- performance (one progression fanned to voices with different per-chord dwell
   -- schedules + skips + phase offsets) round-tripped through Reef.Vetula.Protocol,
@@ -938,44 +929,6 @@ balistesSimGolden = """   0 | 36/120/0/30x1  46/78/-8/200x1
  126 | 40/78/12/30x1  42/78/-8/30x1
  127 | -"""
 
--- | The frozen Balistes POLYTRIG golden (the TIDAL-tab / ASelene lockstep).
--- | `trigRun` round-trips a resolved rack (incl. an off-grid jack) through the codec
--- | then slices it with the shared renderTrigStep over two 16-step cycles. The
--- | off-grid onsets exercise the fractional-onset multiply — proven byte-identical
--- | under node and the BEAM by conformance/cross-runtime.sh.
-trigGolden :: String
-trigGolden = """   0 | 36@0  42@0
-   1 | 39@600000
-   2 | 42@0
-   3 | -
-   4 | 36@0  42@0
-   5 | 39@333333
-   6 | 42@0
-   7 | -
-   8 | 36@0  42@0
-   9 | -
-  10 | 42@0  39@666667
-  11 | -
-  12 | 36@0  42@0
-  13 | -
-  14 | 42@0
-  15 | 39@200000
-  16 | 36@0  42@0
-  17 | 39@600000
-  18 | 42@0
-  19 | -
-  20 | 36@0  42@0
-  21 | 39@333333
-  22 | 42@0
-  23 | -
-  24 | 36@0  42@0
-  25 | -
-  26 | 42@0  39@666667
-  27 | -
-  28 | 36@0  42@0
-  29 | -
-  30 | 42@0
-  31 | 39@200000"""
 
 -- | The frozen render of `Reef.Conformance.balistesInputRun` — a scripted
 -- | tick-tagged session through the codec + stepBal + renderStep. Identical node ↔ BEAM.

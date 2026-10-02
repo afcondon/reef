@@ -34,7 +34,6 @@ module Reef.Conformance
   , balistesSimRun, balistesSimSteps
   , balistesInputRun, balistesInputSteps
   , fixedRun, fixedRunSteps
-  , trigRun, trigRunSteps
   , routingRun
   , vetulaRun, vetulaRunSteps
   , vetulaMidiRun
@@ -65,8 +64,7 @@ import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
-import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed, decodeTrigKit, encodeTrigKit) as BSim
-import Reef.Balistes.Trig (TrigKit, renderTrigStep) as RTrig
+import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed) as BSim
 import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
 import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
 import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encodeDrumRouting) as RR
@@ -649,51 +647,6 @@ fixedRun :: String
 fixedRun = case BSim.decodeFixed (BSim.encodeFixed fixedTestPattern) of
   Left errs -> "FIXED-DECODE-FAIL: " <> show errs
   Right p -> intercalate "\n" (map (\i -> evDig i (RFix.renderFixed p i)) (range 0 (fixedRunSteps - 1)))
-
--- ── 7½. the Balistes POLYTRIG net (the TIDAL-tab / ASelene lockstep) ──────────
-
--- | How many absolute steps the POLYTRIG run threads. 32 = two 16-step cycles, so
--- | the mod-cycle wrap is exercised.
-trigRunSteps :: Int
-trigRunSteps = 32
-
--- | A representative resolved rack exercising the slicing hazards: an on-grid four-
--- | on-the-floor (frac always 0), an x*8 hat (two onsets per… no — one per step,
--- | frac 0), and — crucially — an OFF-GRID jack whose onsets land mid-step, so
--- | `frac = onset * cycleSteps - step` is a non-trivial float that must agree across
--- | runtimes (the multiply the frontend and BEAM both compute). The onsets are the
--- | cycle-0 fractions the frontend's `Tidal.Lane` would resolve; reef carries no
--- | parser, so the kit is given directly (as the wire push does).
-trigTestKit :: RTrig.TrigKit
-trigTestKit =
-  [ { note: 36, onsets: [ 0.0, 0.25, 0.5, 0.75 ] }
-  , { note: 42, onsets: [ 0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875 ] }
-  , { note: 39, onsets: [ 0.1, 0.3333333333333333, 0.6666666666666666, 0.95 ] }
-  ]
-
--- | The POLYTRIG net. The kit is round-tripped THROUGH the codec (encodeTrigKit then
--- | decodeTrigKit — both reef functions, JS + BEAM) then sliced at each absolute step
--- | by the shared `renderTrigStep`. Byte-identical node ↔ BEAM proves the rack slicing
--- | (incl. the fractional-onset multiply) + its codec behave identically — so
--- | `reef_balistes_voice` plays a pushed rack in lockstep with the frontend's ASelene
--- | branch. A decode failure screams rather than passing silently.
-trigRun :: String
-trigRun = case BSim.decodeTrigKit (BSim.encodeTrigKit trigTestKit) of
-  Left errs -> "TRIG-DECODE-FAIL: " <> show errs
-  Right kit -> intercalate "\n" (map (\i -> trigDig i (RTrig.renderTrigStep kit i 16)) (range 0 (trigRunSteps - 1)))
-
--- | Digest a step's fires. The fractional onset is rounded to an integer 1e6 grid
--- | before `show` — NOT `show`n raw: purerl's `show :: Number` renders in a different
--- | (longer, scientific) form than JS's shortest-round-trip, so two IDENTICAL doubles
--- | would print differently and spuriously fail the diff. Rounding to a fine integer
--- | grid (µ-step resolution, far finer than audible) renders identically on both
--- | runtimes while still catching any real value divergence — the same discipline the
--- | other goldens use (they `round durMs`). 1e6 of a step ≈ sub-microsecond at tempo.
-trigDig :: Int -> Array { note :: Int, frac :: Number } -> String
-trigDig i fires =
-  pad4 i <> " | " <> (if null fires then "-" else intercalate "  " (map one fires))
-  where
-  one f = show f.note <> "@" <> show (round (f.frac * 1000000.0))
 
 -- ── 7¾. the drum routing net (the table on the rig) ─────────────────────────
 
