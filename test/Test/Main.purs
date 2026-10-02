@@ -14,7 +14,7 @@ import Effect (Effect)
 import Effect.Console (log)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Kit (laneOfName)
-import Reef.Conformance (outScaleRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -284,6 +284,10 @@ main = do
   assertEqual' "Odonus outScale golden (sample + wire + q2, 36 steps)"
     { actual: outScaleRun, expected: outScaleGolden }
   log "Reef Odonus outScale golden: OK"
+  -- Harmony routes: parse, print, and the inputs a change makes.
+  assertEqual' "Harmony routes golden (Reef.Route)"
+    { actual: routeRun, expected: routeGolden }
+  log "Reef harmony routes golden: OK"
   -- The Vetula performance-scheduler net (Vetula lockstep V1). A representative
   -- performance (one progression fanned to voices with different per-chord dwell
   -- schedules + skips + phase offsets) round-tripped through Reef.Vetula.Protocol,
@@ -1826,3 +1830,13 @@ outScaleGolden = """  1 | h0 p50 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydia
  34 | h0 p51 d1 r1 v100 | out [] - -
  35 | h0 p55 d1 r1 v100 | out [] - -
  36 | h0 p56 d1 r1 v100 | out [] - -"""
+
+-- | The frozen golden for `routeRun` (conformance/route-golden.txt).
+routeGolden :: String
+routeGolden = """   0 |  | 
+   1 | odonus.grid <- scale "<dorian lydian>/4" d ; odonus.out <- vetula 3 | SetScalePattern(<dorian lydian>/4),SetRoot@2,SetHarmony,SetOutScale@0
+   2 | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | SetScalePattern(dorian),SetRoot@2,SetHarmony(<c'maj7 a'min7>/2)
+   3 | odonus.out <- scale "major" g | SetScalePattern,SetOutScale(major)@7
+   4 | refused: odonus.grid takes a scale (scale "…" or vetula key), not a harmony
+   5 | refused: no input 'odonus.side' (odonus.grid, odonus.out)
+   6 | odonus.grid <- vetula key | SetScalePattern"""

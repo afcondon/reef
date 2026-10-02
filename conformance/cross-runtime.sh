@@ -257,6 +257,19 @@ echo "== outScaleRun (36-step output scale): node vs erl =="
 diff /tmp/reef-outscale-node.txt /tmp/reef-outscale-erl.txt && echo "  ✅ outScaleRun node == erl"
 diff "$OUTSCALE_GOLDEN" /tmp/reef-outscale-node.txt && echo "  ✅ outScaleRun matches frozen golden"
 
+# --- harmony routes (Reef.Conformance.routeRun) ------------------------------
+# The router's table as text: the rig parses what the page writes.
+ROUTE_GOLDEN="$REEF/conformance/route-golden.txt"
+echo "== routeRun (harmony routes: parse, print, inputs): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { routeRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(routeRun);' \
+  ) > /tmp/reef-route-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':routeRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-route-erl.txt
+diff /tmp/reef-route-node.txt /tmp/reef-route-erl.txt && echo "  ✅ routeRun node == erl"
+diff "$ROUTE_GOLDEN" /tmp/reef-route-node.txt && echo "  ✅ routeRun matches frozen golden"
+
 # --- drum routing net (Reef.Conformance.routingRun) ---------------------------
 # The routing table on the rig. A table with every kind of leg the rig plays (a
 # kick doubled across two ports with a trim, FH-2 gate selectors, a Rample voice

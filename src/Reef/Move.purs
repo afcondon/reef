@@ -44,6 +44,7 @@ module Reef.Move
   , Scheduled
   , schedule
   , verbs
+  , pitchClass
   ) where
 
 import Prelude

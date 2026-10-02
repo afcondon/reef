@@ -41,6 +41,7 @@ module Reef.Conformance
   , harmonyRun
   , scaleRun
   , outScaleRun
+  , routeRun
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
@@ -59,7 +60,9 @@ module Reef.Conformance
 import Prelude
 
 import Data.Array (filter, find, length, null, range, snoc, mapWithIndex, (!!))
-import Data.Either (Either(..))
+import Data.Either (Either(..), either)
+import Data.String as String
+import Reef.Route as Route
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -251,6 +254,28 @@ outScaleRun =
           <> maybe "-" (\out -> out.pattern <> "@" <> show out.root) o.outScale
           <> " " <> maybe "-" identity o.harmony)
       }
+
+-- | Harmony routes (`Reef.Route`): each table parsed, printed back, and the
+-- | Odonus inputs that take the previous table to it, as wire tags. The rig
+-- | parses what the router page writes, so both must read a table alike.
+routeRun :: String
+routeRun = intercalate "\n" (map one (range 0 (length tables - 1)))
+  where
+  tables =
+    [ ""
+    , "odonus.grid <- scale \"<dorian lydian>/4\" d\nodonus.out <- vetula 3"
+    , "-- a comment\nodonus.out <- harmony \"<c'maj7 a'min7>/2\"\nodonus.grid <- scale \"dorian\" d"
+    , "odonus.out <- scale \"minPent\" fs\nodonus.out <- scale \"major\" 7"
+    , "odonus.grid <- harmony \"c'maj\""
+    , "odonus.side <- vetula key"
+    , "odonus.grid <- vetula key"
+    ]
+  parsed i = maybe (Right []) Route.parse (tables !! i)
+  prev i = if i == 0 then [] else either (const []) identity (parsed (i - 1))
+  one i = pad4 i <> " | " <> case parsed i of
+    Left why -> "refused: " <> why
+    Right rs -> String.replaceAll (String.Pattern "\n") (String.Replacement " ; ") (Route.print rs)
+      <> " | " <> intercalate "," (map (\inp -> let w = toWire inp in w.tag <> maybe "" (\t -> "(" <> t <> ")") w.txt <> (if w.tag == "SetRoot" || w.tag == "SetOutScale" then "@" <> show w.a else "")) (Route.odonusInputs (prev i) rs))
 
 -- ── 2. the long generative determinism net ───────────────────────────────────
 
