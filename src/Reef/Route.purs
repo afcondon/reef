@@ -17,32 +17,49 @@
 -- |     odonus.grid <- scale "<dorian lydian>/4" d
 -- |     odonus.out <- vetula 3
 -- |
--- | The rig applies a change as Odonus inputs (`odonusInputs`), the same
--- | gestures `odonus $ scale …` and `harmony …` make. Vetula's sources are
--- | conducted from Vetula, so they make no inputs here.
+-- | The rig applies a change as Odonus inputs, the same gestures `odonus $
+-- | scale …` and `harmony …` make. Vetula's two sources need what Vetula is
+-- | doing, which the rig knows and reef does not: its key (the stage object
+-- | `vetula/key`, `parseKey`) and each voice's chords as a harmony pattern
+-- | (the rig reads a card with Tidal). The rig hands them over as a `Context`;
+-- | `resolve` turns the routes into what each input is fed (`Feeds`), and
+-- | `feedInputs` gives the inputs that move Odonus from one to the next, so a
+-- | card edited under a route re-feeds Odonus as a changed route does.
 module Reef.Route
   ( Input(..)
   , Source(..)
   , Route
   , Routes
+  , Key
+  , Context
+  , Feed(..)
+  , Feeds
   , inputName
   , parse
   , print
   , sourceOf
+  , setRoute
+  , parseKey
+  , printKey
+  , noContext
+  , resolve
+  , feedInputs
   , odonusInputs
   ) where
 
 import Prelude
 
-import Data.Array (filter, find, foldl, index, mapMaybe)
+import Data.Array (filter, find, foldl, index, mapMaybe, nub, sort)
+import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String (Pattern(..), joinWith, lastIndexOf, indexOf, split, trim)
 import Data.String.CodeUnits as CU
 import Data.Traversable (traverse)
 import Reef.Input as I
 import Reef.Move (pitchClass)
+import Reef.PitchSet (PitchSet(..))
 
 data Input = OdonusGrid | OdonusOut
 
@@ -133,22 +150,88 @@ print rs = joinWith "\n" (map one rs)
 noteName :: Int -> String
 noteName pc = fromMaybe (show pc) (index [ "c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b" ] pc)
 
--- | The Odonus inputs that take it from the routes `old` to `new`: for each
--- | input whose source changed, what its new source sets, or, with none, what
--- | returns it to the hand-set scale. Vetula's sources set nothing here (Vetula
--- | conducts them), but routing one in still releases what fed the input.
-odonusInputs :: Routes -> Routes -> Array I.Input
-odonusInputs old new = grid <> out
+-- | Route `input` to `source`, replacing what fed it; inputs stay in order.
+setRoute :: Input -> Source -> Routes -> Routes
+setRoute input source routes =
+  mapMaybe (\i -> find (\r -> r.input == i) others) inputs
   where
-  changed i = sourceOf i old /= sourceOf i new
+  others = filter (\r -> r.input /= input) routes <> [ { input, source } ]
+
+-- | Vetula's key: a root (pitch class) and the scale's steps above it.
+type Key = { root :: Int, offsets :: Array Int }
+
+-- | The key as the stage keeps it (`vetula/key`): the root, then the steps,
+-- | `d 0 2 3 5 7 9 10`. The root reads as `pitchClass` does (`c`, `fs`, `bf`,
+-- | or 0-11); steps are taken mod 12, sorted, and always hold the root.
+parseKey :: String -> Either String Key
+parseKey t = case filter (_ /= "") (split (Pattern " ") (trim t)) of
+  [] -> Left "a key is ROOT STEPS…: d 0 2 3 5 7 9 10"
+  ws -> do
+    root <- pitchClass (fromMaybe "" (Array.head ws))
+    steps <- traverse step (Array.drop 1 ws)
+    pure { root, offsets: sort (nub ([ 0 ] <> map (\n -> ((n `mod` 12) + 12) `mod` 12) steps)) }
+  where
+  step w = case Int.fromString w of
+    Just n -> Right n
+    Nothing -> Left ("a key's steps are numbers: '" <> w <> "'")
+
+printKey :: Key -> String
+printKey k = joinWith " " ([ noteName k.root ] <> map show k.offsets)
+
+-- | What the rig knows of Vetula: its key, if the page has said, and the
+-- | harmony each voice (by channel) is playing, as a Tidal note pattern.
+type Context =
+  { key :: Maybe Key
+  , voices :: Array { channel :: Int, harmony :: String }
+  }
+
+noContext :: Context
+noContext = { key: Nothing, voices: [] }
+
+-- | What an input is fed. `Unfed` is no route, or a Vetula source with
+-- | nothing behind it: the input follows Odonus's hand-set scale.
+data Feed
+  = FeedScale { pattern :: String, root :: Int }
+  | FeedHarmony String
+  | FeedKey Key
+  | Unfed
+
+derive instance Eq Feed
+
+type Feeds = { grid :: Feed, out :: Feed }
+
+resolve :: Context -> Routes -> Feeds
+resolve ctx rs = { grid: feed (sourceOf OdonusGrid rs), out: feed (sourceOf OdonusOut rs) }
+  where
+  feed = case _ of
+    Just (Scale s) -> FeedScale s
+    Just (Harmony h) -> FeedHarmony h
+    Just VetulaKey -> maybe Unfed FeedKey ctx.key
+    Just (VetulaVoice n) -> maybe Unfed (FeedHarmony <<< _.harmony) (find (\v -> v.channel == n) ctx.voices)
+    Nothing -> Unfed
+
+-- | The Odonus inputs that take it from feeding `old` to feeding `new`: for
+-- | each input whose feed changed, what the new one sets, or, with none, what
+-- | returns it to the hand-set scale. Each clears what the others set, since
+-- | an explicit pitch set wins over the scale, and an output scale over a
+-- | harmony.
+feedInputs :: Feeds -> Feeds -> Array I.Input
+feedInputs old new = grid <> out
+  where
   grid
-    | not (changed OdonusGrid) = []
-    | otherwise = case sourceOf OdonusGrid new of
-        Just (Scale s) -> [ I.SetScalePattern (Just s.pattern), I.SetRoot s.root ]
-        _ -> [ I.SetScalePattern Nothing ]
+    | old.grid == new.grid = []
+    | otherwise = case new.grid of
+        FeedScale s -> [ I.ClearPitchSet, I.SetScalePattern (Just s.pattern), I.SetRoot s.root ]
+        FeedKey k -> [ I.SetScalePattern Nothing, I.SetPitchSet (PitchSet { offsets: k.offsets, root: 48 + k.root, period: Just 12 }) ]
+        _ -> [ I.ClearPitchSet, I.SetScalePattern Nothing ]
   out
-    | not (changed OdonusOut) = []
-    | otherwise = case sourceOf OdonusOut new of
-        Just (Harmony h) -> [ I.SetHarmony (Just h) ]
-        Just (Scale s) -> [ I.SetOutScale (Just s.pattern) s.root ]
+    | old.out == new.out = []
+    | otherwise = case new.out of
+        FeedHarmony h -> [ I.SetOutScale Nothing 0, I.SetHarmony (Just h) ]
+        FeedScale s -> [ I.SetHarmony Nothing, I.SetOutScale (Just s.pattern) s.root ]
         _ -> [ I.SetHarmony Nothing, I.SetOutScale Nothing 0 ]
+
+-- | `feedInputs` with nothing known of Vetula, from the routes `old` to `new`:
+-- | what a table written by itself does, and what checks it before keeping.
+odonusInputs :: Routes -> Routes -> Array I.Input
+odonusInputs old new = feedInputs (resolve noContext old) (resolve noContext new)

@@ -259,8 +259,23 @@ outScaleRun =
 -- | Odonus inputs that take the previous table to it, as wire tags. The rig
 -- | parses what the router page writes, so both must read a table alike.
 routeRun :: String
-routeRun = intercalate "\n" (map one (range 0 (length tables - 1)))
+routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fed)
   where
+  wire inp = let w = toWire inp in w.tag <> maybe "" (\t -> "(" <> t <> ")") w.txt <> (if w.tag == "SetRoot" || w.tag == "SetOutScale" then "@" <> show w.a else "")
+  -- Vetula's key as the stage keeps it
+  keys = map (\t -> "key " <> t <> " | " <> either ("refused: " <> _) Route.printKey (Route.parseKey t))
+    [ "d 0 2 3 5 7 9 10", "fs 4 7 16", "c", "", "q 0 2", "a 0 x" ]
+  -- the Vetula rows, fed: the same table with nothing known, with a key and
+  -- voice 3, then voice 3's card edited under its route
+  ctx = { key: either (const Nothing) Just (Route.parseKey "d 0 2 3 5 7 9 10"), voices: [ { channel: 3, harmony: "<c'maj e'min>" } ] }
+  ctx' = ctx { voices = [ { channel: 3, harmony: "<f'maj7 g'dom7>/2" } ] }
+  vt = either (const []) identity (Route.parse "odonus.grid <- vetula key\nodonus.out <- vetula 3")
+  fed =
+    [ "fed none->ctx | " <> intercalate "," (map wire (Route.feedInputs (Route.resolve Route.noContext vt) (Route.resolve ctx vt)))
+    , "fed ctx->ctx' | " <> intercalate "," (map wire (Route.feedInputs (Route.resolve ctx vt) (Route.resolve ctx' vt)))
+    , "fed ctx->none | " <> intercalate "," (map wire (Route.feedInputs (Route.resolve ctx' vt) (Route.resolve ctx' [])))
+    , "set | " <> String.replaceAll (String.Pattern "\n") (String.Replacement " ; ") (Route.print (Route.setRoute Route.OdonusGrid Route.VetulaKey (Route.setRoute Route.OdonusOut (Route.VetulaVoice 2) [])))
+    ]
   tables =
     [ ""
     , "odonus.grid <- scale \"<dorian lydian>/4\" d\nodonus.out <- vetula 3"
@@ -275,7 +290,7 @@ routeRun = intercalate "\n" (map one (range 0 (length tables - 1)))
   one i = pad4 i <> " | " <> case parsed i of
     Left why -> "refused: " <> why
     Right rs -> String.replaceAll (String.Pattern "\n") (String.Replacement " ; ") (Route.print rs)
-      <> " | " <> intercalate "," (map (\inp -> let w = toWire inp in w.tag <> maybe "" (\t -> "(" <> t <> ")") w.txt <> (if w.tag == "SetRoot" || w.tag == "SetOutScale" then "@" <> show w.a else "")) (Route.odonusInputs (prev i) rs))
+      <> " | " <> intercalate "," (map wire (Route.odonusInputs (prev i) rs))
 
 -- ── 2. the long generative determinism net ───────────────────────────────────
 
