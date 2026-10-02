@@ -28,9 +28,15 @@ module Reef.Engine
   , stepTick
   , followHarmony
   , followScale
+  , sampleInput
   ) where
 
+import Prelude
+
+import Data.Array as Array
+import Data.Maybe (Maybe(..))
 import Reef.Gen (GenInput, runGen)
+import Reef.Input (Input(..))
 import Reef.Odonus (Fired, stepEmit)
 import Reef.Odonus (followHarmony, followScale) as Odonus
 
@@ -59,6 +65,20 @@ stepTick s =
 -- | place in the step, after the step's inputs, so lockstep holds.
 followHarmony :: (String -> Array Int) -> SimState -> SimState
 followHarmony sample s = s { odo = Odonus.followHarmony sample s.odo }
+
+-- | **What the rig sends instead of following.** A host that can read Tidal (the
+-- | BEAM) samples Odonus's two patterns for a coming step and hands both
+-- | runtimes the result as one input, `SetSampled`, tick-tagged, so the browser
+-- | never reads a pattern (docs/kb/plans/gpl-boundary-review.md). `harmony` and
+-- | `scale` are the samplers for that step; an empty sample is no chord, and
+-- | leaves the scale as it is. Applying the input is what `followHarmony` then
+-- | `followScale` do.
+sampleInput :: (String -> Array Int) -> (String -> Array Int) -> SimState -> Input
+sampleInput harmony scale s = SetSampled chord sc
+  where
+  chord = s.odo.harmony >>= \t -> nonEmpty (harmony t)
+  sc = s.odo.scalePattern >>= \t -> nonEmpty (scale t)
+  nonEmpty xs = if Array.null xs then Nothing else Just xs
 
 -- | The same for the scale pattern (`Reef.Odonus.followScale`): `sample`
 -- | gives the steps of the scale named at this step. Before `followHarmony`,

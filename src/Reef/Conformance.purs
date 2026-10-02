@@ -72,7 +72,7 @@ import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
 import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encodeDrumRouting) as RR
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
-import Reef.Engine (followHarmony, followScale, stepTick)
+import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
 import Reef.PitchSet (PitchSet(..))
 import Reef.Protocol (decodeInput, decodeSim, encodeInput)
@@ -173,7 +173,8 @@ harmonyRun =
   advance acc i =
     let
       st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
-      r = stepTick (followHarmony (sample i) st1)
+      -- the rig's path: sample into a SetSampled, across the wire, applied
+      r = stepTick (applyInput (wire (sampleInput (sample i) (const []) st1)) st1)
     in
       { st: r.sim, out: snoc acc.out (renderStep i r.fired) }
 
@@ -206,7 +207,8 @@ scaleRun =
   advance acc i =
     let
       st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
-      r = stepTick (followScale (sample i) st1)
+      -- the rig's path: sample into a SetSampled, across the wire, applied
+      r = stepTick (applyInput (wire (sampleInput (const []) (sample i) st1)) st1)
       o = r.sim.odo
     in
       { st: r.sim

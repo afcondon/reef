@@ -44,7 +44,8 @@ import Prelude
 import Data.Array (findIndex, (!!))
 import Data.Foldable (foldl)
 import Data.Int (round, toNumber)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Reef.Scale (normaliseIvls)
 import Data.Traversable (traverse)
 import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, seedMelody, setAmt, setOn, setRate, toggleGen)
 import Reef.Marbles (Seed)
@@ -53,7 +54,7 @@ import Reef.Odonus
   , clearPitchSet, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
-  , setDegShift, setHarmony, setScalePattern, releaseScale, setGatePct, setHeadDir, setHeadEuclidSteps
+  , setDegShift, setHarmony, setScalePattern, releaseScale, followChord, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
@@ -126,6 +127,11 @@ data Input
   -- a pattern of Tidal scale names the scale follows (Reef.Move's `scale`);
   -- Nothing returns to the authored scale. Shares the `txt` wire field.
   | SetScalePattern (Maybe String)
+  -- what the rig sampled from those two patterns for this step: the chord (pitch
+  -- classes; Nothing = none) and, when a scale pattern is set, the scale's steps
+  -- (Nothing = leave the scale). The rig samples (it has Tidal) and broadcasts
+  -- this tick-tagged, so the browser never reads a pattern (Engine.sampleInput).
+  | SetSampled (Maybe (Array Int)) (Maybe (Array Int))
   -- Reichian phase macros
   | UnifyHeads
   | FanOffsets Int
@@ -200,6 +206,7 @@ applyInput = case _ of
   ClearPitchSet -> onOdo clearPitchSet
   SetHarmony h -> onOdo (setHarmony h)
   SetScalePattern p -> onOdo (setScalePattern p)
+  SetSampled c sc -> onOdo \o -> (followChord c o) { scaleIvls = maybe o.scaleIvls normaliseIvls sc }
   UnifyHeads -> onOdo unifyHeads
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
@@ -237,10 +244,12 @@ type WireInput =
   , ns :: Array Int            -- SetNotes / SetChordPicks payload
   , ps :: Maybe PitchSet       -- SetPitchSet payload
   , txt :: Maybe String        -- SetHarmony / SetScalePattern payload; absent on older frames
+  , chord :: Maybe (Array Int) -- SetSampled's chord; absent on older frames
+  , ivls :: Maybe (Array Int)  -- SetSampled's scale steps; absent on older frames
   }
 
 w0 :: WireInput
-w0 = { tag: "", a: 0, b: 0, ns: [], ps: Nothing, txt: Nothing }
+w0 = { tag: "", a: 0, b: 0, ns: [], ps: Nothing, txt: Nothing, chord: Nothing, ivls: Nothing }
 
 -- GenKind ↔ Int via its position in `genKinds` (stable, the UI's own order).
 kindCode :: GenKind -> Int
@@ -287,6 +296,7 @@ toWire = case _ of
   ClearPitchSet -> w0 { tag = "ClearPitchSet" }
   SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
   SetScalePattern p -> w0 { tag = "SetScalePattern", txt = p }
+  SetSampled c sc -> w0 { tag = "SetSampled", chord = c, ivls = sc }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
@@ -343,6 +353,7 @@ fromWire w = case w.tag of
   "ClearPitchSet" -> Just ClearPitchSet
   "SetHarmony" -> Just (SetHarmony w.txt)
   "SetScalePattern" -> Just (SetScalePattern w.txt)
+  "SetSampled" -> Just (SetSampled w.chord w.ivls)
   "UnifyHeads" -> Just UnifyHeads
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)
