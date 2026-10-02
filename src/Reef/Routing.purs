@@ -29,6 +29,10 @@ module Reef.Routing
   , drumSends
   , encodeDrumRouting
   , decodeDrumRouting
+  , VoiceRouting
+  , voiceRoutingSends
+  , encodeVoiceRouting
+  , decodeVoiceRouting
   ) where
 
 import Prelude
@@ -179,3 +183,20 @@ encodeDrumRouting = writeJSON
 
 decodeDrumRouting :: String -> Either MultipleErrors DrumRouting
 decodeDrumRouting = readJSON
+
+-- | **A melodic machine's voices** (Odonus's four heads; later Vetula's), each
+-- | with its live MIDI legs, resolved as the drum lanes' are. A voice is a
+-- | stream: every leg carries the note it is given (or its own, for a gate or
+-- | a Rample trigger), so there is no lane to find, only the voice's index.
+type VoiceRouting = { voices :: Array (Array Leg) }
+
+-- | What one note of voice `i` sends, down every leg of that voice. A voice
+-- | with no legs (or past the table) sends nothing.
+voiceRoutingSends :: VoiceRouting -> Int -> Hit -> Array Send
+voiceRoutingSends routing i hit = concatMap (\leg -> legSends leg hit) (fromMaybe [] (routing.voices !! i))
+
+encodeVoiceRouting :: VoiceRouting -> String
+encodeVoiceRouting = writeJSON
+
+decodeVoiceRouting :: String -> Either MultipleErrors VoiceRouting
+decodeVoiceRouting = readJSON

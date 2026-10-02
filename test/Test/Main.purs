@@ -7,13 +7,14 @@ module Test.Main (main) where
 import Prelude
 
 import Data.Array (filter, mapWithIndex, range, take)
-import Data.Either (Either(..))
+import Data.Either (Either(..), hush)
 import Data.Int (toNumber)
 import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Kit (laneOfName)
+import Reef.Routing as Routing
 import Reef.Conformance (outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
@@ -21,7 +22,7 @@ import Reef.Marbles (seedFrom)
 import Reef.Odonus (defaultOdonus)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
-import Test.Assert (assertEqual')
+import Test.Assert (assert', assertEqual')
 import Test.Calibration (calibrationTests)
 import Test.Rample (rampleTests)
 import Test.Voices (voicesTests)
@@ -288,6 +289,21 @@ main = do
   assertEqual' "Harmony routes golden (Reef.Route)"
     { actual: routeRun, expected: routeGolden }
   log "Reef harmony routes golden: OK"
+  -- A voice's routing: every leg of the voice carries the note it is given.
+  let
+    vr = { voices: [ [ { port: "IAC Driver Tidal", channel: 1, note: -1, offsetMs: 0.0, rample: [] }
+                     , { port: "FH-2", channel: 1, note: -1, offsetMs: 2.0, rample: [] } ]
+                   , [] ] }
+    hit = { note: 60, velocity: 100, atMs: 0.0, durMs: 120.0, stepMs: 125.0 }
+  assert' "Voice routing: both legs of voice 0, nothing from voice 1"
+    ( Routing.voiceRoutingSends vr 0 hit ==
+        [ Routing.Note { port: "IAC Driver Tidal", channel: 1, note: 60, velocity: 100, atMs: 0.0, durMs: 120.0 }
+        , Routing.Note { port: "FH-2", channel: 1, note: 60, velocity: 100, atMs: 2.0, durMs: 120.0 } ]
+        && Routing.voiceRoutingSends vr 1 hit == [] )
+  assertEqual' "Voice routing round-trips its codec"
+    { actual: map Routing.encodeVoiceRouting (hush (Routing.decodeVoiceRouting (Routing.encodeVoiceRouting vr)))
+    , expected: Just (Routing.encodeVoiceRouting vr) }
+  log "Reef voice routing: OK"
   -- The Vetula performance-scheduler net (Vetula lockstep V1). A representative
   -- performance (one progression fanned to voices with different per-chord dwell
   -- schedules + skips + phase offsets) round-tripped through Reef.Vetula.Protocol,
