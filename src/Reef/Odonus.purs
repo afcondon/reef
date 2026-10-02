@@ -60,6 +60,7 @@ module Reef.Odonus
   , setHarmony
   , followHarmony
   , setScalePattern
+  , setOutScale
   , followScale
   , releaseScale
   , setPitchSet
@@ -168,6 +169,11 @@ type Odonus =
                                  -- by the host, see followScale
   , scaleHeld :: Maybe (Array Int) -- the authored scale, kept while a pattern
                                    -- plays it; `scale off` puts it back
+  , outScale :: Maybe { pattern :: String, root :: Int }
+      -- a pattern of Tidal scale names the OUTPUT snaps to (q2), on its own
+      -- root (a pitch class), as `harmony` gives it a chord: offsets forced
+      -- into a scale. Sampled by the host; one of harmony and outScale at a
+      -- time. A Maybe, so a handed-over state from before it decodes as none
   }
 
 -- | The active scale built from the root + interval mask.
@@ -276,8 +282,20 @@ followChord mpcs o = o { chord = mpcs }
 -- | it for `followHarmony` to fill on the next step.
 setHarmony :: Maybe String -> Odonus -> Odonus
 setHarmony h o = case h of
-  Just _ -> o { harmony = h }
+  Just _ -> o { harmony = h, outScale = Nothing }
   Nothing -> followChord Nothing o { harmony = Nothing }
+
+-- | **The output's scale** (the second quantise point, `odonus.out`): the
+-- | output snaps, past each head's offset, to the pitch classes of a scale
+-- | named by a pattern of Tidal's scale names, on its own root, rather than
+-- | to a chord. The host samples it into the same chord the harmony pattern
+-- | fills (`Reef.Engine.sampleInput`), so the snap itself is q2 unchanged.
+-- | Setting it drops the harmony pattern, and the harmony pattern drops it:
+-- | one source per input. `Nothing` returns the output to the scale.
+setOutScale :: Maybe String -> Int -> Odonus -> Odonus
+setOutScale p root o = case p of
+  Just pattern -> o { outScale = Just { pattern, root: ((root `mod` 12) + 12) `mod` 12 }, harmony = Nothing }
+  Nothing -> followChord Nothing o { outScale = Nothing }
 
 -- | **Harmony as a Tidal pattern.** Reef cannot read Tidal (Littorina is GPL
 -- | and reef is not), so the host that steps the machine supplies the reader:
@@ -382,7 +400,7 @@ defaultOdonus =
   , pitchSet: Nothing
   , span: 3
   , octaveShift: 0, degShift: 0, gatePct: 90, chord: Nothing, harmony: Nothing
-  , scalePattern: Nothing, scaleHeld: Nothing }
+  , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing }
 
 -- ---------------------------------------------------------------------------
 -- traversal — walk the head's pattern ordering, skip-aware

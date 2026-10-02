@@ -52,7 +52,7 @@ import Data.Foldable (foldl)
 import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, null, reverse, snoc, takeWhile, uncons, (!!))
 import Data.Either (Either(..))
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String as String
 import Data.String.CodeUnits as CU
 import Data.Tuple (Tuple(..))
@@ -109,6 +109,8 @@ restore is s = concatMap undo is
     SetGatePct _ -> [ SetGatePct s.odo.gatePct ]
     SetHarmony _ -> [ SetHarmony s.odo.harmony ]
     SetScalePattern _ -> [ SetScalePattern s.odo.scalePattern ]
+    -- one of harmony and outScale holds the output, so restore whichever did
+    SetOutScale _ _ -> [ SetOutScale (_.pattern <$> s.odo.outScale) (maybe 0 _.root s.odo.outScale), SetHarmony s.odo.harmony ]
     SetRoot _ -> [ SetRoot s.odo.rootPc ]
     _ -> []
   genBack k = case gen k of
@@ -136,6 +138,7 @@ verbs =
   , "offset N N N N"
   , "harmony \"PATTERN\" | off"
   , "scale \"PATTERN\" | off"
+  , "outscale \"PATTERN\" [ROOT] | off"
   , "root NOTE"
   , "for BARS (MOVE)"
   ]
@@ -311,6 +314,13 @@ term ts = case uncons ts of
     Just { head: Quoted p, tail: after } -> Right { move: Gestures [ SetScalePattern (Just p) ], rest: after }
     Just { head: Word "off", tail: after } -> Right { move: Gestures [ SetScalePattern Nothing ], rest: after }
     _ -> Left "scale takes a pattern of scale names in quotes (\"<dorian mixolydian>/4\") or off"
+  Just { head: Word "outscale", tail } -> case uncons tail of
+    Just { head: Quoted p, tail: after } -> case uncons after of
+      Just { head: Word w, tail: after' } | Right pc <- pitchClass w ->
+        Right { move: Gestures [ SetOutScale (Just p) pc ], rest: after' }
+      _ -> Right { move: Gestures [ SetOutScale (Just p) 0 ], rest: after }
+    Just { head: Word "off", tail: after } -> Right { move: Gestures [ SetOutScale Nothing 0 ], rest: after }
+    _ -> Left "outscale takes a pattern of scale names in quotes and a root (\"<dorian lydian>/4\" d), or off"
   Just { head: Word name, tail } ->
     let
       args = wordsWhile tail

@@ -51,7 +51,7 @@ import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, seedMelody, setAmt,
 import Reef.Marbles (Seed)
 import Reef.Odonus
   ( Odonus
-  , clearPitchSet, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
+  , clearPitchSet, setOutScale, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
   , setDegShift, setHarmony, setScalePattern, releaseScale, followChord, setGatePct, setHeadDir, setHeadEuclidSteps
@@ -127,6 +127,10 @@ data Input
   -- a pattern of Tidal scale names the scale follows (Reef.Move's `scale`);
   -- Nothing returns to the authored scale. Shares the `txt` wire field.
   | SetScalePattern (Maybe String)
+  -- a pattern of Tidal scale names the OUTPUT snaps to, past the offsets, on a
+  -- root (pitch class): Reef.Move's `outscale`, the router's scale → odonus.out.
+  -- Nothing returns the output to the scale. Wire: `txt` and `a`.
+  | SetOutScale (Maybe String) Int
   -- what the rig sampled from those two patterns for this step: the chord (pitch
   -- classes; Nothing = none) and, when a scale pattern is set, the scale's steps
   -- (Nothing = leave the scale). The rig samples (it has Tidal) and broadcasts
@@ -206,6 +210,7 @@ applyInput = case _ of
   ClearPitchSet -> onOdo clearPitchSet
   SetHarmony h -> onOdo (setHarmony h)
   SetScalePattern p -> onOdo (setScalePattern p)
+  SetOutScale p root -> onOdo (setOutScale p root)
   SetSampled c sc -> onOdo \o -> (followChord c o) { scaleIvls = maybe o.scaleIvls normaliseIvls sc }
   UnifyHeads -> onOdo unifyHeads
   FanOffsets n -> onOdo (fanOffsets n)
@@ -296,6 +301,7 @@ toWire = case _ of
   ClearPitchSet -> w0 { tag = "ClearPitchSet" }
   SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
   SetScalePattern p -> w0 { tag = "SetScalePattern", txt = p }
+  SetOutScale p root -> w0 { tag = "SetOutScale", txt = p, a = root }
   SetSampled c sc -> w0 { tag = "SetSampled", chord = c, ivls = sc }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
@@ -353,6 +359,7 @@ fromWire w = case w.tag of
   "ClearPitchSet" -> Just ClearPitchSet
   "SetHarmony" -> Just (SetHarmony w.txt)
   "SetScalePattern" -> Just (SetScalePattern w.txt)
+  "SetOutScale" -> Just (SetOutScale w.txt w.a)
   "SetSampled" -> Just (SetSampled w.chord w.ivls)
   "UnifyHeads" -> Just UnifyHeads
   "FanOffsets" -> Just (FanOffsets w.a)

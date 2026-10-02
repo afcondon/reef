@@ -242,6 +242,21 @@ echo "== fixedRun (128-step fixed rhythm): node vs erl =="
 diff /tmp/reef-fixed-node.txt /tmp/reef-fixed-erl.txt && echo "  ✅ fixedRun node == erl (fixed-rhythm eval + codec identical over 128 steps)"
 diff "$FIXED_GOLDEN" /tmp/reef-fixed-node.txt && echo "  ✅ fixedRun matches frozen golden"
 
+# --- Odonus output scale (Reef.Conformance.outScaleRun) -----------------------
+# The second quantise point: a scale pattern sampled into SetSampled's chord on
+# its own root, across the wire, snapped by q2. Byte-identical here = the rig's
+# sampling and the page's applying agree on the output's pitch set.
+OUTSCALE_GOLDEN="$REEF/conformance/outscale-golden.txt"
+echo "== outScaleRun (36-step output scale): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { outScaleRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(outScaleRun);' \
+  ) > /tmp/reef-outscale-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':outScaleRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-outscale-erl.txt
+diff /tmp/reef-outscale-node.txt /tmp/reef-outscale-erl.txt && echo "  ✅ outScaleRun node == erl"
+diff "$OUTSCALE_GOLDEN" /tmp/reef-outscale-node.txt && echo "  ✅ outScaleRun matches frozen golden"
+
 # --- drum routing net (Reef.Conformance.routingRun) ---------------------------
 # The routing table on the rig. A table with every kind of leg the rig plays (a
 # kick doubled across two ports with a trim, FH-2 gate selectors, a Rample voice

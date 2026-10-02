@@ -14,7 +14,7 @@ import Effect (Effect)
 import Effect.Console (log)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Kit (laneOfName)
-import Reef.Conformance (conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (outScaleRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -279,6 +279,11 @@ main = do
     { actual: map laneOfName [ "bd", "BD", "sn", "sd", "hh", "oh", "rim", "cb", "arpy" ]
     , expected: [ Just 0, Just 0, Just 1, Just 1, Just 4, Just 6, Just 3, Just 13, Nothing ] }
   log "Reef Balistes kit names: OK"
+  -- The output's scale (odonus.out): sampled into SetSampled's chord on its own
+  -- root, across the wire; harmony takes the output from it and back.
+  assertEqual' "Odonus outScale golden (sample + wire + q2, 36 steps)"
+    { actual: outScaleRun, expected: outScaleGolden }
+  log "Reef Odonus outScale golden: OK"
   -- The Vetula performance-scheduler net (Vetula lockstep V1). A representative
   -- performance (one progression fanned to voices with different per-chord dwell
   -- schedules + skips + phase offsets) round-tripped through Reef.Vetula.Protocol,
@@ -1782,3 +1787,42 @@ Dm6    |  144  102  289  202   45   80  918 1000  149    0"""
 -- beat of a sixteen-grain bar.
 everyFourth :: Array Number -> Array Number
 everyFourth xs = map _.x (filter (\r -> r.i `mod` 4 == 0) (mapWithIndex (\i x -> { i, x }) xs))
+
+-- | The frozen golden for `outScaleRun` (conformance/outscale-golden.txt).
+outScaleGolden :: String
+outScaleGolden = """  1 | h0 p50 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydian>@2 -
+  2 | h0 p52 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydian>@2 -
+  3 | h0 p55 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydian>@2 -
+  4 | h0 p57 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydian>@2 -
+  5 | h0 p59 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydian>@2 -
+  6 | h0 p62 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydian>@2 -
+  7 | h0 p64 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydian>@2 -
+  8 | h0 p68 d1 r1 v100 | out [2,4,6,8,9,11,1] <dorian lydian>@2 -
+  9 | h0 p68 d1 r1 v100 | out [2,4,6,8,9,11,1] <dorian lydian>@2 -
+ 10 | h0 p71 d1 r1 v100 | out [2,4,6,8,9,11,1] <dorian lydian>@2 -
+ 11 | h0 p74 d1 r1 v100 | out [2,4,6,8,9,11,1] <dorian lydian>@2 -
+ 12 | h0 p76 d1 r1 v100 | out [2,4,6,8,9,11,1] <dorian lydian>@2 -
+ 13 | h0 p80 d1 r1 v100 | out [2,4,6,8,9,11,1] <dorian lydian>@2 -
+ 14 | h0 p79 d1 r1 v100 | out [0,4,7] - c'maj
+ 15 | h0 p84 d1 r1 v100 | out [0,4,7] - c'maj
+ 16 | h0 p48 d1 r1 v100 | out [0,4,7] - c'maj
+ 17 | h0 p52 d1 r1 v100 | out [0,4,7] - c'maj
+ 18 | h0 p52 d1 r1 v100 | out [0,4,7] - c'maj
+ 19 | h0 p55 d1 r1 v100 | out [0,4,7] - c'maj
+ 20 | h0 p55 d1 r1 v100 | out [0,4,7] - c'maj
+ 21 | h0 p60 d1 r1 v100 | out [0,4,7] - c'maj
+ 22 | h0 p62 d1 r1 v100 | out [7,9,10,0,2,4,5] <dorian lydian>@7 -
+ 23 | h0 p64 d1 r1 v100 | out [7,9,10,0,2,4,5] <dorian lydian>@7 -
+ 24 | h0 p67 d1 r1 v100 | out [7,9,11,1,2,4,6] <dorian lydian>@7 -
+ 25 | h0 p69 d1 r1 v100 | out [7,9,11,1,2,4,6] <dorian lydian>@7 -
+ 26 | h0 p71 d1 r1 v100 | out [7,9,11,1,2,4,6] <dorian lydian>@7 -
+ 27 | h0 p74 d1 r1 v100 | out [7,9,11,1,2,4,6] <dorian lydian>@7 -
+ 28 | h0 p76 d1 r1 v100 | out [7,9,11,1,2,4,6] <dorian lydian>@7 -
+ 29 | h0 p79 d1 r1 v100 | out [7,9,11,1,2,4,6] <dorian lydian>@7 -
+ 30 | h0 p80 d1 r1 v100 | out [] - -
+ 31 | h0 p82 d1 r1 v100 | out [] - -
+ 32 | h0 p48 d1 r1 v100 | out [] - -
+ 33 | h0 p50 d1 r1 v100 | out [] - -
+ 34 | h0 p51 d1 r1 v100 | out [] - -
+ 35 | h0 p55 d1 r1 v100 | out [] - -
+ 36 | h0 p56 d1 r1 v100 | out [] - -"""

@@ -76,7 +76,10 @@ followHarmony sample s = s { odo = Odonus.followHarmony sample s.odo }
 sampleInput :: (String -> Array Int) -> (String -> Array Int) -> SimState -> Input
 sampleInput harmony scale s = SetSampled chord sc
   where
-  chord = s.odo.harmony >>= \t -> nonEmpty (harmony t)
+  -- the output's set: a scale on its own root (outScale), or a chord
+  chord = case s.odo.outScale of
+    Just out -> map (\i -> (i + out.root) `mod` 12) <$> nonEmpty (scale out.pattern)
+    Nothing -> s.odo.harmony >>= \t -> nonEmpty (harmony t)
   sc = s.odo.scalePattern >>= \t -> nonEmpty (scale t)
   nonEmpty xs = if Array.null xs then Nothing else Just xs
 

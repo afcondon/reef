@@ -40,6 +40,7 @@ module Reef.Conformance
   , chordRun
   , harmonyRun
   , scaleRun
+  , outScaleRun
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
@@ -213,6 +214,42 @@ scaleRun =
       , out: snoc acc.out (renderStep i r.fired <> " | k" <> show o.rootPc
           <> " [" <> intercalate "," (map show o.scaleIvls) <> "] "
           <> maybe "-" identity o.scalePattern)
+      }
+
+-- | The output's scale (odonus.out, `SetOutScale`): sampled as the rig samples
+-- | it, into SetSampled's chord on its own root, across the wire, applied. The
+-- | harmony pattern takes the output from it (step 14), and it takes it back
+-- | (22) on another root; `Nothing` returns the output to the grid's scale (30).
+outScaleRun :: String
+outScaleRun =
+  let
+    s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 1 36)
+  in
+    intercalate "\n" final.out
+  where
+  script i = case i of
+    1 -> [ SetOutScale (Just "<dorian lydian>") 2 ]
+    14 -> [ SetHarmony (Just "c'maj") ]
+    22 -> [ SetOutScale (Just "<dorian lydian>") 7 ]
+    30 -> [ SetOutScale Nothing 0 ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  scaleOf' i txt
+    | txt == "<dorian lydian>" = if (i / 8) `mod` 2 == 0 then [ 0, 2, 3, 5, 7, 9, 10 ] else [ 0, 2, 4, 6, 7, 9, 11 ]
+    | otherwise = []
+  harmonyOf txt = if txt == "c'maj" then [ 0, 4, 7 ] else []
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick (applyInput (wire (sampleInput harmonyOf (scaleOf' i) st1)) st1)
+      o = r.sim.odo
+    in
+      { st: r.sim
+      , out: snoc acc.out (renderStep i r.fired
+          <> " | out [" <> intercalate "," (map show (fromMaybe [] o.chord)) <> "] "
+          <> maybe "-" (\out -> out.pattern <> "@" <> show out.root) o.outScale
+          <> " " <> maybe "-" identity o.harmony)
       }
 
 -- ── 2. the long generative determinism net ───────────────────────────────────
