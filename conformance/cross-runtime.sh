@@ -11,7 +11,7 @@
 set -euo pipefail
 
 REEF="$(cd "$(dirname "$0")/.." && pwd)"
-PURERL="$REEF/../live-coding/purerl-tidal"
+PURERL="$REEF/../live-coding/architeuthis"
 GOLDEN="$REEF/conformance/odonus-golden.txt"
 DATA='^ *[0-9]+ \|'
 
