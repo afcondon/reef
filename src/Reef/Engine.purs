@@ -29,6 +29,9 @@ module Reef.Engine
   , followHarmony
   , followScale
   , sampleInput
+  , Patterns
+  , patternsOf
+  , samplePatterns
   ) where
 
 import Prelude
@@ -74,13 +77,28 @@ followHarmony sample s = s { odo = Odonus.followHarmony sample s.odo }
 -- | leaves the scale as it is. Applying the input is what `followHarmony` then
 -- | `followScale` do.
 sampleInput :: (String -> Array Int) -> (String -> Array Int) -> SimState -> Input
-sampleInput harmony scale s = SetSampled chord sc
+sampleInput harmony scale s = samplePatterns harmony scale (patternsOf s)
+
+-- | The patterns a sample reads, and nothing else of the state: what the rig
+-- | samples for a page that plays Odonus itself (Solo), which sends just
+-- | these (`odonus-sample`) and gets back one `SetSampled` a step.
+type Patterns =
+  { harmony :: Maybe String
+  , scale :: Maybe String
+  , outScale :: Maybe { pattern :: String, root :: Int }
+  }
+
+patternsOf :: SimState -> Patterns
+patternsOf s = { harmony: s.odo.harmony, scale: s.odo.scalePattern, outScale: s.odo.outScale }
+
+samplePatterns :: (String -> Array Int) -> (String -> Array Int) -> Patterns -> Input
+samplePatterns harmony scale p = SetSampled chord sc
   where
   -- the output's set: a scale on its own root (outScale), or a chord
-  chord = case s.odo.outScale of
+  chord = case p.outScale of
     Just out -> map (\i -> (i + out.root) `mod` 12) <$> nonEmpty (scale out.pattern)
-    Nothing -> s.odo.harmony >>= \t -> nonEmpty (harmony t)
-  sc = s.odo.scalePattern >>= \t -> nonEmpty (scale t)
+    Nothing -> p.harmony >>= \t -> nonEmpty (harmony t)
+  sc = p.scale >>= \t -> nonEmpty (scale t)
   nonEmpty xs = if Array.null xs then Nothing else Just xs
 
 -- | The same for the scale pattern (`Reef.Odonus.followScale`): `sample`
