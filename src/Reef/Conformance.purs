@@ -259,7 +259,7 @@ outScaleRun =
 -- | Odonus inputs that take the previous table to it, as wire tags. The rig
 -- | parses what the router page writes, so both must read a table alike.
 routeRun :: String
-routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fed)
+routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fed <> feeds)
   where
   wire inp = let w = toWire inp in w.tag <> maybe "" (\t -> "(" <> t <> ")") w.txt <> (if w.tag == "SetRoot" || w.tag == "SetOutScale" then "@" <> show w.a else "")
   -- Vetula's key as the stage keeps it
@@ -275,6 +275,16 @@ routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fe
     , "fed ctx->ctx' | " <> intercalate "," (map wire (Route.feedInputs (Route.resolve ctx vt) (Route.resolve ctx' vt)))
     , "fed ctx->none | " <> intercalate "," (map wire (Route.feedInputs (Route.resolve ctx' vt) (Route.resolve ctx' [])))
     , "set | " <> String.replaceAll (String.Pattern "\n") (String.Replacement " ; ") (Route.print (Route.setRoute Route.OdonusGrid Route.VetulaKey (Route.setRoute Route.OdonusOut (Route.VetulaVoice 2) [])))
+    ]
+  -- the feeds as the rig publishes them (`odonus/feeds`), printed and read back
+  flat = String.replaceAll (String.Pattern "\n") (String.Replacement " ; ")
+  feeds = map (\t -> "feeds " <> flat t <> " | " <> either ("refused: " <> _) (flat <<< Route.printFeeds) (Route.parseFeeds t))
+    [ Route.printFeeds (Route.resolve ctx vt)
+    , Route.printFeeds (Route.resolve ctx (either (const []) identity (Route.parse (fromMaybe "" (tables !! 2)))))
+    , ""
+    , "odonus.grid <- vetula key"
+    , "odonus.out <- key q 0"
+    , "odonus.grid <- scale \"minor\" e"
     ]
   tables =
     [ ""

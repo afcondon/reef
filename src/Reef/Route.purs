@@ -45,6 +45,8 @@ module Reef.Route
   , resolve
   , feedInputs
   , odonusInputs
+  , printFeeds
+  , parseFeeds
   ) where
 
 import Prelude
@@ -54,6 +56,7 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Tuple (Tuple(..))
 import Data.String (Pattern(..), joinWith, lastIndexOf, indexOf, split, trim)
 import Data.String.CodeUnits as CU
 import Data.Traversable (traverse)
@@ -140,12 +143,14 @@ quoted t = do
 print :: Routes -> String
 print rs = joinWith "\n" (map one rs)
   where
-  one r = inputName r.input <> " <- " <> sourceText' r.source
-  sourceText' = case _ of
-    Scale s -> "scale \"" <> s.pattern <> "\"" <> (if s.root == 0 then "" else " " <> noteName s.root)
-    Harmony h -> "harmony \"" <> h <> "\""
-    VetulaKey -> "vetula key"
-    VetulaVoice n -> "vetula " <> show n
+  one r = inputName r.input <> " <- " <> printSource r.source
+
+printSource :: Source -> String
+printSource = case _ of
+  Scale s -> "scale \"" <> s.pattern <> "\"" <> (if s.root == 0 then "" else " " <> noteName s.root)
+  Harmony h -> "harmony \"" <> h <> "\""
+  VetulaKey -> "vetula key"
+  VetulaVoice n -> "vetula " <> show n
 
 noteName :: Int -> String
 noteName pc = fromMaybe (show pc) (index [ "c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b" ] pc)
@@ -235,3 +240,40 @@ feedInputs old new = grid <> out
 -- | what a table written by itself does, and what checks it before keeping.
 odonusInputs :: Routes -> Routes -> Array I.Input
 odonusInputs old new = feedInputs (resolve noContext old) (resolve noContext new)
+
+-- | The feeds as text, as the rig publishes them once resolved (`odonus/feeds`)
+-- | for a page that plays Odonus itself (Solo) to apply: the routes' syntax,
+-- | with Vetula's sources replaced by what they gave, and `key` for a key.
+-- | An unfed input has no line.
+-- |
+-- |     odonus.grid <- key d 0 2 3 5 7 9 10
+-- |     odonus.out <- harmony "<[0,4,7] [2,5,9]>"
+printFeeds :: Feeds -> String
+printFeeds fs = joinWith "\n" (mapMaybe one [ Tuple OdonusGrid fs.grid, Tuple OdonusOut fs.out ])
+  where
+  one (Tuple i f) = (\t -> inputName i <> " <- " <> t) <$> case f of
+    FeedScale s -> Just (printSource (Scale s))
+    FeedHarmony h -> Just (printSource (Harmony h))
+    FeedKey k -> Just ("key " <> printKey k)
+    Unfed -> Nothing
+
+parseFeeds :: String -> Either String Feeds
+parseFeeds text = foldl step (Right { grid: Unfed, out: Unfed }) (filter keep (map trim (split (Pattern "\n") text)))
+  where
+  keep l = l /= "" && CU.take 2 l /= "--"
+  step acc l = do
+    fs <- acc
+    case split (Pattern "<-") l of
+      [ lhs, rhs ] -> do
+        f <- feedText (trim rhs)
+        case trim lhs of
+          "odonus.grid" -> Right fs { grid = f }
+          "odonus.out" -> Right fs { out = f }
+          other -> Left ("no input '" <> other <> "' (odonus.grid, odonus.out)")
+      _ -> Left ("a feed is INPUT <- FEED: '" <> l <> "'")
+  feedText t = case CU.take 4 t of
+    "key " -> FeedKey <$> parseKey (CU.drop 4 t)
+    _ -> sourceText t >>= case _ of
+      Scale s -> Right (FeedScale s)
+      Harmony h -> Right (FeedHarmony h)
+      _ -> Left ("a feed is resolved, not a Vetula source: '" <> t <> "'")
