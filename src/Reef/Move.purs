@@ -49,6 +49,8 @@ module Reef.Move
 
 import Prelude
 
+import Data.Traversable (traverse)
+
 import Data.Foldable (foldl)
 import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, null, reverse, snoc, takeWhile, uncons, (!!))
 import Data.Either (Either(..))
@@ -106,6 +108,7 @@ restore is s = concatMap undo is
     SetHeadOffset i _ -> catMaybes [ (\h -> SetHeadOffset i h.offset) <$> heads !! i ]
     StaggerLengths _ -> perHead \i h -> SetHeadLen i h.len
     SetHeadLen i _ -> catMaybes [ (\h -> SetHeadLen i h.len) <$> heads !! i ]
+    SetHeadClock i _ -> catMaybes [ (\h -> SetHeadClock i h.clock) <$> heads !! i ]
     SetHeadPattern i _ -> catMaybes [ (\h -> SetHeadPattern i h.patternIx) <$> heads !! i ]
     SetHeadTransp i _ -> catMaybes [ (\h -> SetHeadTransp i h.transp) <$> heads !! i ]
     SetGatePct _ -> [ SetGatePct s.odo.gatePct ]
@@ -137,6 +140,7 @@ verbs =
   , "pattern N N N N"
   , "transp N N N N"
   , "len N N N N"
+  , "clock dur|step [dur|step ...]"
   , "offset N N N N"
   , "harmony \"PATTERN\" | off"
   , "scale \"PATTERN\" | off"
@@ -179,6 +183,10 @@ verb name args = case name, args of
   "pattern", ns | not (null ns) -> perHead (\i v -> SetHeadPattern i (v - 1)) ns
   "transp", ns | not (null ns) -> perHead SetHeadTransp ns
   "len", ns | not (null ns) -> perHead SetHeadLen ns
+  -- What moves each head on: `dur`, its notes' lengths (it holds each cell
+  -- for the cell's dur), or `step`, its steps. One word sets every head.
+  "clock", [ w ] -> (\c -> mapWithIndex (\i _ -> SetHeadClock i c) heads0) <$> clockWord w
+  "clock", ws | not (null ws) -> mapWithIndex SetHeadClock <$> traverse clockWord ws
   "offset", ns | not (null ns) -> perHead SetHeadOffset ns
   "root", [ w ] -> one SetRoot <$> pitchClass w
   _, _ ->
@@ -190,6 +198,16 @@ verb name args = case name, args of
   isVerb n = find (\v -> firstWord v == n) verbs /= Nothing
   usage n = fromMaybe n (find (\v -> firstWord v == n) verbs)
   firstWord v = fromMaybe v (head (String.split (String.Pattern " ") v))
+
+clockWord :: String -> Either String Int
+clockWord = case _ of
+  "dur" -> Right 1
+  "step" -> Right 0
+  w -> Left ("a clock is dur or step, not '" <> w <> "'")
+
+-- | Four heads, for a word that sets every one.
+heads0 :: Array Unit
+heads0 = [ unit, unit, unit, unit ]
 
 int :: String -> Either String Int
 int w = case Int.fromString w of

@@ -37,7 +37,7 @@ import Data.List.NonEmpty (singleton)
 import Data.Maybe (Maybe(..))
 import Foreign (ForeignError(..), MultipleErrors)
 import Reef.Input (Input, SimState, Tagged, WireInput, WireSim, fromWire, fromWireSim, toWire, toWireSim)
-import Reef.Odonus (Odonus)
+import Reef.Odonus (HeadWire, Odonus, OdonusOf, odonusFromWire, odonusToWire)
 import Simple.JSON (readJSON, writeJSON)
 
 -- The WriteForeign/ReadForeign instance for `Distribution` (the one non-primitive
@@ -46,11 +46,11 @@ import Simple.JSON (readJSON, writeJSON)
 
 -- | Serialize a complete Odonus record to a JSON string for the wire.
 encodeOdonus :: Odonus -> String
-encodeOdonus = writeJSON
+encodeOdonus = writeJSON <<< odonusToWire
 
 -- | Parse a JSON string from the wire back into an Odonus record.
 decodeOdonus :: String -> Either MultipleErrors Odonus
-decodeOdonus = readJSON
+decodeOdonus s = odonusFromWire <$> (readJSON s :: Either MultipleErrors (OdonusOf HeadWire))
 
 -- ── the Input protocol (lockstep; see Reef.Input) ────────────────────────────
 --

@@ -15,7 +15,7 @@ import Effect.Console (log)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Routing as Routing
-import Reef.Conformance (outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -285,6 +285,10 @@ main = do
   assertEqual' "Odonus outScale golden (sample + wire + q2, 36 steps)"
     { actual: outScaleRun, expected: outScaleGolden }
   log "Reef Odonus outScale golden: OK"
+  -- The duration clock: a head held on each cell for its dur (AC, 2026-10-03).
+  assertEqual' "Odonus duration clock golden (56 steps)"
+    { actual: durRun, expected: durGolden }
+  log "Reef Odonus duration clock golden: OK"
   -- Harmony routes: parse, print, and the inputs a change makes.
   assertEqual' "Harmony routes golden (Reef.Route)"
     { actual: routeRun, expected: routeGolden }
@@ -1850,9 +1854,84 @@ outScaleGolden = """  1 | h0 p50 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydia
 -- | The frozen golden for `routeRun` (conformance/route-golden.txt).
 routeGolden :: String
 routeGolden = """   0 |  | 
-   1 | odonus.grid <- scale "<dorian lydian>/4" d ; odonus.out <- vetula 3 | SetScalePattern(<dorian lydian>/4),SetRoot@2,SetHarmony,SetOutScale@0
-   2 | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | SetScalePattern(dorian),SetRoot@2,SetHarmony(<c'maj7 a'min7>/2)
-   3 | odonus.out <- scale "major" g | SetScalePattern,SetOutScale(major)@7
+   1 | odonus.grid <- scale "<dorian lydian>/4" d ; odonus.out <- vetula 3 | ClearPitchSet,SetScalePattern(<dorian lydian>/4),SetRoot@2
+   2 | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | ClearPitchSet,SetScalePattern(dorian),SetRoot@2,SetOutScale@0,SetHarmony(<c'maj7 a'min7>/2)
+   3 | odonus.out <- scale "major" g | ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale(major)@7
    4 | refused: odonus.grid takes a scale (scale "…" or vetula key), not a harmony
    5 | refused: no input 'odonus.side' (odonus.grid, odonus.out)
-   6 | odonus.grid <- vetula key | SetScalePattern"""
+   6 | odonus.grid <- vetula key | 
+key d 0 2 3 5 7 9 10 | d 0 2 3 5 7 9 10
+key fs 4 7 16 | fs 0 4 7
+key c | c 0
+key  | refused: a key is ROOT STEPS…: d 0 2 3 5 7 9 10
+key q 0 2 | refused: 'q' is not a note name or a pitch class
+key a 0 x | refused: a key's steps are numbers: 'x'
+fed none->ctx | SetScalePattern,SetPitchSet,SetOutScale@0,SetHarmony(<c'maj e'min>)
+fed ctx->ctx' | SetOutScale@0,SetHarmony(<f'maj7 g'dom7>/2)
+fed ctx->none | ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale@0
+set | odonus.grid <- vetula key ; odonus.out <- vetula 2
+feeds odonus.grid <- key d 0 2 3 5 7 9 10 ; odonus.out <- harmony "<c'maj e'min>" | odonus.grid <- key d 0 2 3 5 7 9 10 ; odonus.out <- harmony "<c'maj e'min>"
+feeds odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2"
+feeds  | 
+feeds odonus.grid <- vetula key | refused: a feed is resolved, not a Vetula source: 'vetula key'
+feeds odonus.out <- key q 0 | refused: 'q' is not a note name or a pitch class
+feeds odonus.grid <- scale "minor" e | odonus.grid <- scale "minor" e"""
+
+-- | The frozen golden for `durRun` (conformance/dur-golden.txt).
+durGolden :: String
+durGolden = """  1 | h0 p50 d2 r1 v100 | 1/2 0/0
+  2 | - | 1/1 1/0
+  3 | h0 p51 d1 r1 v100 | 2/1 1/0
+  4 | h0 p55 d4 r1 v100 | 3/4 2/0
+  5 | - | 3/3 2/0
+  6 | - | 3/2 3/0
+  7 | - | 3/1 3/0
+  8 | h0 p56 d1 r1 v100 | 4/1 7/0
+  9 | - | 5/3 7/0
+ 10 | - | 5/2 6/0
+ 11 | - | 5/1 6/0
+ 12 | h0 p62 d2 r1 v100 | 6/2 5/0
+ 13 | - | 6/1 5/0
+ 14 | h0 p63 d1 r1 v100 | 7/1 4/0
+ 15 | h0 p67 d2 r1 v100 | 8/2 4/0
+ 16 | - | 8/1 8/0
+ 17 | h0 p70 d1 r1 v100 | 10/1 8/0
+ 18 | h0 p74 d2 r1 v100 | 11/2 10/0
+ 19 | - | 11/1 10/0
+ 20 | h0 p75 d4 r1 v100  h1 p82 d2 r1 v100 | 12/4 11/2
+ 21 | - | 12/3 11/2
+ 22 | - | 12/2 11/1
+ 23 | - | 12/1 11/1
+ 24 | h0 p79 d1 r1 v100  h1 p89 d2 r1 v100 | 13/1 15/2
+ 25 | h0 p80 d1 r1 v100 | 14/1 15/2
+ 26 | h0 p82 d2 r1 v100 | 15/2 15/1
+ 27 | - | 15/1 15/1
+ 28 | h0 p48 d1 r1 v100  h1 p87 d1 r1 v100 | 0/1 14/1
+ 29 | h0 p50 d2 r1 v100 | 1/2 14/1
+ 30 | h1 p86 d1 r1 v100 | 1/1 13/1
+ 31 | h0 p51 d1 r1 v100 | 2/1 13/1
+ 32 | h0 p55 d4 r1 v100  h1 p82 d4 r1 v100 | 3/4 12/4
+ 33 | - | 3/3 12/4
+ 34 | - | 3/2 12/3
+ 35 | - | 3/1 12/3
+ 36 | h0 p56 d1 r1 v100 | 4/1 12/2
+ 37 | - | 5/3 12/2
+ 38 | - | 5/2 12/1
+ 39 | - | 5/1 12/1
+ 40 | h0 p62 d2 r1 v100  h1 p55 d1 r1 v100 | 6/0 0/1
+ 41 | h0 p63 d1 r1 v100 | 7/0 0/1
+ 42 | h0 p67 d2 r1 v100  h1 p58 d2 r1 v100 | 8/0 1/2
+ 43 | h0 p70 d1 r1 v100 | 10/0 1/2
+ 44 | h0 p74 d2 r1 v100 | 11/0 1/1
+ 45 | h0 p75 d4 r1 v100 | 12/0 1/1
+ 46 | h0 p79 d1 r1 v100  h1 p58 d1 r1 v100 | 13/0 2/1
+ 47 | h0 p80 d1 r1 v100 | 14/0 2/1
+ 48 | h0 p82 d2 r1 v100  h1 p62 d4 r1 v100 | 15/0 3/4
+ 49 | h0 p48 d1 r1 v100 | 0/0 3/4
+ 50 | h0 p50 d2 r1 v100 | 1/0 3/3
+ 51 | h0 p51 d1 r1 v100 | 2/0 3/3
+ 52 | h0 p55 d4 r1 v100 | 3/0 3/2
+ 53 | h0 p56 d1 r1 v100 | 4/0 3/2
+ 54 | - | 5/0 3/1
+ 55 | h0 p62 d2 r1 v100 | 6/0 3/1
+ 56 | h0 p63 d1 r1 v100  h1 p70 d1 r1 v100 | 7/0 7/1"""

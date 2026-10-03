@@ -110,6 +110,9 @@ printHead hd =
   "head " <> patternSlug hd.patternIx <> " " <> decimal (speedOf hd) <> " " <> dirSlug hd.direction
     <> " transp " <> show hd.transp <> " off " <> show hd.offset <> " len " <> show hd.len
     <> " euclid " <> show hd.pulses <> " " <> show hd.esteps
+    -- clocked by its notes' lengths; left out on the step clock, so older
+    -- patches read and print as they did
+    <> (if hd.clock == 1 then " clock dur" else "")
     <> (if hd.mute then " mute" else "")
 
 printGen :: GenSource -> String
@@ -168,7 +171,8 @@ bools xs = "[ " <> joinWith ", " (map (\b -> if b then "T" else "F") xs) <> " ]"
 -- ---------------------------------------------------------------------------
 
 -- | Where one head's playhead was.
-type Phase = { cursor :: Int, seqPos :: Int, accumulator :: Int, pendStep :: Int, etick :: Int }
+-- | `hold`: on the duration clock, the ticks left on its cell (0 otherwise).
+type Phase = { cursor :: Int, seqPos :: Int, accumulator :: Int, pendStep :: Int, etick :: Int, hold :: Int }
 
 -- | What Odonus was quantising to, as pitch classes.
 type Sounding = { root :: Int, scale :: Array Int, chord :: Maybe (Array Int) }
@@ -207,14 +211,16 @@ printNow n =
   where
   phase h = "{ cursor: " <> show h.cursor <> ", seqPos: " <> show h.seqPos
     <> ", acc: " <> show h.accumulator <> ", pend: " <> show h.pendStep
-    <> ", etick: " <> show h.etick <> " }"
+    <> ", etick: " <> show h.etick
+    -- only on the duration clock, so earlier instants print as they did
+    <> (if h.hold > 0 then ", hold: " <> show h.hold else "") <> " }"
 
 -- | The heads with these phases, head by head; a head with none keeps its own.
 withPhases :: Array Phase -> Odonus -> Odonus
 withPhases ps o = o { heads = mapWithIndex set o.heads }
   where
   set i h = case ps !! i of
-    Just p -> h { cursor = p.cursor, seqPos = p.seqPos, accumulator = p.accumulator, pendStep = p.pendStep, etick = p.etick }
+    Just p -> h { cursor = p.cursor, seqPos = p.seqPos, accumulator = p.accumulator, pendStep = p.pendStep, etick = p.etick, hold = p.hold }
     Nothing -> h
 
 -- | Keep every source a patch saved and fill in any it predates with its
@@ -491,13 +497,21 @@ headP = do
   kw "euclid"
   pul <- intP
   est <- intP
+  clk <- peek >>= case _ of
+    Just (Word "clock") -> do
+      _ <- word
+      word >>= case _ of
+        "dur" -> pure 1
+        "step" -> pure 0
+        w -> failP ("a head's clock is dur or step, not " <> w)
+    _ -> pure 0
   mute <- peek >>= case _ of
     Just (Word "mute") -> word *> pure true
     _ -> pure false
   pure
     { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
     , speedIx: spd, direction: dir, transp: tr, mute, patternIx: pat
-    , offset: off, len: ln, pulses: pul, esteps: est }
+    , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0 }
 
 genP :: P GenSource
 genP = do
@@ -544,8 +558,11 @@ phaseP = do
   accumulator <- field "acc" intP
   pendStep <- field "pend" intP
   etick <- field "etick" intP
+  hold <- peek >>= case _ of
+    Just (Word "hold") -> field "hold" intP
+    _ -> pure 0
   punctP '}'
-  pure { cursor, seqPos, accumulator, pendStep, etick }
+  pure { cursor, seqPos, accumulator, pendStep, etick, hold }
 
 soundingP :: P Sounding
 soundingP = do

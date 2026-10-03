@@ -257,6 +257,20 @@ echo "== outScaleRun (36-step output scale): node vs erl =="
 diff /tmp/reef-outscale-node.txt /tmp/reef-outscale-erl.txt && echo "  ✅ outScaleRun node == erl"
 diff "$OUTSCALE_GOLDEN" /tmp/reef-outscale-node.txt && echo "  ✅ outScaleRun matches frozen golden"
 
+# --- Odonus's duration clock (Reef.Conformance.durRun) ------------------------
+# A head held on each cell for its dur, through a rest and a skip; a second head
+# joining on the duration clock; the first going back to its steps.
+DUR_GOLDEN="$REEF/conformance/dur-golden.txt"
+echo "== durRun (56-step duration clock): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { durRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(durRun);' \
+  ) > /tmp/reef-dur-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':durRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-dur-erl.txt
+diff /tmp/reef-dur-node.txt /tmp/reef-dur-erl.txt && echo "  ✅ durRun node == erl"
+diff "$DUR_GOLDEN" /tmp/reef-dur-node.txt && echo "  ✅ durRun matches frozen golden"
+
 # --- Odonus as text (Reef.Conformance.patchRun) --------------------------------
 # The patch and odonusNow printed and read back, the recall moves Limulus sends
 # (multi-line, which purerl's trim once broke), and what they do to a state.

@@ -41,6 +41,7 @@ module Reef.Conformance
   , harmonyRun
   , scaleRun
   , outScaleRun
+  , durRun
   , routeRun
   , patchRun
   , conspicillumRun, conspicillumGrains
@@ -60,7 +61,7 @@ module Reef.Conformance
 
 import Prelude
 
-import Data.Array (filter, find, length, null, range, snoc, mapWithIndex, (!!))
+import Data.Array (filter, find, length, null, range, snoc, mapWithIndex, take, (!!))
 import Data.Either (Either(..), either)
 import Data.String as String
 import Reef.Route as Route
@@ -75,7 +76,7 @@ import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encode
 import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
 import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
 import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encodeDrumRouting) as RR
-import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, stepEmit)
+import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, setHeadClock, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
@@ -256,6 +257,37 @@ outScaleRun =
           <> " | out [" <> intercalate "," (map show (fromMaybe [] o.chord)) <> "] "
           <> maybe "-" (\out -> out.pattern <> "@" <> show out.root) o.outScale
           <> " " <> maybe "-" identity o.harmony)
+      }
+
+-- | The duration clock (AC, 2026-10-03): head I holds each cell for its `dur`
+-- | from step 1, through a rest (cell 5's gate off, held for its dur) and a
+-- | skip (cell 9, no time at all); head II joins on the duration clock at 20,
+-- | and head I goes back to its steps at 40. Each step's notes and the heads'
+-- | cursors and holds, so a difference in when a head moves shows.
+durRun :: String
+durRun =
+  let
+    s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 1 56)
+  in
+    intercalate "\n" final.out
+  where
+  durs = [ 1, 2, 1, 4, 1, 3, 2, 1, 2, 1, 1, 2, 4, 1, 1, 2 ]
+  script i = case i of
+    1 -> [ SetHeadClock 0 1, ToggleGate 5, ToggleSkip 9 ] <> mapWithIndex SetCellDur durs
+    20 -> [ ToggleHeadMute 1, SetHeadClock 1 1 ]
+    40 -> [ SetHeadClock 0 0 ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick st1
+      hs = r.sim.odo.heads
+    in
+      { st: r.sim
+      , out: snoc acc.out (renderStep i r.fired
+          <> " | " <> intercalate " " (map (\h -> show h.cursor <> "/" <> show h.hold) (take 2 hs)))
       }
 
 -- | Harmony routes (`Reef.Route`): each table parsed, printed back, and the
@@ -519,13 +551,13 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
   p0 =
     { name: "live", odo: setPat odo0, gen: Patch.reconcileGen [], genSpread: 0.3, genBias: 0.7
     , swing: 0.12, velHumanize: 9, stepDiv: 2 }
-  setPat o = o { scalePattern = Just "<dorian lydian>/4", scaleHeld = Just o.scaleIvls }
+  setPat o = setHeadClock 1 1 (o { scalePattern = Just "<dorian lydian>/4", scaleHeld = Just o.scaleIvls })
   t1 = Patch.printPatch p0
   t2 = maybe "UNREAD" Patch.printPatch (Patch.parsePatch t1)
   patchLines = [ t1, "patch round-trip " <> show (t1 == t2) ]
   n0 =
     { step: 1234, tempo: 178, seed: 987654321.0, frozen: false
-    , phases: map (\i -> { cursor: i, seqPos: i + 1, accumulator: i `mod` 8, pendStep: if i == 3 then -1 else 1, etick: 2 * i }) (range 0 3)
+    , phases: map (\i -> { cursor: i, seqPos: i + 1, accumulator: i `mod` 8, pendStep: if i == 3 then -1 else 1, etick: 2 * i, hold: if i == 2 then 3 else 0 }) (range 0 3)
     , sounding: { root: 5, scale: [ 0, 2, 4, 5, 7, 9, 11 ], chord: Just [ 3, 5, 8, 11 ] }
     , routes: Just "odonus.grid <- scale \"minor\" e", feeds: Nothing }
   tn = Patch.printNow n0

@@ -50,12 +50,12 @@ import Data.Traversable (traverse)
 import Reef.Gen (GenKind, GenSource, genKinds, rollAllNotes, seedMelody, setAmt, setOn, setRate, toggleGen)
 import Reef.Marbles (Seed)
 import Reef.Odonus
-  ( Odonus
+  ( Odonus, OdonusOf, HeadWire, odonusFromWire, odonusToWire
   , clearPitchSet, setOutScale, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
   , setDegShift, setHarmony, setScalePattern, releaseScale, followChord, setGatePct, setHeadDir, setHeadEuclidSteps
-  , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
+  , setHeadClock, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
   , toggleScaleNote, toggleSkip, unifyHeads, recallScene
@@ -100,6 +100,7 @@ data Input
   | SetHeadTransp Int Int
   | SetHeadOffset Int Int
   | SetHeadLen Int Int
+  | SetHeadClock Int Int          -- head, 0 its steps | 1 its notes' lengths
   | SetHeadPulses Int Int
   | SetHeadEuclidSteps Int Int
   | NudgeHeadPulses Int Int        -- head, signed delta (relative — accumulates under buffering)
@@ -195,6 +196,7 @@ applyInput = case _ of
   SetHeadTransp h v -> onOdo (setHeadTransp h v)
   SetHeadOffset h v -> onOdo (setHeadOffset h v)
   SetHeadLen h v -> onOdo (setHeadLen h v)
+  SetHeadClock h v -> onOdo (setHeadClock h v)
   SetHeadPulses h v -> onOdo (setHeadPulses h v)
   SetHeadEuclidSteps h v -> onOdo (setHeadEuclidSteps h v)
   NudgeHeadPulses h d -> onOdo (nudgeHeadPulses h d)
@@ -293,6 +295,7 @@ toWire = case _ of
   SetHeadTransp h v -> w0 { tag = "SetHeadTransp", a = h, b = v }
   SetHeadOffset h v -> w0 { tag = "SetHeadOffset", a = h, b = v }
   SetHeadLen h v -> w0 { tag = "SetHeadLen", a = h, b = v }
+  SetHeadClock h v -> w0 { tag = "SetHeadClock", a = h, b = v }
   SetHeadPulses h v -> w0 { tag = "SetHeadPulses", a = h, b = v }
   SetHeadEuclidSteps h v -> w0 { tag = "SetHeadEuclidSteps", a = h, b = v }
   NudgeHeadPulses h d -> w0 { tag = "NudgeHeadPulses", a = h, b = d }
@@ -353,6 +356,7 @@ fromWire w = case w.tag of
   "SetHeadTransp" -> Just (SetHeadTransp w.a w.b)
   "SetHeadOffset" -> Just (SetHeadOffset w.a w.b)
   "SetHeadLen" -> Just (SetHeadLen w.a w.b)
+  "SetHeadClock" -> Just (SetHeadClock w.a w.b)
   "SetHeadPulses" -> Just (SetHeadPulses w.a w.b)
   "SetHeadEuclidSteps" -> Just (SetHeadEuclidSteps w.a w.b)
   "NudgeHeadPulses" -> Just (NudgeHeadPulses w.a w.b)
@@ -414,7 +418,7 @@ type WireSim =
   { gen :: Array WireGenSource
   , spreadMille :: Int
   , biasMille :: Int
-  , odo :: Odonus
+  , odo :: OdonusOf HeadWire   -- heads' clock optional: older handoffs read
   , seedInt :: Int
   , frozen :: Boolean
   }
@@ -424,7 +428,7 @@ toWireSim s =
   { gen: map (\g -> { kind: kindCode g.kind, on: g.on, rate: g.rate, amt: g.amt }) s.gen
   , spreadMille: round (s.spread * 1000.0)
   , biasMille: round (s.bias * 1000.0)
-  , odo: s.odo
+  , odo: odonusToWire s.odo
   , seedInt: round s.seed
   , frozen: s.frozen
   }
@@ -440,7 +444,7 @@ fromWireSim w = do
     { gen
     , spread: toNumber w.spreadMille / 1000.0
     , bias: toNumber w.biasMille / 1000.0
-    , odo: w.odo
+    , odo: odonusFromWire w.odo
     , seed: toNumber w.seedInt
     , frozen: w.frozen
     }

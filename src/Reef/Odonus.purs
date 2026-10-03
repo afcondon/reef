@@ -7,7 +7,14 @@
 module Reef.Odonus
   ( Cell
   , Head
+  , HeadOf
+  , HeadWire
+  , headFromWire
+  , headToWire
   , Odonus
+  , OdonusOf
+  , odonusFromWire
+  , odonusToWire
   , currentChordPCs
   , followChord
   , Pattern
@@ -33,6 +40,7 @@ module Reef.Odonus
   , setHeadTransp
   , setHeadOffset
   , setHeadLen
+  , setHeadClock
   , setHeadPulses
   , setHeadEuclidSteps
   , nudgeHeadPulses
@@ -124,7 +132,10 @@ orderOf ix = maybe defaultOrder _.order (patternLibrary !! ix)
 
 -- | A playhead. `seqPos` is the index into its pattern's order; `cursor` is the
 -- | derived grid cell (order !! seqPos). `direction` 0=fwd 1=back 2=pendulum.
-type Head =
+-- | A head's fields, but for its clock: `Head` has them, and `HeadWire` (what
+-- | is read from JSON) has them optional, so state saved before the duration
+-- | clock still reads, on the step clock.
+type HeadOf r =
   { cursor :: Int
   , seqPos :: Int
   , accumulator :: Int   -- phase carry in 1/8-step units (`stepDenom`), 0..stepDenom-1.
@@ -146,11 +157,38 @@ type Head =
   , len :: Int      -- loop length: reset after L steps (polymeter)
   , pulses :: Int   -- Euclidean trigger count: the k in E(k, esteps) (pulses ≥ esteps ⇒ every step)
   , esteps :: Int   -- Euclidean step-count: the n in E(pulses, n) — INDEPENDENT of len, so E(5,12) etc.
+  | r
   }
 
-type Odonus =
+type Head = HeadOf
+  ( clock :: Int    -- what moves the head on: 0 = its steps (the Euclidean clock, as
+                    -- ever); 1 = its notes' lengths: it holds each cell for that cell's
+                    -- `dur` steps, so the cells' durations are its rhythm (AC,
+                    -- 2026-10-03), and a gate-off cell is a rest of its own length
+  , hold :: Int     -- clock 1: base ticks left on the current cell (0 = move on now)
+  )
+
+type HeadWire = HeadOf (clock :: Maybe Int, hold :: Maybe Int)
+
+headFromWire :: HeadWire -> Head
+headFromWire h = h { clock = fromMaybe 0 h.clock, hold = fromMaybe 0 h.hold }
+
+headToWire :: Head -> HeadWire
+headToWire h = h { clock = Just h.clock, hold = Just h.hold }
+
+-- | Odonus as read from JSON (heads as `HeadWire`), and back.
+odonusFromWire :: OdonusOf HeadWire -> Odonus
+odonusFromWire o = o { heads = map headFromWire o.heads }
+
+odonusToWire :: Odonus -> OdonusOf HeadWire
+odonusToWire o = o { heads = map headToWire o.heads }
+
+type Odonus = OdonusOf Head
+
+-- | Odonus with its heads of type `h`: `Head`, or `HeadWire` on the wire.
+type OdonusOf h =
   { cells :: Array Cell   -- length 16
-  , heads :: Array Head
+  , heads :: Array h
   , rootPc :: Int         -- scale root pitch-class 0..11 (legacy: drives scaleOf / UI / chord path)
   , scaleIvls :: Array Int -- in-scale semitone offsets from root (legacy: as above)
   , dist :: Distribution  -- how a cell integer becomes a pitch (legacy: chord-off path now uses pitchSet)
@@ -371,7 +409,8 @@ replicate16 = replicate 16
 mkHead :: Int -> Int -> Int -> Boolean -> Int -> Head
 mkHead speedIx direction transp mute patternIx =
   { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
-  , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16 }
+  , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16
+  , clock: 0, hold: 0 }
 
 -- | Head I runs (Rows, 1.0×); II–IV start muted with distinct patterns + fugue
 -- | offsets — unmute to build the canon. (Speed indices into the widened
@@ -476,10 +515,34 @@ advanceHead cells h =
     remain = newAcc `mod` stepDenom
     r = advanceEuclid order cells len (decodeDir h.direction) h.pulses es ticks
           { pos: h.seqPos, pend: h.pendStep, et: h.etick }
+    d = advanceDur order cells len (decodeDir h.direction) h.offset ticks
+          { pos: h.seqPos, pend: h.pendStep, hold: h.hold }
   in
-    h { seqPos = r.pos
-      , cursor = gridAt order (modPos (r.pos + h.offset) len)
-      , accumulator = remain, pendStep = r.pend, etick = r.et }
+    if h.clock == 1 then
+      h { seqPos = d.pos
+        , cursor = gridAt order (modPos (d.pos + h.offset) len)
+        , accumulator = remain, pendStep = d.pend, hold = d.hold }
+    else
+      h { seqPos = r.pos
+        , cursor = gridAt order (modPos (r.pos + h.offset) len)
+        , accumulator = remain, pendStep = r.pend, etick = r.et }
+
+-- | Run `n` base ticks on the duration clock: the head holds a cell for that
+-- | cell's `dur` ticks, then steps to its next (skip-aware, direction-aware)
+-- | cell, and holds that one for its own `dur`. `hold` 0 moves on at once.
+advanceDur
+  :: Array Int -> Array Cell -> Int -> Dir -> Int -> Int
+  -> { pos :: Int, pend :: Int, hold :: Int } -> { pos :: Int, pend :: Int, hold :: Int }
+advanceDur order cells len dir off n st
+  | n <= 0 = st
+  | st.hold > 1 = advanceDur order cells len dir off (n - 1) st { hold = st.hold - 1 }
+  | otherwise =
+      let
+        s = stepSeq order cells len dir { pos: st.pos, pend: st.pend }
+        cur = gridAt order (modPos (s.pos + off) len)
+        d = maybe 1 (\c -> clampI 1 8 c.dur) (cells !! cur)
+      in
+        advanceDur order cells len dir off (n - 1) { pos: s.pos, pend: s.pend, hold: d }
 
 -- | Did this head land on a Euclidean pulse during this model step? Recomputes the
 -- | same `ticks` window `advanceHead` runs, over the PRE-step `etick`/`accumulator`
@@ -489,7 +552,10 @@ pulsedThisStep :: Head -> Boolean
 pulsedThisStep h =
   let es = clampI 1 maxEsteps h.esteps
       ticks = (h.accumulator + speedNumOf h) `div` stepDenom
-  in anyPulse h.pulses es h.etick ticks
+  in
+    -- on the duration clock, a pulse is the tick its hold runs out on
+    if h.clock == 1 then ticks > 0 && ticks >= max 1 h.hold
+    else anyPulse h.pulses es h.etick ticks
 
 anyPulse :: Int -> Int -> Int -> Int -> Boolean
 anyPulse pulses es et n
@@ -593,6 +659,11 @@ setHeadOffset h v = editHead h \hd -> hd { offset = clampI 0 15 v }
 
 setHeadLen :: Int -> Int -> Odonus -> Odonus
 setHeadLen h v = editHead h \hd -> hd { len = clampI 1 16 v }
+
+-- | What moves head `h` on: 0 its steps, 1 its notes' lengths. Changing it
+-- | starts the new clock fresh (hold 0: move on at the next tick).
+setHeadClock :: Int -> Int -> Odonus -> Odonus
+setHeadClock h v = editHead h \hd -> if hd.clock == clampI 0 1 v then hd else hd { clock = clampI 0 1 v, hold = 0 }
 
 -- | The Euclidean step-count ceiling — the largest n in E(k, n) a head may hold.
 -- |
@@ -813,7 +884,7 @@ recallScene live scene =
   where
   carry lh sh = sh
     { cursor = lh.cursor, seqPos = lh.seqPos
-    , accumulator = lh.accumulator, pendStep = lh.pendStep }
+    , accumulator = lh.accumulator, pendStep = lh.pendStep, hold = lh.hold }
 
 -- | Recall only the *gesture* of `scene` over the `live` patch, KEEPING the live
 -- | harmonic context — root, scale intervals, distribution, any explicit
@@ -837,4 +908,4 @@ recallGesture live scene =
   where
   carry lh sh = sh
     { cursor = lh.cursor, seqPos = lh.seqPos
-    , accumulator = lh.accumulator, pendStep = lh.pendStep }
+    , accumulator = lh.accumulator, pendStep = lh.pendStep, hold = lh.hold }

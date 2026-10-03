@@ -19,7 +19,7 @@ odonusPatch "live"
   , vels: [ 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100 ]
   , heads:
       [ head rows 1.0 fwd transp 0 off 0 len 16 euclid 16 16
-      , head serpentine 0.5 fwd transp 7 off 1 len 16 euclid 16 16
+      , head serpentine 0.5 fwd transp 7 off 1 len 16 euclid 16 16 clock dur
       , head spiral 2.0 back transp 14 off 2 len 16 euclid 16 16
       , head columns 0.75 pend transp 21 off 3 len 16 euclid 16 16 mute ]
   , gen:
@@ -45,7 +45,7 @@ odonusNow
   , phases:
       [ { cursor: 0, seqPos: 1, acc: 0, pend: 1, etick: 0 }
       , { cursor: 1, seqPos: 2, acc: 1, pend: 1, etick: 2 }
-      , { cursor: 2, seqPos: 3, acc: 2, pend: 1, etick: 4 }
+      , { cursor: 2, seqPos: 3, acc: 2, pend: 1, etick: 4, hold: 3 }
       , { cursor: 3, seqPos: 4, acc: 3, pend: -1, etick: 6 } ]
   , sounding: { root: F, scale: [ 0, 2, 4, 5, 7, 9, 11 ], chord: [ 3, 5, 8, 11 ] }
   , routes: "odonus.grid <- scale \"minor\" e"
