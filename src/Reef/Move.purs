@@ -53,13 +53,14 @@ import Data.Foldable (foldl)
 import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, null, reverse, snoc, takeWhile, uncons, (!!))
 import Data.Either (Either(..))
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.String as String
 import Data.String.CodeUnits as CU
 import Data.Tuple (Tuple(..))
 import Reef.Gen (GenKind(..))
 import Reef.Input (Input(..), SimState)
 import Reef.Odonus (knobMax)
+import Reef.Odonus.Patch as Patch
 
 -- | A parsed line: gestures, a sequence of moves, or a move for n bars.
 data Move
@@ -263,12 +264,24 @@ tokenize src = go [] (CU.toCharArray src) ""
 parse :: String -> Either String Move
 parse src = do
   let
-    body = case String.stripPrefix (String.Pattern "odonus") (String.trim src) of
-      Just rest -> fromMaybe rest (String.stripPrefix (String.Pattern "$") (String.trim rest))
+    -- Patch.trimText, not String.trim: purerl's leaves a multi-line block
+    -- (a recall Limulus sends whole) untrimmed, so the `$` stayed on
+    body = case String.stripPrefix (String.Pattern "odonus") (Patch.trimText src) of
+      Just rest -> fromMaybe rest (String.stripPrefix (String.Pattern "$") (Patch.trimText rest))
       Nothing -> src
-  tokens <- tokenize body
-  { move, rest } <- hashChain tokens
-  if null rest then Right move else Left "unexpected ')' or trailing words"
+  -- A recall, as a mark's code gives it (Reef.Odonus.Patch): the whole body
+  -- is one value, read before the move syntax, whose `#` a `C#` would trip.
+  case Patch.trimText body of
+    t | Just _ <- String.stripPrefix (String.Pattern "odonusPatch") t ->
+          if isJust (Patch.parsePatch t) then Right (Gestures [ RecallPatch t ])
+          else Left "this odonusPatch does not read (the fields in their printed order?)"
+      | Just _ <- String.stripPrefix (String.Pattern "odonusNow") t ->
+          if isJust (Patch.parseNow t) then Right (Gestures [ RecallNow t ])
+          else Left "this odonusNow does not read"
+      | otherwise -> do
+          tokens <- tokenize body
+          { move, rest } <- hashChain tokens
+          if null rest then Right move else Left "unexpected ')' or trailing words"
 
 type P = Array Token -> Either String { move :: Move, rest :: Array Token }
 

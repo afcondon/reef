@@ -257,6 +257,20 @@ echo "== outScaleRun (36-step output scale): node vs erl =="
 diff /tmp/reef-outscale-node.txt /tmp/reef-outscale-erl.txt && echo "  ✅ outScaleRun node == erl"
 diff "$OUTSCALE_GOLDEN" /tmp/reef-outscale-node.txt && echo "  ✅ outScaleRun matches frozen golden"
 
+# --- Odonus as text (Reef.Conformance.patchRun) --------------------------------
+# The patch and odonusNow printed and read back, the recall moves Limulus sends
+# (multi-line, which purerl's trim once broke), and what they do to a state.
+PATCH_GOLDEN="$REEF/conformance/patch-golden.txt"
+echo "== patchRun (Odonus patch text, recall moves): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { patchRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(patchRun);' \
+  ) > /tmp/reef-patch-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':patchRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-patch-erl.txt
+diff /tmp/reef-patch-node.txt /tmp/reef-patch-erl.txt && echo "  ✅ patchRun node == erl"
+diff "$PATCH_GOLDEN" /tmp/reef-patch-node.txt && echo "  ✅ patchRun matches frozen golden"
+
 # --- harmony routes (Reef.Conformance.routeRun) ------------------------------
 # The router's table as text: the rig parses what the page writes.
 ROUTE_GOLDEN="$REEF/conformance/route-golden.txt"

@@ -42,6 +42,7 @@ module Reef.Conformance
   , scaleRun
   , outScaleRun
   , routeRun
+  , patchRun
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
@@ -63,6 +64,8 @@ import Data.Array (filter, find, length, null, range, snoc, mapWithIndex, (!!))
 import Data.Either (Either(..), either)
 import Data.String as String
 import Reef.Route as Route
+import Reef.Odonus.Patch as Patch
+import Reef.Move as Move
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -502,6 +505,53 @@ simRun = case decodeSim handoffJson of
     let r = stepTick acc.sim
         out' = if i `mod` sampleEvery == 0 then snoc acc.out (digest i r.sim.odo r.sim.seed) else acc.out
     in { sim: r.sim, out: out' }
+
+-- ── the patch as text, and recalling it (Reef.Odonus.Patch) ─────────────────
+
+-- | A patch and an instant printed and read back, a patch from before `span`,
+-- | the two recall moves Limulus sends, and what they do to a running state.
+patchRun :: String
+patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recalled)
+  where
+  odo0 = defaultOdonus
+    { harmony = Just "<c'maj7 a'min7>/2", span = 2, octaveShift = -1
+    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3 }) defaultOdonus.heads }
+  p0 =
+    { name: "live", odo: setPat odo0, gen: Patch.reconcileGen [], genSpread: 0.3, genBias: 0.7
+    , swing: 0.12, velHumanize: 9, stepDiv: 2 }
+  setPat o = o { scalePattern = Just "<dorian lydian>/4", scaleHeld = Just o.scaleIvls }
+  t1 = Patch.printPatch p0
+  t2 = maybe "UNREAD" Patch.printPatch (Patch.parsePatch t1)
+  patchLines = [ t1, "patch round-trip " <> show (t1 == t2) ]
+  n0 =
+    { step: 1234, tempo: 178, seed: 987654321.0, frozen: false
+    , phases: map (\i -> { cursor: i, seqPos: i + 1, accumulator: i `mod` 8, pendStep: if i == 3 then -1 else 1, etick: 2 * i }) (range 0 3)
+    , sounding: { root: 5, scale: [ 0, 2, 4, 5, 7, 9, 11 ], chord: Just [ 3, 5, 8, 11 ] }
+    , routes: Just "odonus.grid <- scale \"minor\" e", feeds: Nothing }
+  tn = Patch.printNow n0
+  nowLines = [ tn, "now round-trip " <> show (Just tn == map Patch.printNow (Patch.parseNow tn)) ]
+  noSpan = String.replaceAll (String.Pattern "  , span: 2\n") (String.Replacement "") t1
+  legacy = [ "legacy span " <> maybe "UNREAD" (\p -> show p.odo.span) (Patch.parsePatch noSpan) ]
+  moveLine src = case Move.parse src of
+    Left e -> "refused: " <> e
+    Right m -> intercalate "," (map (\i -> (toWire i).tag) (Move.inputsOf m))
+  moves =
+    [ "move patch | " <> moveLine ("odonus $ " <> t1)
+    , "move now | " <> moveLine ("odonus $ " <> tn)
+    , "move one line | " <> moveLine ("odonus $ " <> String.replaceAll (String.Pattern "\n") (String.Replacement " ") t1)
+    , "move broken | " <> moveLine "odonus $ odonusPatch \"x\" { scale: C"
+    ]
+  recalled = case decodeSim handoffJson of
+    Left _ -> [ "SIM-DECODE-FAIL" ]
+    Right sim0 ->
+      let
+        moved = (stepTick (stepTick sim0).sim).sim
+        r1 = applyInput (RecallPatch t1) moved
+        r2 = applyInput (RecallNow tn) r1
+      in
+        [ "recall patch " <> digest 0 r1.odo r1.seed
+        , "recall now   " <> digest 0 r2.odo r2.seed <> " frozen " <> show r2.frozen
+        ]
 
 -- ── 3. the transcendental (pow / Beta) diagnostic ────────────────────────────
 

@@ -58,9 +58,10 @@ import Reef.Odonus
   , setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
-  , toggleScaleNote, toggleSkip, unifyHeads
+  , toggleScaleNote, toggleSkip, unifyHeads, recallScene
   )
 import Reef.PitchSet (PitchSet)
+import Reef.Odonus.Patch as Patch
 
 -- ── the synced simulation state ──────────────────────────────────────────────
 
@@ -136,6 +137,13 @@ data Input
   -- (Nothing = leave the scale). The rig samples (it has Tidal) and broadcasts
   -- this tick-tagged, so the browser never reads a pattern (Engine.sampleInput).
   | SetSampled (Maybe (Array Int)) (Maybe (Array Int))
+  -- A recall (docs/kb/plans/the-deck.md): a patch's settings (`Reef.Odonus.
+  -- Patch`, as text) with the playheads carried on where they are, as a scene
+  -- recall does; and an instant's phases, seed and freeze (`odonusNow`).
+  -- Text that does not read changes nothing. The feel the page keeps beside
+  -- the model (swing, humanise, step length) is the page's to take.
+  | RecallPatch String
+  | RecallNow String
   -- Reichian phase macros
   | UnifyHeads
   | FanOffsets Int
@@ -212,6 +220,12 @@ applyInput = case _ of
   SetScalePattern p -> onOdo (setScalePattern p)
   SetOutScale p root -> onOdo (setOutScale p root)
   SetSampled c sc -> onOdo \o -> (followChord c o) { scaleIvls = maybe o.scaleIvls normaliseIvls sc }
+  RecallPatch txt -> \s -> case Patch.parsePatch txt of
+    Just p -> s { odo = recallScene s.odo p.odo, gen = Patch.reconcileGen p.gen, spread = p.genSpread, bias = p.genBias }
+    Nothing -> s
+  RecallNow txt -> \s -> case Patch.parseNow txt of
+    Just n -> s { odo = Patch.withPhases n.phases s.odo, seed = n.seed, frozen = n.frozen }
+    Nothing -> s
   UnifyHeads -> onOdo unifyHeads
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
@@ -303,6 +317,8 @@ toWire = case _ of
   SetScalePattern p -> w0 { tag = "SetScalePattern", txt = p }
   SetOutScale p root -> w0 { tag = "SetOutScale", txt = p, a = root }
   SetSampled c sc -> w0 { tag = "SetSampled", chord = c, ivls = sc }
+  RecallPatch t -> w0 { tag = "RecallPatch", txt = Just t }
+  RecallNow t -> w0 { tag = "RecallNow", txt = Just t }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
@@ -361,6 +377,8 @@ fromWire w = case w.tag of
   "SetScalePattern" -> Just (SetScalePattern w.txt)
   "SetOutScale" -> Just (SetOutScale w.txt w.a)
   "SetSampled" -> Just (SetSampled w.chord w.ivls)
+  "RecallPatch" -> RecallPatch <$> w.txt
+  "RecallNow" -> RecallNow <$> w.txt
   "UnifyHeads" -> Just UnifyHeads
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)

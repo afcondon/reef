@@ -1,0 +1,61 @@
+odonusPatch "live"
+  { scale: C minor "<dorian lydian>/4"
+  , distribution: Natural
+  , octave: -1
+  , span: 2
+  , scalarTransp: 0
+  , gate: 90
+  , quantize: harmony "<c'maj7 a'min7>/2"
+  , swing: 12
+  , velHumanize: 9
+  , stepDiv: 2
+  , marbles: { spread: 30, bias: 70 }
+  , notes: [ 0, 17, 34, 51, 68, 85, 102, 119, 136, 153, 170, 187, 204, 221, 238, 255 ]
+  , gates: [ T, T, T, T, T, T, T, T, T, T, T, T, T, T, T, T ]
+  , skips: [ F, F, F, F, F, F, F, F, F, F, F, F, F, F, F, F ]
+  , glides: [ F, F, F, F, F, F, F, F, F, F, F, F, F, F, F, F ]
+  , durs: [ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 ]
+  , ratchets: [ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 ]
+  , vels: [ 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100 ]
+  , heads:
+      [ head rows 1.0 fwd transp 0 off 0 len 16 euclid 16 16
+      , head serpentine 0.5 fwd transp 7 off 1 len 16 euclid 16 16
+      , head spiral 2.0 back transp 14 off 2 len 16 euclid 16 16
+      , head columns 0.75 pend transp 21 off 3 len 16 euclid 16 16 mute ]
+  , gen:
+      [ source notes rate 96 amt 20 off
+      , source gate rate 96 amt 30 off
+      , source skip rate 96 amt 30 off
+      , source glide rate 96 amt 30 off
+      , source len rate 72 amt 25 off
+      , source ratchet rate 72 amt 25 off
+      , source heads rate 96 amt 30 off
+      , source transp rate 96 amt 40 off
+      , source pattern rate 96 amt 30 off
+      , source speed rate 96 amt 30 off
+      , source key rate 96 amt 25 off
+      , source vel rate 72 amt 30 off ]
+  }
+patch round-trip true
+odonusNow
+  { step: 1234
+  , tempo: 178
+  , seed: 987654321
+  , frozen: F
+  , phases:
+      [ { cursor: 0, seqPos: 1, acc: 0, pend: 1, etick: 0 }
+      , { cursor: 1, seqPos: 2, acc: 1, pend: 1, etick: 2 }
+      , { cursor: 2, seqPos: 3, acc: 2, pend: 1, etick: 4 }
+      , { cursor: 3, seqPos: 4, acc: 3, pend: -1, etick: 6 } ]
+  , sounding: { root: F, scale: [ 0, 2, 4, 5, 7, 9, 11 ], chord: [ 3, 5, 8, 11 ] }
+  , routes: "odonus.grid <- scale \"minor\" e"
+  , feeds: none
+  }
+now round-trip true
+legacy span 3
+move patch | RecallPatch
+move now | RecallNow
+move one line | RecallPatch
+move broken | refused: this odonusPatch does not read (the fields in their printed order?)
+recall patch    0 | k0 [0,2,3,5,7,8,10] s1733897595 | 0/1/1/1,17/1/1/1,34/1/1/1,51/1/1/1,68/1/1/1,85/1/1/1,102/1/1/1,119/1/1/1,136/1/1/1,153/1/1/1,170/1/1/1,187/1/1/1,204/1/1/1,221/1/1/1,238/1/1/1,255/1/1/1 | 2:2:0:4:0:16  1:1:7:2:1:16  5:12:14:6:3:16  4:1:21:3:2:16m
+recall now      0 | k0 [0,2,3,5,7,8,10] s987654321 | 0/1/1/1,17/1/1/1,34/1/1/1,51/1/1/1,68/1/1/1,85/1/1/1,102/1/1/1,119/1/1/1,136/1/1/1,153/1/1/1,170/1/1/1,187/1/1/1,204/1/1/1,221/1/1/1,238/1/1/1,255/1/1/1 | 0:1:0:4:0:16  1:2:7:2:1:16  2:3:14:6:3:16  3:4:21:3:2:16m frozen false
