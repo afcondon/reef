@@ -71,8 +71,9 @@ parseLine src = do
         (case named of
           Just b -> Just b.kind
           Nothing -> Rack.kindOf k)
+      target <- Rack.bankOf t
       terms <- foldM (\acc part -> snoc acc <$> term part) [] (filter (_ /= "") rest)
-      pure { kind, block: map _.name named, target: Rack.parseTarget t, terms }
+      pure { kind, block: map _.name named, target, terms }
     _ -> Left ("a line starts with a kind and a bank, as in lfo es9main: " <> h)
   where
   term part = case Str.indexOf (Str.Pattern " ") part of
@@ -252,9 +253,9 @@ rigLine src rack = case words src of
   -- `off <bank>`: the bank leaves the rack, and its daemon is sent the same
   -- kind with every slot silent, so the outputs stop (a dropped "free")
   [ "off", t ] -> do
+    target <- Rack.bankOf t
     let
       sel = Rack.parseRack rack
-      target = Rack.parseTarget t
     dest <- note (t <> " is already free") (Array.find (\d -> d.target == target) sel.destinations)
     let sent = Wire.destinationEnvelope (dest { bank = Rack.silence dest.bank })
     pure

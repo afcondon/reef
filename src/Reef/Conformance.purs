@@ -1772,9 +1772,12 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     , "ochd es9main # shape blob"
     , "chord es98cv0 # quality fancy"
     , "divider es9gt0 # by \"2 x\""
+    -- a typo is not a bank: only `virtual:` makes one
+    , "divider fh2gt0"
+    , "lfo virtual:bus # rate 1"
     ]
   -- `off <bank>` on the rig: the bank leaves the rack, its daemon sent silence
-  offs = [ "== off" ] <> (foldl off { rack: SR.printRack final, out: [] } [ "off es9gt1", "off es9gt1", "off fh2_1" ]).out
+  offs = [ "== off" ] <> (foldl off { rack: SR.printRack final, out: [] } [ "off es9gt1", "off es9gt1", "off fh2_1", "off fh2gt0" ]).out
   off acc src = case SL.rigLine src acc.rack of
     Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
     Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }

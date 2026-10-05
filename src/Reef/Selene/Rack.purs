@@ -28,6 +28,7 @@ module Reef.Selene.Rack
   , printDest
   , parseRack
   , parseTarget
+  , bankOf
   , kindKeyword
   -- for the line form (Reef.Selene.Line), which reads the same tokens
   , kindOf
@@ -40,6 +41,7 @@ module Reef.Selene.Rack
 import Prelude
 
 import Data.Array (drop, filter, foldl, mapWithIndex, range, snoc, take, (!!))
+import Data.Either (Either(..))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Number as Number
@@ -254,6 +256,16 @@ parseTarget tok =
   afterInt pfx ctor = case Str.stripPrefix (Str.Pattern pfx) tok of
     Just rest -> map ctor (Int.fromString rest)
     Nothing -> Nothing
+
+-- | A bank as a line names it: strict, where `parseTarget` (for saved racks)
+-- | takes any unknown token as a virtual bank. On a line that turned a typo
+-- | into a bank that is kept and never sent (`fh2gt0`, AC 2026-10-05), so a
+-- | virtual bank must be asked for as `virtual:name`.
+bankOf :: String -> Either String M.Target
+bankOf tok = case parseTarget tok of
+  M.Virtual v | Str.stripPrefix (Str.Pattern "virtual:") tok == Nothing ->
+    Left ("no bank " <> v <> ": es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>")
+  t -> Right t
 
 -- ---------------------------------------------------------------------------
 -- Per-kind slot parsers + silent defaults

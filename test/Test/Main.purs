@@ -2038,10 +2038,13 @@ lfo | refused: a line starts with a kind and a bank, as in lfo es9main: lfo
 ochd es9main # shape blob | refused: ochd: shape is sin, tri, saw or sqr, not blob
 chord es98cv0 # quality fancy | refused: chord: no quality fancy (maj min maj7 min7 dom7 min9 sus2 sus4 dim aug)
 divider es9gt0 # by "2 x" | refused: divider: by wants whole numbers, not x
+divider fh2gt0 | refused: no bank fh2gt0: es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>
+lfo virtual:bus # rate 1 | accepted
 == off
 off es9gt1 | es9 gt1 | still in the rack: false
 off es9gt1 | refused: es9gt1 is already free
 off fh2_1 | fh2 gt0 | still in the rack: false
+off fh2gt0 | refused: no bank fh2gt0: es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
