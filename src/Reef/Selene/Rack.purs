@@ -29,6 +29,11 @@ module Reef.Selene.Rack
   , parseRack
   , parseTarget
   , kindKeyword
+  -- for the line form (Reef.Selene.Line), which reads the same tokens
+  , kindOf
+  , parseBase
+  , noteToken
+  , fmt
   ) where
 
 import Prelude

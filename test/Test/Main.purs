@@ -15,7 +15,7 @@ import Effect.Console (log)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Routing as Routing
-import Reef.Conformance (durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -35,6 +35,13 @@ main = do
   assertEqual' "Odonus stepEmit conformance (defaultOdonus, scale source, 32 steps)"
     { actual: run, expected: golden }
   log "Reef Odonus conformance golden: OK"
+
+  -- Selene's language (docs/kb/plans/selene-in-tidal.md): the rack printed and
+  -- read back, lines applied in turn and printed back, refusals. The BEAM
+  -- prints the same (conformance/cross-runtime.sh).
+  assertEqual' "Selene rack and line form golden"
+    { actual: seleneRun, expected: seleneGolden }
+  log "Reef Selene language golden: OK"
 
   -- Conspicillum: the grain selector (triggerfish/docs/CONSPICILLUM-DESIGN.md, C2).
   --
@@ -1935,3 +1942,136 @@ durGolden = """  1 | h0 p50 d2 r1 v100 | 1/2 0/0
  54 | - | 5/0 3/1
  55 | h0 p62 d2 r1 v100 | 6/0 3/1
  56 | h0 p63 d1 r1 v100  h1 p70 d1 r1 v100 | 7/0 7/1"""
+
+seleneGolden :: String
+seleneGolden = """== the default rack
+-- SELENE · edit the numbers; the rack follows.
+-- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
+-- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind.
+
+lfo es9main
+  0.5 @0 sin 0.8   -- 1
+  0.5 @0.13 sin 0.8   -- 2
+  0.5 @0.25 sin 0.8   -- 3
+  0.5 @0.38 sin 0.8   -- 4
+  0.5 @0.5 sin 0.8   -- 5
+  0.5 @0.63 sin 0.8   -- 6
+  0.5 @0.75 sin 0.8   -- 7
+  0.5 @0.88 sin 0.8   -- 8
+
+euclid es9gt0
+  3 8 @4   -- 1
+  4 8 @4   -- 2
+  5 8 @4   -- 3
+  6 8 @4   -- 4
+  7 16 @4   -- 5
+  3 16 @4   -- 6
+  4 16 @4   -- 7
+  5 16 @4   -- 8
+
+clock es9gt1
+  1/4 x1 50%   -- 1
+  1/4 x2 50%   -- 2
+  1/4 x3 50%   -- 3
+  1/4 x4 50%   -- 4
+  1/4 x5 50%   -- 5
+  1/4 x6 50%   -- 6
+  1/4 x7 50%   -- 7
+  1/4 x8 50%   -- 8
+
+note midi1
+  C2   -- 1
+  G2   -- 2
+  C3   -- 3
+  D3   -- 4
+  E3   -- 5
+  G3   -- 6
+  C4   -- 7
+  E4   -- 8
+rack round-trip true
+== lines
+> lfo es9main # rate "0.5 1 2 4" # phase "0 0.25"
+  lfo es9main # rate "0.5 1 2 4 0.5 1 2 4" # phase "0 0.25 0 0.25 0 0.25 0 0.25"
+> lfo es9main # tri 0.6 # sin 0
+  lfo es9main # rate "0.5 1 2 4 0.5 1 2 4" # phase "0 0.25 0 0.25 0 0.25 0 0.25" # sin 0 # tri 0.6
+> euclid es9gt0 # hits 5
+  euclid es9gt0 # hits 5 # steps "8 8 8 8 16 16 16 16"
+> euclid es9gt0 # hits "3 4 5 6 7 3 4 5" # steps "8 8 8 8 16 16 16 16" # acc 2
+  euclid es9gt0 # hits "3 4 5 6 7 3 4 5" # steps "8 8 8 8 16 16 16 16" # acc 2
+> clock es9gt1 # div 1/8 # mult "1 2 3 4 5 6 7 8" # pw 25
+  clock es9gt1 # div 1/8 # mult "1 2 3 4 5 6 7 8" # pw 25
+> note es98cv0 # note "C3 E3 G3 B3"
+  note es98cv0 # note "C3 E3 G3 B3 C3 E3 G3 B3"
+> env fh2_0 # a 10 # d 200 # s 64 # r 400
+  env fh2_0 # a 10 # d 200 # s 64 # r 400
+> lfo es9gt0 # rate 2
+  lfo es9gt0 # rate 2 # phase "0 0.13 0.25 0.38 0.5 0.63 0.75 0.88"
+== refusals
+squiggle es9main # rate 1 | refused: not a kind of polysignal: squiggle (lfo, euclid, clock, note, env)
+lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
+euclid es9gt0 # hits many | refused: hits wants a whole number, not many
+lfo | refused: a line starts with a kind and a bank, as in lfo es9main: lfo
+== the rack after
+-- SELENE · edit the numbers; the rack follows.
+-- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
+-- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind.
+
+lfo es9main
+  0.5 @0 tri 0.6   -- 1
+  1 @0.25 tri 0.6   -- 2
+  2 @0 tri 0.6   -- 3
+  4 @0.25 tri 0.6   -- 4
+  0.5 @0 tri 0.6   -- 5
+  1 @0.25 tri 0.6   -- 6
+  2 @0 tri 0.6   -- 7
+  4 @0.25 tri 0.6   -- 8
+
+lfo es9gt0
+  2 @0 sin 0.8   -- 1
+  2 @0.13 sin 0.8   -- 2
+  2 @0.25 sin 0.8   -- 3
+  2 @0.38 sin 0.8   -- 4
+  2 @0.5 sin 0.8   -- 5
+  2 @0.63 sin 0.8   -- 6
+  2 @0.75 sin 0.8   -- 7
+  2 @0.88 sin 0.8   -- 8
+
+clock es9gt1
+  1/8 x1 25%   -- 1
+  1/8 x2 25%   -- 2
+  1/8 x3 25%   -- 3
+  1/8 x4 25%   -- 4
+  1/8 x5 25%   -- 5
+  1/8 x6 25%   -- 6
+  1/8 x7 25%   -- 7
+  1/8 x8 25%   -- 8
+
+note midi1
+  C2   -- 1
+  G2   -- 2
+  C3   -- 3
+  D3   -- 4
+  E3   -- 5
+  G3   -- 6
+  C4   -- 7
+  E4   -- 8
+
+note es98cv0
+  C3   -- 1
+  E3   -- 2
+  G3   -- 3
+  B3   -- 4
+  C3   -- 5
+  E3   -- 6
+  G3   -- 7
+  B3   -- 8
+
+env fh2_0
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 1
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 2
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 3
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 4
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 5
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 6
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 7
+  a 10 d 200 s 64 r 400 vel 96 time 2   -- 8"""

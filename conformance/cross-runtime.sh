@@ -597,3 +597,19 @@ echo "== Conspicillum reference (generated docs): node vs erl vs committed =="
   > /tmp/reef-conspicillum-reference-erl.txt
 diff /tmp/reef-conspicillum-reference-node.txt /tmp/reef-conspicillum-reference-erl.txt && echo "  OK Conspicillum reference node == erl"
 diff "$CONSPICILLUM_REFERENCE_DOC" /tmp/reef-conspicillum-reference-node.txt && echo "  OK Conspicillum reference matches docs/CONSPICILLUM-REFERENCE.md"
+
+# --- Selene's language (Reef.Conformance.seleneRun) ---------------------------
+# The rack printed and read back, `selene $` lines applied in turn and printed
+# back as lines, refusals (docs/kb/plans/selene-in-tidal.md). Numbers print
+# through Reef.Conspicillum.Decimal, so the two runtimes owe each other every
+# byte. The daemons' JSON is not in it (each runtime's own float printing).
+SELENE_GOLDEN="$REEF/conformance/selene-golden.txt"
+echo "== seleneRun (rack + line form): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { seleneRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(seleneRun);' \
+  ) > /tmp/reef-selene-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':seleneRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-selene-erl.txt
+diff /tmp/reef-selene-node.txt /tmp/reef-selene-erl.txt && echo "  OK seleneRun node == erl"
+diff "$SELENE_GOLDEN" /tmp/reef-selene-node.txt && echo "  OK seleneRun matches frozen golden"

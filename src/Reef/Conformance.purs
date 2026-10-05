@@ -57,6 +57,7 @@ module Reef.Conformance
   , conspicillumDisplayRun
   , conspicillumProgressionRun
   , conspicillumHarmonicRun, conspicillumProgression
+  , seleneRun
   ) where
 
 import Prelude
@@ -97,6 +98,9 @@ import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
+import Reef.Selene.Model (defaultSelene) as SM
+import Reef.Selene.Rack (parseRack, printRack) as SR
+import Reef.Selene.Line (applyLine, parseLine, printLine) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -1711,3 +1715,46 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
       render es = intercalate " " (map (\e -> show e.n <> "@" <> Decimal.fixed 4 e.at <> ":" <> Decimal.fixed 4 e.begin <> "-" <> Decimal.fixed 4 e.end) es)
     in
       "cycle " <> show c <> " as a pushed scene: " <> (if render byEngine == render pushed then "same" else "DIFFERENT")
+
+
+-- ---------------------------------------------------------------------------
+-- Selene's language (docs/kb/plans/selene-in-tidal.md): the rack printed and
+-- read back, then a run of lines applied in turn, each bank printed back as
+-- a line, then refusals, then the rack as it ends. Every number prints
+-- through Rack.fmt (Decimal), so the BEAM and JS must agree byte for byte.
+-- The daemons' JSON (Reef.Selene.Wire) is left out: it is simple-json's, which
+-- prints decimals each runtime's own way, and the daemons read either.
+-- ---------------------------------------------------------------------------
+
+seleneRun :: String
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> [ "== the rack after", SR.printRack final ])
+  where
+  r0 = SR.printRack SM.defaultSelene
+  rack0 = [ "== the default rack", r0 ]
+  roundTrip = [ "rack round-trip " <> show (SR.printRack (SR.parseRack r0) == r0) ]
+  script =
+    [ "lfo es9main # rate \"0.5 1 2 4\" # phase \"0 0.25\""
+    , "lfo es9main # tri 0.6 # sin 0"
+    , "euclid es9gt0 # hits 5"
+    , "euclid es9gt0 # hits \"3 4 5 6 7 3 4 5\" # steps \"8 8 8 8 16 16 16 16\" # acc 2"
+    , "clock es9gt1 # div 1/8 # mult \"1 2 3 4 5 6 7 8\" # pw 25"
+    , "note es98cv0 # note \"C3 E3 G3 B3\""
+    , "env fh2_0 # a 10 # d 200 # s 64 # r 400"
+    , "lfo es9gt0 # rate 2"
+    ]
+  step acc src = case SL.parseLine src >>= \l -> SL.applyLine l acc.sel <#> \sel -> { l, sel } of
+    Left e -> acc { out = acc.out <> [ "> " <> src, "  refused: " <> e ] }
+    Right { l, sel } ->
+      acc { sel = sel, out = acc.out <> [ "> " <> src ] <> map (\d -> "  " <> SL.printLine d) (filter (\d -> d.target == l.target) sel.destinations) }
+  ran = foldl step { sel: SM.defaultSelene, out: [] } script
+  lines = [ "== lines" ] <> ran.out
+  final = ran.sel
+  refusals = [ "== refusals" ] <> map refuse
+    [ "squiggle es9main # rate 1"
+    , "lfo es9main # hits 3"
+    , "euclid es9gt0 # hits many"
+    , "lfo"
+    ]
+  refuse src = src <> " | " <> case SL.parseLine src >>= \l -> SL.applyLine l SM.defaultSelene of
+    Left e -> "refused: " <> e
+    Right _ -> "accepted"
