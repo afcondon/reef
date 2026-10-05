@@ -27,6 +27,10 @@ module Reef.Selene.Line
   , paramsOf
   , RigLine
   , rigLine
+  , moduleOf
+  , onBank
+  , moduleKind
+  , accepts
   ) where
 
 import Prelude
@@ -249,3 +253,39 @@ rigLine src rack = do
     , bank: maybe "" _.bank sent
     , json: maybe "" _.json sent
     }
+
+-- ---------------------------------------------------------------------------
+-- Modules: a bank's worth, free of any bank (docs/kb/plans/selene-in-tidal.md)
+-- ---------------------------------------------------------------------------
+
+-- | A bank as a module: its line without the bank (`euclid # hits 5 # …`),
+-- | to be dropped on another bank.
+moduleOf :: M.Destination -> String
+moduleOf d = case Str.indexOf (Str.Pattern " # ") line of
+  Just at -> Rack.kindKeyword d.bank <> Str.drop at line
+  Nothing -> Rack.kindKeyword d.bank
+  where
+  line = printLine d
+
+-- | A module (or a block's name, with its terms) put on a bank: the line to
+-- | send, `<kind or block> <bank> # …`.
+onBank :: String -> M.Target -> String
+onBank m target = case Str.indexOf (Str.Pattern " ") (trim m) of
+  Just at -> Str.take at (trim m) <> " " <> M.targetWire target <> Str.drop at (trim m)
+  Nothing -> trim m <> " " <> M.targetWire target
+
+-- | The kind of bank a module makes: its first word, a kind or a block.
+moduleKind :: String -> Maybe M.GenKind
+moduleKind m = case head (words m) of
+  Just w -> case Block.blockNamed w of
+    Just b -> Just b.kind
+    Nothing -> Rack.kindOf w
+  Nothing -> Nothing
+
+-- | Whether a bank can take a kind: gate banks take rhythms and clocks; a
+-- | MIDI channel takes notes; CV banks, the FH-2 and virtual buses take any.
+accepts :: M.Target -> M.GenKind -> Boolean
+accepts target kind = case target of
+  M.ES9Gt _ -> kind == M.KEuclid || kind == M.KClock
+  M.Midi _ -> kind == M.KNote
+  _ -> true
