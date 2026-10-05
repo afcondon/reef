@@ -31,6 +31,7 @@ module Reef.Selene.Line
   , onBank
   , moduleKind
   , accepts
+  , refusal
   ) where
 
 import Prelude
@@ -74,6 +75,7 @@ parseLine src = do
     _ -> Left ("a line starts with a kind and a bank, as in lfo es9main: " <> h)
   where
   term part = case Str.indexOf (Str.Pattern " ") part of
+    Nothing | part == "fresh" -> Right { param: "fresh", values: [] }
     Nothing -> Left ("# " <> part <> " wants a value")
     Just at ->
       let
@@ -96,9 +98,13 @@ applyLine line sel = do
     kindOfLine = line.kind
   -- a block sets the whole bank from its own parameters; the line's other
   -- terms then apply to that, as plain parameters
+  -- `# fresh` starts the bank fresh first: a module dropped on a bank
+  -- replaces what was there, rather than changing only what it names
+  let fresh = Array.any (\t -> t.param == "fresh") line.terms
+      named = filter (\t -> t.param /= "fresh") line.terms
   { start, terms } <- case line.block >>= Block.blockNamed of
-    Just b -> (\x -> { start: x.bank, terms: x.rest }) <$> Block.expand b line.terms
-    Nothing -> pure { start: current, terms: line.terms }
+    Just b -> (\x -> { start: x.bank, terms: x.rest }) <$> Block.expand b named
+    Nothing -> pure { start: if fresh then M.freshBank kindOfLine else current, terms: named }
   bank <- foldM applyTerm start terms
   let dest = { target: line.target, range: Nothing, bank }
   pure case existing of
@@ -282,10 +288,20 @@ moduleKind m = case head (words m) of
     Nothing -> Rack.kindOf w
   Nothing -> Nothing
 
--- | Whether a bank can take a kind: gate banks take rhythms and clocks; a
--- | MIDI channel takes notes; CV banks, the FH-2 and virtual buses take any.
+-- | Whether a bank can take a kind: gate banks (the ES-5, an ESX-8GT, the
+-- | FH-2's FHX-8GT) take rhythms and clocks; a MIDI channel takes notes; CV
+-- | banks, the FH-2's own eight and virtual buses take any.
 accepts :: M.Target -> M.GenKind -> Boolean
 accepts target kind = case target of
-  M.ES9Gt _ -> kind == M.KEuclid || kind == M.KClock
+  M.ES9Gt _ -> gates
+  M.FH2 n | n > 0 -> gates
   M.Midi _ -> kind == M.KNote
   _ -> true
+  where
+  gates = kind == M.KEuclid || kind == M.KClock
+
+-- | Why a bank cannot take a kind, for the page to say.
+refusal :: M.Target -> M.GenKind -> String
+refusal target kind = case target of
+  M.Midi _ -> "a MIDI channel takes notes, not " <> M.kindLabel kind
+  _ -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind

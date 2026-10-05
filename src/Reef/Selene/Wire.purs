@@ -40,7 +40,10 @@ targetSocketBank = case _ of
   M.ES9Main -> Just { socket: "es9", bank: "main" }
   M.ES9Gt n -> Just { socket: "es9", bank: "gt" <> show n }
   M.ES9Cv n -> Just { socket: "es9", bank: "cv" <> show n }
-  M.FH2 _ -> Just { socket: "fh2", bank: "main" }
+  -- the FH-2's own eight, then each FHX-8 expander, which in AC's rack is an
+  -- FHX-8GT, gates (Triggerfish.Rig's assumption, spelt out there)
+  M.FH2 0 -> Just { socket: "fh2", bank: "main" }
+  M.FH2 n -> Just { socket: "fh2", bank: "gt" <> show (n - 1) }
   M.Midi _ -> Nothing
   M.Virtual _ -> Nothing
 
