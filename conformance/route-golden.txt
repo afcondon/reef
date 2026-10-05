@@ -1,8 +1,8 @@
    0 |  | 
-   1 | odonus.grid <- scale "<dorian lydian>/4" d ; odonus.out <- vetula 3 | ClearPitchSet,SetScalePattern(<dorian lydian>/4),SetRoot@2
-   2 | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | ClearPitchSet,SetScalePattern(dorian),SetRoot@2,SetOutScale@0,SetHarmony(<c'maj7 a'min7>/2)
-   3 | odonus.out <- scale "major" g | ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale(major)@7
-   4 | refused: odonus.grid takes a scale (scale "…" or vetula key), not a harmony
+   1 | odonus.grid <- scale "<dorian lydian>/4" d ; odonus.out <- vetula 3 | SetGridHarmony,ClearPitchSet,SetScalePattern(<dorian lydian>/4),SetRoot@2
+   2 | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | SetGridHarmony,ClearPitchSet,SetScalePattern(dorian),SetRoot@2,SetOutScale@0,SetHarmony(<c'maj7 a'min7>/2)
+   3 | odonus.out <- scale "major" g | SetGridHarmony,ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale(major)@7
+   4 | odonus.grid <- harmony "c'maj" | SetScalePattern,SetGridHarmony(c'maj),SetHarmony,SetOutScale@0
    5 | refused: no input 'odonus.side' (odonus.grid, odonus.out)
    6 | odonus.grid <- vetula key | 
 key d 0 2 3 5 7 9 10 | d 0 2 3 5 7 9 10
@@ -11,9 +11,9 @@ key c | c 0
 key  | refused: a key is ROOT STEPS…: d 0 2 3 5 7 9 10
 key q 0 2 | refused: 'q' is not a note name or a pitch class
 key a 0 x | refused: a key's steps are numbers: 'x'
-fed none->ctx | SetScalePattern,SetPitchSet,SetOutScale@0,SetHarmony(<c'maj e'min>)
+fed none->ctx | SetGridHarmony,SetScalePattern,SetPitchSet,SetOutScale@0,SetHarmony(<c'maj e'min>)
 fed ctx->ctx' | SetOutScale@0,SetHarmony(<f'maj7 g'dom7>/2)
-fed ctx->none | ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale@0
+fed ctx->none | SetGridHarmony,ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale@0
 set | odonus.grid <- vetula key ; odonus.out <- vetula 2
 feeds odonus.grid <- key d 0 2 3 5 7 9 10 ; odonus.out <- harmony "<c'maj e'min>" | odonus.grid <- key d 0 2 3 5 7 9 10 ; odonus.out <- harmony "<c'maj e'min>"
 feeds odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2"

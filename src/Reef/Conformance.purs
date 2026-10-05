@@ -41,6 +41,7 @@ module Reef.Conformance
   , harmonyRun
   , scaleRun
   , outScaleRun
+  , voicingRun
   , durRun
   , routeRun
   , patchRun
@@ -82,6 +83,7 @@ import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt
 import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
 import Reef.PitchSet (PitchSet(..))
+import Reef.PitchSet as PS
 import Reef.Protocol (decodeInput, decodeSim, encodeInput)
 import Reef.Marbles (Seed, seedFrom, rollValue)
 import Reef.Vetula.Perf (Perf, VDest(..), VRenderer(..), cursorAt, odoCursorAt, odoPcsAt, renderVoiceMidiAt) as VP
@@ -225,6 +227,39 @@ scaleRun =
       , out: snoc acc.out (renderStep i r.fired <> " | k" <> show o.rootPc
           <> " [" <> intercalate "," (map show o.scaleIvls) <> "] "
           <> maybe "-" identity o.scalePattern)
+      }
+
+-- | **Chords as voiced** (docs/kb/plans/harmony-routes-coherent.md): the
+-- | sets voicings make, the output snapping to a ninth chord as voiced, and
+-- | Odonus with its grid shaped by a chord pattern (sampled as voiced into
+-- | SetSampled, across the wire), then its output too, then back to the scale.
+-- | The ninth (D) must only ever sound a ninth above a C.
+voicingRun :: String
+voicingRun = intercalate "\n" (sets <> snaps <> sim)
+  where
+  maj9 = [ 0, 4, 7, 11, 14 ]
+  sets = map (\ns -> "voicing " <> show ns <> " -> " <> maybe "none" (\(PitchSet p) -> show p.offsets <> " root " <> show p.root <> " period " <> show p.period) (PS.voicing ns))
+    [ [], [ 0, 4, 7 ], maj9, [ -12, -5, 4, 11, 14 ], [ 0, 4, 7, 12 ], [ 7, 0, 4, 0 ] ]
+  snaps = [ "snap c'maj9 " <> intercalate " " (map (\n -> show n <> ">" <> show (PS.quantiseToVoicing maj9 n)) (range 46 76)) ]
+  s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+  sim = (foldl advance { st: s0, out: [] } (range 1 30)).out
+  script i = case i of
+    1 -> [ SetGridHarmony (Just "c'maj9") ]
+    11 -> [ SetHarmony (Just "c'maj9") ]
+    21 -> [ SetGridHarmony Nothing, SetHarmony Nothing ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  harmonyOf txt = if txt == "c'maj9" then maj9 else []
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick (applyInput (wire (sampleInput harmonyOf (const []) st1)) st1)
+      o = r.sim.odo
+    in
+      { st: r.sim
+      , out: snoc acc.out (renderStep i r.fired
+          <> " | grid " <> maybe "scale" (\(PitchSet p) -> show p.offsets <> "/" <> show p.period) o.pitchSet
+          <> " out " <> maybe "-" show o.chord)
       }
 
 -- | The output's scale (odonus.out, `SetOutScale`): sampled as the rig samples

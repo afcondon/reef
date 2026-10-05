@@ -1,14 +1,15 @@
 -- | **Harmony routes**: what feeds each of a machine's harmony inputs
 -- | (docs/kb/plans/matrix-router.md). Odonus has two:
 -- |
--- | - `odonus.grid`, q1: the scale a cell's value is mapped onto (the shape);
+-- | - `odonus.grid`, q1: the set a cell's value is mapped onto (the shape): a
+-- |   scale, or a chord as voiced, whose cells then play its arpeggios;
 -- | - `odonus.out`, q2: the set the output snaps to past each head's offset.
 -- |
 -- | A route names one source for one input; an input with no route follows
 -- | Odonus's own hand-set scale. Sources:
 -- |
 -- | - `scale "<dorian lydian>/4" d`: a pattern of Tidal's scale names, on a root;
--- | - `harmony "<c'maj7 a'min7>/2"`: a Tidal note pattern of chords (out only);
+-- | - `harmony "<c'maj7 a'min7>/2"`: a Tidal note pattern of chords, as voiced;
 -- | - `vetula key`: Vetula's scale; `vetula 3`: Vetula's voice 3, its chords.
 -- |
 -- | The table is text, one route a line, as the router keeps it on the stage
@@ -110,10 +111,9 @@ line l = case split (Pattern "<-") l of
       "odonus.out" -> Right OdonusOut
       other -> Left ("no input '" <> other <> "' (odonus.grid, odonus.out)")
     source <- sourceText (trim rhs)
-    case input, source of
-      OdonusGrid, Harmony _ -> Left "odonus.grid takes a scale (scale \"…\" or vetula key), not a harmony"
-      OdonusGrid, VetulaVoice _ -> Left "odonus.grid takes a scale (scale \"…\" or vetula key), not a voice's chords"
-      _, _ -> Right { input, source }
+    -- every input takes every source: a chord shapes the grid as its
+    -- arpeggios (docs/kb/plans/harmony-routes-coherent.md)
+    Right { input, source }
   _ -> Left ("a route is INPUT <- SOURCE: '" <> l <> "'")
 
 sourceText :: String -> Either String Source
@@ -226,9 +226,10 @@ feedInputs old new = grid <> out
   grid
     | old.grid == new.grid = []
     | otherwise = case new.grid of
-        FeedScale s -> [ I.ClearPitchSet, I.SetScalePattern (Just s.pattern), I.SetRoot s.root ]
-        FeedKey k -> [ I.SetScalePattern Nothing, I.SetPitchSet (PitchSet { offsets: k.offsets, root: 48 + k.root, period: Just 12 }) ]
-        _ -> [ I.ClearPitchSet, I.SetScalePattern Nothing ]
+        FeedScale s -> [ I.SetGridHarmony Nothing, I.ClearPitchSet, I.SetScalePattern (Just s.pattern), I.SetRoot s.root ]
+        FeedKey k -> [ I.SetGridHarmony Nothing, I.SetScalePattern Nothing, I.SetPitchSet (PitchSet { offsets: k.offsets, root: 48 + k.root, period: Just 12 }) ]
+        FeedHarmony h -> [ I.SetScalePattern Nothing, I.SetGridHarmony (Just h) ]
+        Unfed -> [ I.SetGridHarmony Nothing, I.ClearPitchSet, I.SetScalePattern Nothing ]
   out
     | old.out == new.out = []
     | otherwise = case new.out of

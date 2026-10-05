@@ -257,6 +257,20 @@ echo "== outScaleRun (36-step output scale): node vs erl =="
 diff /tmp/reef-outscale-node.txt /tmp/reef-outscale-erl.txt && echo "  ✅ outScaleRun node == erl"
 diff "$OUTSCALE_GOLDEN" /tmp/reef-outscale-node.txt && echo "  ✅ outScaleRun matches frozen golden"
 
+# --- Chords as voiced (Reef.Conformance.voicingRun) -------------------------
+# A chord's own set (octaves kept), the output snapping to it, and the grid
+# shaped by it: the ninth stays a ninth on both runtimes.
+VOICING_GOLDEN="$REEF/conformance/voicing-golden.txt"
+echo "== voicingRun (chords as voiced): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { voicingRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(voicingRun);' \
+  ) > /tmp/reef-voicing-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':voicingRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-voicing-erl.txt
+diff /tmp/reef-voicing-node.txt /tmp/reef-voicing-erl.txt && echo "  ✅ voicingRun node == erl"
+diff "$VOICING_GOLDEN" /tmp/reef-voicing-node.txt && echo "  ✅ voicingRun matches frozen golden"
+
 # --- Odonus's duration clock (Reef.Conformance.durRun) ------------------------
 # A head held on each cell for its dur, through a rest and a skip; a second head
 # joining on the duration clock; the first going back to its steps.

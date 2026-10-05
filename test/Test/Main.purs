@@ -15,7 +15,7 @@ import Effect.Console (log)
 import Data.Maybe (Maybe(..))
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Routing as Routing
-import Reef.Conformance (seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -296,6 +296,11 @@ main = do
   assertEqual' "Odonus duration clock golden (56 steps)"
     { actual: durRun, expected: durGolden }
   log "Reef Odonus duration clock golden: OK"
+  -- Chords as voiced: a chord's own set, the output snapping to it, the grid
+  -- shaped by it (docs/kb/plans/harmony-routes-coherent.md).
+  assertEqual' "Chords as voiced golden (Reef.Conformance.voicingRun)"
+    { actual: voicingRun, expected: voicingGolden }
+  log "Reef chords as voiced golden: OK"
   -- Harmony routes: parse, print, and the inputs a change makes.
   assertEqual' "Harmony routes golden (Reef.Route)"
     { actual: routeRun, expected: routeGolden }
@@ -1861,10 +1866,10 @@ outScaleGolden = """  1 | h0 p50 d1 r1 v100 | out [2,4,5,7,9,11,0] <dorian lydia
 -- | The frozen golden for `routeRun` (conformance/route-golden.txt).
 routeGolden :: String
 routeGolden = """   0 |  | 
-   1 | odonus.grid <- scale "<dorian lydian>/4" d ; odonus.out <- vetula 3 | ClearPitchSet,SetScalePattern(<dorian lydian>/4),SetRoot@2
-   2 | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | ClearPitchSet,SetScalePattern(dorian),SetRoot@2,SetOutScale@0,SetHarmony(<c'maj7 a'min7>/2)
-   3 | odonus.out <- scale "major" g | ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale(major)@7
-   4 | refused: odonus.grid takes a scale (scale "…" or vetula key), not a harmony
+   1 | odonus.grid <- scale "<dorian lydian>/4" d ; odonus.out <- vetula 3 | SetGridHarmony,ClearPitchSet,SetScalePattern(<dorian lydian>/4),SetRoot@2
+   2 | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | SetGridHarmony,ClearPitchSet,SetScalePattern(dorian),SetRoot@2,SetOutScale@0,SetHarmony(<c'maj7 a'min7>/2)
+   3 | odonus.out <- scale "major" g | SetGridHarmony,ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale(major)@7
+   4 | odonus.grid <- harmony "c'maj" | SetScalePattern,SetGridHarmony(c'maj),SetHarmony,SetOutScale@0
    5 | refused: no input 'odonus.side' (odonus.grid, odonus.out)
    6 | odonus.grid <- vetula key | 
 key d 0 2 3 5 7 9 10 | d 0 2 3 5 7 9 10
@@ -1873,9 +1878,9 @@ key c | c 0
 key  | refused: a key is ROOT STEPS…: d 0 2 3 5 7 9 10
 key q 0 2 | refused: 'q' is not a note name or a pitch class
 key a 0 x | refused: a key's steps are numbers: 'x'
-fed none->ctx | SetScalePattern,SetPitchSet,SetOutScale@0,SetHarmony(<c'maj e'min>)
+fed none->ctx | SetGridHarmony,SetScalePattern,SetPitchSet,SetOutScale@0,SetHarmony(<c'maj e'min>)
 fed ctx->ctx' | SetOutScale@0,SetHarmony(<f'maj7 g'dom7>/2)
-fed ctx->none | ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale@0
+fed ctx->none | SetGridHarmony,ClearPitchSet,SetScalePattern,SetHarmony,SetOutScale@0
 set | odonus.grid <- vetula key ; odonus.out <- vetula 2
 feeds odonus.grid <- key d 0 2 3 5 7 9 10 ; odonus.out <- harmony "<c'maj e'min>" | odonus.grid <- key d 0 2 3 5 7 9 10 ; odonus.out <- harmony "<c'maj e'min>"
 feeds odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2" | odonus.grid <- scale "dorian" d ; odonus.out <- harmony "<c'maj7 a'min7>/2"
@@ -2119,3 +2124,43 @@ euclid fh2_1
   3 16 @4   -- 6
   3 16 @4   -- 7
   3 16 @4   -- 8"""
+
+-- | The frozen golden for `voicingRun` (conformance/voicing-golden.txt).
+voicingGolden :: String
+voicingGolden = """voicing [] -> none
+voicing [0,4,7] -> [0,4,7] root 48 period (Just 12)
+voicing [0,4,7,11,14] -> [0,4,7,11,14] root 48 period (Just 24)
+voicing [-12,-5,4,11,14] -> [0,7,16,23,26] root 48 period (Just 36)
+voicing [0,4,7,12] -> [0,4,7,12] root 48 period (Just 24)
+voicing [7,0,4,0] -> [0,4,7] root 48 period (Just 12)
+snap c'maj9 46>48 47>48 48>48 49>48 50>52 51>52 52>52 53>52 54>55 55>55 56>55 57>59 58>59 59>59 60>59 61>62 62>62 63>62 64>62 65>62 66>62 67>72 68>72 69>72 70>72 71>72 72>72 73>72 74>76 75>76 76>76
+  1 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  2 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  3 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  4 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  5 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  6 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  7 | h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  8 | h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  9 | h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+ 10 | h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+ 11 | h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 12 | h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 13 | h0 p62 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 14 | h0 p62 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 15 | h0 p62 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 16 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 17 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 18 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 19 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 20 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 21 | h0 p58 d1 r1 v100 | grid scale out -
+ 22 | h0 p62 d1 r1 v100 | grid scale out -
+ 23 | h0 p63 d1 r1 v100 | grid scale out -
+ 24 | h0 p67 d1 r1 v100 | grid scale out -
+ 25 | h0 p68 d1 r1 v100 | grid scale out -
+ 26 | h0 p70 d1 r1 v100 | grid scale out -
+ 27 | h0 p74 d1 r1 v100 | grid scale out -
+ 28 | h0 p75 d1 r1 v100 | grid scale out -
+ 29 | h0 p79 d1 r1 v100 | grid scale out -
+ 30 | h0 p80 d1 r1 v100 | grid scale out -"""

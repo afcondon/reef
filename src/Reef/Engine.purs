@@ -86,19 +86,23 @@ type Patterns =
   { harmony :: Maybe String
   , scale :: Maybe String
   , outScale :: Maybe { pattern :: String, root :: Int }
+  , gridHarmony :: Maybe String
   }
 
 patternsOf :: SimState -> Patterns
-patternsOf s = { harmony: s.odo.harmony, scale: s.odo.scalePattern, outScale: s.odo.outScale }
+patternsOf s = { harmony: s.odo.harmony, scale: s.odo.scalePattern, outScale: s.odo.outScale, gridHarmony: s.odo.gridHarmony }
 
 samplePatterns :: (String -> Array Int) -> (String -> Array Int) -> Patterns -> Input
-samplePatterns harmony scale p = SetSampled chord sc
+samplePatterns harmony scale p = SetSampled chord sc grid
   where
   -- the output's set: a scale on its own root (outScale), or a chord
   chord = case p.outScale of
     Just out -> map (\i -> (i + out.root) `mod` 12) <$> nonEmpty (scale out.pattern)
     Nothing -> p.harmony >>= \t -> nonEmpty (harmony t)
   sc = p.scale >>= \t -> nonEmpty (scale t)
+  -- the grid's chord, as voiced: `harmony` is the host's sampler, which gives
+  -- the notes as voiced (Tidal.Harmony.voicingSampler)
+  grid = p.gridHarmony >>= \t -> nonEmpty (harmony t)
   nonEmpty xs = if Array.null xs then Nothing else Just xs
 
 -- | The same for the scale pattern (`Reef.Odonus.followScale`): `sample`

@@ -54,7 +54,7 @@ import Reef.Odonus
   , clearPitchSet, setOutScale, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
-  , setDegShift, setHarmony, setScalePattern, releaseScale, followChord, setGatePct, setHeadDir, setHeadEuclidSteps
+  , setDegShift, setHarmony, setScalePattern, setGridHarmony, followGridHarmony, releaseScale, followChord, setGatePct, setHeadDir, setHeadEuclidSteps
   , setHeadClock, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
@@ -133,11 +133,17 @@ data Input
   -- root (pitch class): Reef.Move's `outscale`, the router's scale → odonus.out.
   -- Nothing returns the output to the scale. Wire: `txt` and `a`.
   | SetOutScale (Maybe String) Int
-  -- what the rig sampled from those two patterns for this step: the chord (pitch
-  -- classes; Nothing = none) and, when a scale pattern is set, the scale's steps
-  -- (Nothing = leave the scale). The rig samples (it has Tidal) and broadcasts
-  -- this tick-tagged, so the browser never reads a pattern (Engine.sampleInput).
-  | SetSampled (Maybe (Array Int)) (Maybe (Array Int))
+  -- a Tidal chord pattern the GRID takes its shape from (q1, the router's
+  -- harmony or Vetula voice → odonus.grid); Nothing returns it to the scale.
+  -- Shares the `txt` wire field.
+  | SetGridHarmony (Maybe String)
+  -- what the rig sampled from those patterns for this step: the output's chord
+  -- (its notes as voiced; Nothing = none), when a scale pattern is set the
+  -- scale's steps (Nothing = leave the scale), and when the grid follows a
+  -- chord pattern that chord as voiced (Nothing = leave the grid). The rig
+  -- samples (it has Tidal) and broadcasts this tick-tagged, so the browser
+  -- never reads a pattern (Engine.sampleInput).
+  | SetSampled (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int))
   -- A recall (docs/kb/plans/the-deck.md): a patch's settings (`Reef.Odonus.
   -- Patch`, as text) with the playheads carried on where they are, as a scene
   -- recall does; and an instant's phases, seed and freeze (`odonusNow`).
@@ -221,7 +227,8 @@ applyInput = case _ of
   SetHarmony h -> onOdo (setHarmony h)
   SetScalePattern p -> onOdo (setScalePattern p)
   SetOutScale p root -> onOdo (setOutScale p root)
-  SetSampled c sc -> onOdo \o -> (followChord c o) { scaleIvls = maybe o.scaleIvls normaliseIvls sc }
+  SetGridHarmony h -> onOdo (setGridHarmony h)
+  SetSampled c sc g -> onOdo \o -> followGridHarmony (const (fromMaybe [] g)) ((followChord c o) { scaleIvls = maybe o.scaleIvls normaliseIvls sc })
   RecallPatch txt -> \s -> case Patch.parsePatch txt of
     Just p -> s { odo = recallScene s.odo p.odo, gen = Patch.reconcileGen p.gen, spread = p.genSpread, bias = p.genBias }
     Nothing -> s
@@ -267,10 +274,11 @@ type WireInput =
   , txt :: Maybe String        -- SetHarmony / SetScalePattern payload; absent on older frames
   , chord :: Maybe (Array Int) -- SetSampled's chord; absent on older frames
   , ivls :: Maybe (Array Int)  -- SetSampled's scale steps; absent on older frames
+  , grid :: Maybe (Array Int)  -- SetSampled's grid chord, as voiced; absent on older frames
   }
 
 w0 :: WireInput
-w0 = { tag: "", a: 0, b: 0, ns: [], ps: Nothing, txt: Nothing, chord: Nothing, ivls: Nothing }
+w0 = { tag: "", a: 0, b: 0, ns: [], ps: Nothing, txt: Nothing, chord: Nothing, ivls: Nothing, grid: Nothing }
 
 -- GenKind ↔ Int via its position in `genKinds` (stable, the UI's own order).
 kindCode :: GenKind -> Int
@@ -319,7 +327,8 @@ toWire = case _ of
   SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
   SetScalePattern p -> w0 { tag = "SetScalePattern", txt = p }
   SetOutScale p root -> w0 { tag = "SetOutScale", txt = p, a = root }
-  SetSampled c sc -> w0 { tag = "SetSampled", chord = c, ivls = sc }
+  SetGridHarmony h -> w0 { tag = "SetGridHarmony", txt = h }
+  SetSampled c sc g -> w0 { tag = "SetSampled", chord = c, ivls = sc, grid = g }
   RecallPatch t -> w0 { tag = "RecallPatch", txt = Just t }
   RecallNow t -> w0 { tag = "RecallNow", txt = Just t }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
@@ -380,7 +389,8 @@ fromWire w = case w.tag of
   "SetHarmony" -> Just (SetHarmony w.txt)
   "SetScalePattern" -> Just (SetScalePattern w.txt)
   "SetOutScale" -> Just (SetOutScale w.txt w.a)
-  "SetSampled" -> Just (SetSampled w.chord w.ivls)
+  "SetGridHarmony" -> Just (SetGridHarmony w.txt)
+  "SetSampled" -> Just (SetSampled w.chord w.ivls w.grid)
   "RecallPatch" -> RecallPatch <$> w.txt
   "RecallNow" -> RecallNow <$> w.txt
   "UnifyHeads" -> Just UnifyHeads

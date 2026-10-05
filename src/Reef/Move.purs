@@ -113,7 +113,9 @@ restore is s = concatMap undo is
     SetHeadTransp i _ -> catMaybes [ (\h -> SetHeadTransp i h.transp) <$> heads !! i ]
     SetGatePct _ -> [ SetGatePct s.odo.gatePct ]
     SetHarmony _ -> [ SetHarmony s.odo.harmony ]
-    SetScalePattern _ -> [ SetScalePattern s.odo.scalePattern ]
+    -- one of a scale pattern and a chord pattern shapes the grid
+    SetScalePattern _ -> [ SetGridHarmony s.odo.gridHarmony, SetScalePattern s.odo.scalePattern ]
+    SetGridHarmony _ -> [ SetScalePattern s.odo.scalePattern, SetGridHarmony s.odo.gridHarmony ]
     -- one of harmony and outScale holds the output, so restore whichever did
     SetOutScale _ _ -> [ SetOutScale (_.pattern <$> s.odo.outScale) (maybe 0 _.root s.odo.outScale), SetHarmony s.odo.harmony ]
     SetRoot _ -> [ SetRoot s.odo.rootPc ]

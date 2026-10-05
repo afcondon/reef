@@ -70,6 +70,8 @@ module Reef.Odonus
   , setScalePattern
   , setOutScale
   , followScale
+  , setGridHarmony
+  , followGridHarmony
   , releaseScale
   , setPitchSet
   , clearPitchSet
@@ -93,13 +95,13 @@ module Reef.Odonus
 
 import Prelude
 
-import Data.Array (catMaybes, elem, filter, findIndex, mapWithIndex, null, replicate, modifyAt, length, zipWith, (!!), (:))
+import Data.Array (catMaybes, elem, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
 import Data.Foldable (foldl)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
-import Reef.PitchSet (realizeEqualShift) as PS
+import Reef.PitchSet (nearestIn, periodsIn, quantiseToVoicing, realizeEqualShift, voicing) as PS
 
 type Cell =
   { note :: Int
@@ -212,6 +214,12 @@ type OdonusOf h =
       -- root (a pitch class), as `harmony` gives it a chord: offsets forced
       -- into a scale. Sampled by the host; one of harmony and outScale at a
       -- time. A Maybe, so a handed-over state from before it decodes as none
+  , gridHarmony :: Maybe String
+      -- a Tidal chord pattern the GRID takes its shape from (q1): sampled by
+      -- the host each step as voiced (`Tidal.Harmony.voicingAt`) into the
+      -- pitch set, so the cells play arpeggios of the chord, octaves kept
+      -- (docs/kb/plans/harmony-routes-coherent.md). Nothing: the scale. A
+      -- Maybe, so a handed-over state from before it decodes as none
   }
 
 -- | The active scale built from the root + interval mask.
@@ -252,12 +260,16 @@ scaleTypeName o = recogniseScale o.scaleIvls
 renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
     let scaleSet = effectivePitchSet o
-        home = PS.realizeEqualShift scaleSet o.span knobMax o.degShift c.note
+        home = PS.realizeEqualShift scaleSet (PS.periodsIn scaleSet o.span) knobMax o.degShift c.note
         target = home + hd.transp
         snapped =
           case o.chord of
-            Just pcs -> quantiseToChordPCs pcs target
-            Nothing -> quantiseToScale (scaleOf o) target
+            Just notes -> PS.quantiseToVoicing notes target
+            -- no output set: back onto the grid's own set (a no-op on its
+            -- notes), so a grid shaped by a chord or Vetula's key keeps to it
+            Nothing -> case o.pitchSet of
+              Just ps -> PS.nearestIn ps target
+              Nothing -> quantiseToScale (scaleOf o) target
     in snapped + o.octaveShift * 12
 
 -- | The raw NOTE-knob ceiling. Cells hold a value in `0..knobMax`, shown on the
@@ -288,7 +300,9 @@ clearPitchSet o = o { pitchSet = Nothing }
 -- | one. The UI uses it as the NOTE knob's range — cells are indices now, not
 -- | chromatic values, so the old 36..84 range no longer applies.
 cellIndexMax :: Odonus -> Int
-cellIndexMax o = max 1 (o.span * cardinality (effectivePitchSet o)) - 1
+cellIndexMax o =
+  let ps = effectivePitchSet o
+  in max 1 (PS.periodsIn ps o.span * cardinality ps) - 1
 
 -- | The MIDI pitch a cell's KNOB currently labels: equal-map the knob over the
 -- | scale to its melodic home, colour it by the active chord if one is firing,
@@ -301,14 +315,17 @@ cellIndexMax o = max 1 (o.span * cardinality (effectivePitchSet o)) - 1
 cellLabel :: Odonus -> Int -> Int
 cellLabel o knob =
   let
-    h = PS.realizeEqualShift (effectivePitchSet o) o.span knobMax o.degShift (clampI 0 knobMax knob)
-    coloured = maybe h (\pcs -> quantiseToChordPCs pcs h) o.chord
+    ps = effectivePitchSet o
+    h = PS.realizeEqualShift ps (PS.periodsIn ps o.span) knobMax o.degShift (clampI 0 knobMax knob)
+    coloured = maybe h (\notes -> PS.quantiseToVoicing notes h) o.chord
   in coloured + o.octaveShift * 12
 
 -- | The pitch classes (0..11) of the chord the output is snapping to; none
 -- | while it follows the scale alone.
 currentChordPCs :: Odonus -> Array Int
-currentChordPCs o = fromMaybe [] o.chord
+currentChordPCs o = sort (nub (map pc12 (fromMaybe [] o.chord)))
+  where
+  pc12 n = ((n `mod` 12) + 12) `mod` 12
 
 -- | Snap to this chord past the scale (`Just pcs`), or to the scale alone.
 -- | `followHarmony` calls it each step with what the harmony pattern gives.
@@ -360,8 +377,28 @@ followHarmony sample o = case o.harmony of
 -- | last writer wins.
 setScalePattern :: Maybe String -> Odonus -> Odonus
 setScalePattern p o = case p of
-  Just _ -> o { scalePattern = p, scaleHeld = Just (fromMaybe o.scaleIvls o.scaleHeld), pitchSet = Nothing }
+  Just _ -> o { scalePattern = p, scaleHeld = Just (fromMaybe o.scaleIvls o.scaleHeld), pitchSet = Nothing, gridHarmony = Nothing }
   Nothing -> o { scalePattern = Nothing, scaleIvls = fromMaybe o.scaleIvls o.scaleHeld, scaleHeld = Nothing }
+
+-- | **The grid's shape from a chord** (`odonus.grid <- harmony …` or `<- vetula
+-- | N`). `setGridHarmony (Just pattern)` hands the grid to a Tidal chord
+-- | pattern: the host samples it each step as voiced and `followGridHarmony`
+-- | makes the pitch set the chord's (`PitchSet.voicing`), so the cells play
+-- | arpeggios of it. It replaces a scale pattern; `Nothing` puts the grid back
+-- | on the scale.
+setGridHarmony :: Maybe String -> Odonus -> Odonus
+setGridHarmony h o = case h of
+  Just _ -> o { gridHarmony = h, scalePattern = Nothing, scaleIvls = fromMaybe o.scaleIvls o.scaleHeld, scaleHeld = Nothing }
+  Nothing -> o { gridHarmony = Nothing, pitchSet = Nothing }
+
+-- | The host's sample of the grid's chord pattern for this step, as voiced.
+-- | Empty (a rest, or text the host cannot read) keeps the set as it is.
+followGridHarmony :: (String -> Array Int) -> Odonus -> Odonus
+followGridHarmony sample o = case o.gridHarmony of
+  Nothing -> o
+  Just txt -> case PS.voicing (sample txt) of
+    Nothing -> o
+    Just ps -> o { pitchSet = Just ps }
 
 -- | The host's sample of the scale pattern for this step: the steps of the
 -- | scale named there (0 first). Empty (a rest, or text the host cannot
@@ -381,7 +418,7 @@ releaseScale o = o { scalePattern = Nothing, scaleHeld = Nothing }
 -- | The pitch classes the current harmony admits: the chord if one is
 -- | sounding, else the whole scale. Used to seed a melodic line.
 harmonyPCs :: Odonus -> Array Int
-harmonyPCs o = fromMaybe (pitchClassesOf (scaleOf o)) o.chord
+harmonyPCs o = maybe (pitchClassesOf (scaleOf o)) (const (currentChordPCs o)) o.chord
 
 speedTable :: Array Number
 speedTable = [ 0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 ]
@@ -439,7 +476,7 @@ defaultOdonus =
   , pitchSet: Nothing
   , span: 3
   , octaveShift: 0, degShift: 0, gatePct: 90, chord: Nothing, harmony: Nothing
-  , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing }
+  , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing }
 
 -- ---------------------------------------------------------------------------
 -- traversal — walk the head's pattern ordering, skip-aware
