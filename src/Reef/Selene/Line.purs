@@ -32,13 +32,14 @@ module Reef.Selene.Line
   , moduleKind
   , accepts
   , refusal
+  , moduleText
   ) where
 
 import Prelude
 
 import Data.Array (all, filter, findIndex, foldM, head, length, mapWithIndex, snoc, uncons, updateAt, (!!))
 import Data.Array as Array
-import Data.Either (Either(..), note)
+import Data.Either (Either(..), hush, note)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Number as Number
@@ -324,3 +325,22 @@ refusal :: M.Target -> M.GenKind -> String
 refusal target kind = case target of
   M.Midi _ -> "a MIDI channel takes notes, not " <> M.kindLabel kind
   _ -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
+
+-- | A module as the setting it makes, in its module form: a block or a kind
+-- | with terms, expanded on a fresh bank, then written back without the
+-- | bank. The same setting so has the same text (and rebus) in the drawer,
+-- | on a row, and wherever it is dropped. Nothing for what is not a module.
+moduleText :: String -> Maybe String
+moduleText m = do
+  kind <- moduleKind m
+  let
+    bank = case kind of
+      M.KEuclid -> M.ES9Gt 0
+      M.KClock -> M.ES9Gt 0
+      M.KNote -> M.ES9Cv 0
+      _ -> M.ES9Main
+    isBlock = maybe false (\w -> Block.blockNamed w /= Nothing) (head (words m))
+    src = onBank m bank <> (if isBlock then "" else " # fresh")
+  line <- hush (parseLine src)
+  sel <- hush (applyLine line { destinations: [] })
+  moduleOf <$> Array.find (\d -> d.target == bank) sel.destinations
