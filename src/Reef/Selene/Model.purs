@@ -232,14 +232,21 @@ data Target
 
 derive instance Eq Target
 
+-- | The hardware a group of eight is (AC's rack, as Triggerfish.Rig has it):
+-- | the ES-9's own jacks, the ES-5 then ESX-8GTs, ESX-8CVs, the FH-2's own
+-- | eight then FHX-8GTs. A second of a kind is numbered.
 targetLabel :: Target -> String
 targetLabel = case _ of
-  ES9Main -> "ES-9 · MAIN"
-  ES9Gt n -> "ES-5 · GT " <> show n
-  ES9Cv n -> "ESX-8CV · " <> show n
-  FH2 n -> "FH-2 · BANK " <> show n
+  ES9Main -> "ES-9"
+  ES9Gt 0 -> "ES-5"
+  ES9Gt n -> "ESX-8GT" <> numbered n
+  ES9Cv n -> "ESX-8CV" <> numbered (n + 1)
+  FH2 0 -> "FH-2"
+  FH2 n -> "FHX-8GT" <> numbered n
   Midi n -> "MIDI · CH " <> show n
   Virtual s -> "VIRTUAL · " <> s
+  where
+  numbered k = if k <= 1 then "" else " " <> show k
 
 targetWire :: Target -> String
 targetWire = case _ of
