@@ -333,8 +333,13 @@ durRun =
 -- | Odonus inputs that take the previous table to it, as wire tags. The rig
 -- | parses what the router page writes, so both must read a table alike.
 routeRun :: String
-routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fed <> feeds)
+routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fed <> feeds <> lines)
   where
+  -- one route a line, as Limulus writes it (`route $ …`), over a table
+  base = either (const []) identity (Route.parse "odonus.grid <- vetula key\nodonus.out <- vetula 3")
+  lines = map (\l -> "line " <> l <> " | " <> either ("refused: " <> _) (flat <<< Route.print) (Route.applyLine l base))
+    [ "odonus.grid <- vetula 2", "odonus.out <- none", "odonus.grid <- none", "odonus.out <- harmony \"<c'maj9 a'min11>/2\""
+    , "odonus.side <- vetula 1", "odonus.grid <- nothing", "odonus.grid" ]
   wire inp = let w = toWire inp in w.tag <> maybe "" (\t -> "(" <> t <> ")") w.txt <> (if w.tag == "SetRoot" || w.tag == "SetOutScale" then "@" <> show w.a else "")
   -- Vetula's key as the stage keeps it
   keys = map (\t -> "key " <> t <> " | " <> either ("refused: " <> _) Route.printKey (Route.parseKey t))

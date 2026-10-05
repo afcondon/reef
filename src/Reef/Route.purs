@@ -40,6 +40,7 @@ module Reef.Route
   , print
   , sourceOf
   , setRoute
+  , applyLine
   , parseKey
   , printKey
   , noContext
@@ -106,10 +107,7 @@ parse text = do
 line :: String -> Either String Route
 line l = case split (Pattern "<-") l of
   [ lhs, rhs ] -> do
-    input <- case trim lhs of
-      "odonus.grid" -> Right OdonusGrid
-      "odonus.out" -> Right OdonusOut
-      other -> Left ("no input '" <> other <> "' (odonus.grid, odonus.out)")
+    input <- inputText (trim lhs)
     source <- sourceText (trim rhs)
     -- every input takes every source: a chord shapes the grid as its
     -- arpeggios (docs/kb/plans/harmony-routes-coherent.md)
@@ -161,6 +159,25 @@ setRoute input source routes =
   mapMaybe (\i -> find (\r -> r.input == i) others) inputs
   where
   others = filter (\r -> r.input /= input) routes <> [ { input, source } ]
+
+-- | **One route, as Limulus writes it** (`route $ odonus.grid <- vetula 2`):
+-- | the table with that input's route set, or with `none` taken away. The rest
+-- | of the table is as it was. The same syntax as a table line, so the
+-- | Dashboard, Limulus and Odonus's labels all describe one table.
+applyLine :: String -> Routes -> Either String Routes
+applyLine l routes = case split (Pattern "<-") l of
+  [ lhs, rhs ] | trim rhs == "none" -> do
+    input <- inputText (trim lhs)
+    Right (filter (\r -> r.input /= input) routes)
+  _ -> do
+    r <- line (trim l)
+    Right (setRoute r.input r.source routes)
+
+inputText :: String -> Either String Input
+inputText = case _ of
+  "odonus.grid" -> Right OdonusGrid
+  "odonus.out" -> Right OdonusOut
+  other -> Left ("no input '" <> other <> "' (odonus.grid, odonus.out)")
 
 -- | Vetula's key: a root (pitch class) and the scale's steps above it.
 type Key = { root :: Int, offsets :: Array Int }
