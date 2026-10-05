@@ -27,18 +27,18 @@ import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.String as String
 import Data.String.CodeUnits as CU
 import Reef.Vetula.Perf (PerfClock, segAtClock)
+import Reef.Vetula.NoteText (tidalNoteName)
 
--- | One chord as a Tidal stack of pitch-class names: `[c,e,g]`; one note bare,
--- | none a rest.
+-- | One chord as a Tidal stack of its notes as voiced, octaves kept:
+-- | `[e3,e5,fs5,bf5]`; one note bare, none a rest. It was pitch-class names
+-- | (`[e,fs,bf]`) until 2026-10-05, which folded a ninth to a second once the
+-- | quantisers came to take chords as voiced (docs/kb/plans/
+-- | harmony-routes-coherent.md).
 chordText :: Array Int -> String
-chordText notes = case sort (nub (map pc notes)) of
+chordText notes = case sort (nub notes) of
   [] -> "~"
-  [ p ] -> name p
-  ps -> "[" <> String.joinWith "," (map name ps) <> "]"
-  where
-  pc n = ((n `mod` 12) + 12) `mod` 12
-  name p = fromMaybe "c" (names !! p)
-  names = [ "c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b" ]
+  [ n ] -> tidalNoteName n
+  ns -> "[" <> String.joinWith "," (map tidalNoteName ns) <> "]"
 
 -- | A voice's clock as a pattern: chord `i` wherever the read-head sits on it at
 -- | pulse `p` (`segAtClock clock phase p`). In a rest between segments the
