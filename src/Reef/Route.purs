@@ -10,6 +10,7 @@
 -- |
 -- | - `scale "<dorian lydian>/4" d`: a pattern of Tidal's scale names, on a root;
 -- | - `harmony "<c'maj7 a'min7>/2"`: a Tidal note pattern of chords, as voiced;
+-- | - `chromatic`: null quantisation, Tidal's `scale "chromatic"`;
 -- | - `vetula key`: Vetula's scale; `vetula 3`: Vetula's voice 3, its chords.
 -- |
 -- | The table is text, one route a line, as the router keeps it on the stage
@@ -116,6 +117,9 @@ line l = case split (Pattern "<-") l of
 
 sourceText :: String -> Either String Source
 sourceText t = case split (Pattern " ") t of
+  -- null quantisation (AC): every semitone on the grid; each note itself at
+  -- the output. Tidal's own `scale "chromatic"`, by name.
+  [ "chromatic" ] -> Right (Scale { pattern: "chromatic", root: 0 })
   [ "vetula", "key" ] -> Right VetulaKey
   [ "vetula", n ] | Just v <- Int.fromString n -> Right (VetulaVoice v)
   _ -> case quoted t of
@@ -123,7 +127,7 @@ sourceText t = case split (Pattern " ") t of
       root <- if after == "" then Right 0 else pitchClass after
       Right (Scale { pattern: body, root })
     Just { head: "harmony", body, after: "" } -> Right (Harmony body)
-    _ -> Left ("no source '" <> t <> "' (scale \"…\" ROOT, harmony \"…\", vetula key, vetula N)")
+    _ -> Left ("no source '" <> t <> "' (scale \"…\" ROOT, harmony \"…\", chromatic, vetula key, vetula N)")
 
 -- | `head "body" after`, split at the first and last quote.
 quoted :: String -> Maybe { head :: String, body :: String, after :: String }
@@ -145,6 +149,7 @@ print rs = joinWith "\n" (map one rs)
 
 printSource :: Source -> String
 printSource = case _ of
+  Scale { pattern: "chromatic", root: 0 } -> "chromatic"
   Scale s -> "scale \"" <> s.pattern <> "\"" <> (if s.root == 0 then "" else " " <> noteName s.root)
   Harmony h -> "harmony \"" <> h <> "\""
   VetulaKey -> "vetula key"

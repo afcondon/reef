@@ -339,7 +339,8 @@ routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fe
   base = either (const []) identity (Route.parse "odonus.grid <- vetula key\nodonus.out <- vetula 3")
   lines = map (\l -> "line " <> l <> " | " <> either ("refused: " <> _) (flat <<< Route.print) (Route.applyLine l base))
     [ "odonus.grid <- vetula 2", "odonus.out <- none", "odonus.grid <- none", "odonus.out <- harmony \"<c'maj9 a'min11>/2\""
-    , "odonus.side <- vetula 1", "odonus.grid <- nothing", "odonus.grid" ]
+    , "odonus.side <- vetula 1", "odonus.grid <- nothing", "odonus.grid"
+    , "odonus.out <- chromatic", "odonus.grid <- scale \"chromatic\"" ]
   wire inp = let w = toWire inp in w.tag <> maybe "" (\t -> "(" <> t <> ")") w.txt <> (if w.tag == "SetRoot" || w.tag == "SetOutScale" then "@" <> show w.a else "")
   -- Vetula's key as the stage keeps it
   keys = map (\t -> "key " <> t <> " | " <> either ("refused: " <> _) Route.printKey (Route.parseKey t))

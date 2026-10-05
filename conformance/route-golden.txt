@@ -26,5 +26,7 @@ line odonus.out <- none | odonus.grid <- vetula key
 line odonus.grid <- none | odonus.out <- vetula 3
 line odonus.out <- harmony "<c'maj9 a'min11>/2" | odonus.grid <- vetula key ; odonus.out <- harmony "<c'maj9 a'min11>/2"
 line odonus.side <- vetula 1 | refused: no input 'odonus.side' (odonus.grid, odonus.out)
-line odonus.grid <- nothing | refused: no source 'nothing' (scale "…" ROOT, harmony "…", vetula key, vetula N)
+line odonus.grid <- nothing | refused: no source 'nothing' (scale "…" ROOT, harmony "…", chromatic, vetula key, vetula N)
 line odonus.grid | refused: a route is INPUT <- SOURCE: 'odonus.grid'
+line odonus.out <- chromatic | odonus.grid <- vetula key ; odonus.out <- chromatic
+line odonus.grid <- scale "chromatic" | odonus.grid <- chromatic ; odonus.out <- vetula 3
