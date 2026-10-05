@@ -13,7 +13,7 @@
 -- | co-locates the engine's sole transcendental — see `Reef.Conformance.betaProbe`,
 -- | which probes whether the two native `pow`s agree closely enough for the
 -- | generative path to stay bit-identical across runtimes.
-module Reef.Numeric (pow, ln) where
+module Reef.Numeric (pow, ln, sin) where
 
 -- | The first argument raised to the power of the second. Delegates to the
 -- | runtime's native primitive; IEEE 754 does not mandate a correctly-rounded
@@ -26,3 +26,8 @@ foreign import pow :: Number -> Number -> Number
 -- | logarithmic. Named `ln` to avoid colliding with the logging `log` that
 -- | every Effect-carrying module imports from Console.
 foreign import ln :: Number -> Number
+
+-- | Sine, of an angle in radians. For the same reason: `Data.Number.sin` is
+-- | not in the purerl era's numbers. Needed by `Reef.Selene.Model`'s LFO
+-- | preview, which the rig compiles with the rest of Selene's language.
+foreign import sin :: Number -> Number
