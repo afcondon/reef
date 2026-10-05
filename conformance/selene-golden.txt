@@ -5,13 +5,13 @@
 
 lfo es9main
   0.5 @0 sin 0.8   -- 1
-  0.5 @0.13 sin 0.8   -- 2
+  0.5 @0.125 sin 0.8   -- 2
   0.5 @0.25 sin 0.8   -- 3
-  0.5 @0.38 sin 0.8   -- 4
+  0.5 @0.375 sin 0.8   -- 4
   0.5 @0.5 sin 0.8   -- 5
-  0.5 @0.63 sin 0.8   -- 6
+  0.5 @0.625 sin 0.8   -- 6
   0.5 @0.75 sin 0.8   -- 7
-  0.5 @0.88 sin 0.8   -- 8
+  0.5 @0.875 sin 0.8   -- 8
 
 euclid es9gt0
   3 8 @4   -- 1
@@ -59,7 +59,7 @@ rack round-trip true
 > env fh2_0 # a 10 # d 200 # s 64 # r 400
   env fh2_0 # a 10 # d 200 # s 64 # r 400
 > lfo es9gt0 # rate 2
-  lfo es9gt0 # rate 2 # phase "0 0.13 0.25 0.38 0.5 0.63 0.75 0.88"
+  lfo es9gt0 # rate 2 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875"
 == refusals
 squiggle es9main # rate 1 | refused: not a kind of polysignal: squiggle (lfo, euclid, clock, note, env)
 lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
@@ -82,13 +82,13 @@ lfo es9main
 
 lfo es9gt0
   2 @0 sin 0.8   -- 1
-  2 @0.13 sin 0.8   -- 2
+  2 @0.125 sin 0.8   -- 2
   2 @0.25 sin 0.8   -- 3
-  2 @0.38 sin 0.8   -- 4
+  2 @0.375 sin 0.8   -- 4
   2 @0.5 sin 0.8   -- 5
-  2 @0.63 sin 0.8   -- 6
+  2 @0.625 sin 0.8   -- 6
   2 @0.75 sin 0.8   -- 7
-  2 @0.88 sin 0.8   -- 8
+  2 @0.875 sin 0.8   -- 8
 
 clock es9gt1
   1/8 x1 25%   -- 1

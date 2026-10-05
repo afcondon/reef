@@ -455,7 +455,7 @@ firstJust :: forall a. Array (Maybe a) -> Maybe a
 firstJust = foldl (\acc x -> acc <|> x) Nothing
 
 fmt :: Number -> String
-fmt x = trimmed 2 x
+fmt x = trimmed 3 x
 
 -- local <|> for Maybe so we needn't pull Control.Alt's name into scope twice
 infixl 3 alt as <|>

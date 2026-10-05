@@ -25,6 +25,8 @@ module Reef.Selene.Line
   , applyLine
   , printLine
   , paramsOf
+  , RigLine
+  , rigLine
   ) where
 
 import Prelude
@@ -33,12 +35,13 @@ import Data.Array (all, filter, findIndex, foldM, head, length, mapWithIndex, sn
 import Data.Array as Array
 import Data.Either (Either(..), note)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Number as Number
 import Data.String as Str
 import Data.String.Common (joinWith, trim)
 import Reef.Selene.Model as M
 import Reef.Selene.Rack as Rack
+import Reef.Selene.Wire as Wire
 
 -- | A line, read: the kind, the bank it addresses, and its terms in order.
 type Line =
@@ -214,3 +217,23 @@ valuesOf p = case _ of
 
 words :: String -> Array String
 words = filter (_ /= "") <<< Str.split (Str.Pattern " ") <<< trim
+
+-- | What the rig does with a `selene $` line (Architeuthis's Handler): the
+-- | rack it keeps on the stage (`selene/rack`) with the line applied, and the
+-- | one bank the line touched, ready for its daemon. `socket` is "" when that
+-- | bank is not on the modular (a MIDI or virtual target): kept, not sent.
+type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String }
+
+rigLine :: String -> String -> Either String RigLine
+rigLine src rack = do
+  line <- parseLine src
+  sel <- applyLine line (Rack.parseRack rack)
+  dest <- note "the line's bank went missing" (Array.find (\d -> d.target == line.target) sel.destinations)
+  let sent = Wire.destinationEnvelope dest
+  pure
+    { rack: Rack.printRack sel
+    , line: printLine dest
+    , socket: maybe "" _.socket sent
+    , bank: maybe "" _.bank sent
+    , json: maybe "" _.json sent
+    }
