@@ -100,7 +100,7 @@ import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), 
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Selene.Model (defaultSelene) as SM
 import Reef.Selene.Rack (parseRack, printRack) as SR
-import Reef.Selene.Line (applyLine, parseLine, printLine) as SL
+import Reef.Selene.Line (applyLine, parseLine, printLine, rigLine) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -1727,7 +1727,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -1773,6 +1773,11 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> [ "== t
     , "chord es98cv0 # quality fancy"
     , "divider es9gt0 # by \"2 x\""
     ]
+  -- `off <bank>` on the rig: the bank leaves the rack, its daemon sent silence
+  offs = [ "== off" ] <> (foldl off { rack: SR.printRack final, out: [] } [ "off es9gt1", "off es9gt1", "off fh2_1" ]).out
+  off acc src = case SL.rigLine src acc.rack of
+    Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
+    Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }
   refuse src = src <> " | " <> case SL.parseLine src >>= \l -> SL.applyLine l SM.defaultSelene of
     Left e -> "refused: " <> e
     Right _ -> "accepted"

@@ -247,7 +247,26 @@ words = filter (_ /= "") <<< Str.split (Str.Pattern " ") <<< trim
 type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String }
 
 rigLine :: String -> String -> Either String RigLine
-rigLine src rack = do
+rigLine src rack = case words src of
+  -- `off <bank>`: the bank leaves the rack, and its daemon is sent the same
+  -- kind with every slot silent, so the outputs stop (a dropped "free")
+  [ "off", t ] -> do
+    let
+      sel = Rack.parseRack rack
+      target = Rack.parseTarget t
+    dest <- note (t <> " is already free") (Array.find (\d -> d.target == target) sel.destinations)
+    let sent = Wire.destinationEnvelope (dest { bank = Rack.silence dest.bank })
+    pure
+      { rack: Rack.printRack (sel { destinations = filter (\d -> d.target /= target) sel.destinations })
+      , line: "off " <> t
+      , socket: maybe "" _.socket sent
+      , bank: maybe "" _.bank sent
+      , json: maybe "" _.json sent
+      }
+  _ -> rigLine' src rack
+
+rigLine' :: String -> String -> Either String RigLine
+rigLine' src rack = do
   line <- parseLine src
   sel <- applyLine line (Rack.parseRack rack)
   dest <- note "the line's bank went missing" (Array.find (\d -> d.target == line.target) sel.destinations)

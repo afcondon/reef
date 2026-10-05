@@ -34,6 +34,7 @@ module Reef.Selene.Rack
   , parseBase
   , noteToken
   , fmt
+  , silence
   ) where
 
 import Prelude
@@ -257,6 +258,16 @@ parseTarget tok =
 -- ---------------------------------------------------------------------------
 -- Per-kind slot parsers + silent defaults
 -- ---------------------------------------------------------------------------
+
+-- | A bank of its kind with every slot silent: what `selene $ off` sends, so
+-- | the outputs stop rather than run on in the daemon.
+silence :: M.GenBank -> M.GenBank
+silence = case _ of
+  M.GLfo s -> M.GLfo (map (const silentLfo) s)
+  M.GEuclid s -> M.GEuclid (map (const silentEuclid) s)
+  M.GClock s -> M.GClock (map (const silentClock) s)
+  M.GNote s -> M.GNote (map (const silentNote) s)
+  M.GEnv s -> M.GEnv (map (const silentEnv) s)
 
 silentLfo :: M.ModSlot
 silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0 }
