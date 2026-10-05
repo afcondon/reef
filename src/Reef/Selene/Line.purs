@@ -41,11 +41,14 @@ import Data.String as Str
 import Data.String.Common (joinWith, trim)
 import Reef.Selene.Model as M
 import Reef.Selene.Rack as Rack
+import Reef.Selene.Block as Block
 import Reef.Selene.Wire as Wire
 
 -- | A line, read: the kind, the bank it addresses, and its terms in order.
 type Line =
   { kind :: M.GenKind
+  -- | a block (Reef.Selene.Block) in place of the kind: it sets the whole bank
+  , block :: Maybe String
   , target :: M.Target
   , terms :: Array { param :: String, values :: Array String }
   }
@@ -57,9 +60,13 @@ parseLine src = do
   { head: h, tail: rest } <- note "an empty line" (uncons parts)
   case words h of
     [ k, t ] -> do
-      kind <- note ("not a kind of polysignal: " <> k <> " (lfo, euclid, clock, note, env)") (Rack.kindOf k)
+      let named = Block.blockNamed k
+      kind <- note ("not a kind of polysignal or a block: " <> k <> " (lfo, euclid, clock, note, env; or a block: " <> joinWith ", " (map _.name Block.blocks) <> ")")
+        (case named of
+          Just b -> Just b.kind
+          Nothing -> Rack.kindOf k)
       terms <- foldM (\acc part -> snoc acc <$> term part) [] (filter (_ /= "") rest)
-      pure { kind, target: Rack.parseTarget t, terms }
+      pure { kind, block: map _.name named, target: Rack.parseTarget t, terms }
     _ -> Left ("a line starts with a kind and a bank, as in lfo es9main: " <> h)
   where
   term part = case Str.indexOf (Str.Pattern " ") part of
@@ -79,11 +86,16 @@ applyLine :: Line -> M.Selene -> Either String M.Selene
 applyLine line sel = do
   let
     existing = findIndex (\d -> d.target == line.target) sel.destinations
-    start = case existing >>= (sel.destinations !! _) of
+    current = case existing >>= (sel.destinations !! _) of
       Just d | M.bankKind d.bank == kindOfLine -> d.bank
       _ -> M.freshBank kindOfLine
     kindOfLine = line.kind
-  bank <- foldM applyTerm start line.terms
+  -- a block sets the whole bank from its own parameters; the line's other
+  -- terms then apply to that, as plain parameters
+  { start, terms } <- case line.block >>= Block.blockNamed of
+    Just b -> (\x -> { start: x.bank, terms: x.rest }) <$> Block.expand b line.terms
+    Nothing -> pure { start: current, terms: line.terms }
+  bank <- foldM applyTerm start terms
   let dest = { target: line.target, range: Nothing, bank }
   pure case existing of
     Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }

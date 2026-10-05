@@ -1741,6 +1741,16 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> [ "== t
     , "note es98cv0 # note \"C3 E3 G3 B3\""
     , "env fh2_0 # a 10 # d 200 # s 64 # r 400"
     , "lfo es9gt0 # rate 2"
+    -- blocks (Reef.Selene.Block): each sets a whole bank, then plain terms
+    , "ochd es9main # rate 0.03 # spread 40"
+    , "ochd es9main # shape sin # tri 0.2"
+    , "quadrature es9main # rate 0.5"
+    , "drift es98cv0"
+    , "divider es9gt0 # by \"1 2 3 4 6 8 12 16\""
+    , "toussaint es9gt1"
+    , "polymeter es9gt0 # hits 4"
+    , "scatter es9gt1 # seed 7"
+    , "chord es98cv0 # root D3 # quality min9"
     ]
   step acc src = case SL.parseLine src >>= \l -> SL.applyLine l acc.sel <#> \sel -> { l, sel } of
     Left e -> acc { out = acc.out <> [ "> " <> src, "  refused: " <> e ] }
@@ -1754,6 +1764,9 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> [ "== t
     , "lfo es9main # hits 3"
     , "euclid es9gt0 # hits many"
     , "lfo"
+    , "ochd es9main # shape blob"
+    , "chord es98cv0 # quality fancy"
+    , "divider es9gt0 # by \"2 x\""
     ]
   refuse src = src <> " | " <> case SL.parseLine src >>= \l -> SL.applyLine l SM.defaultSelene of
     Left e -> "refused: " <> e

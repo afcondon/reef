@@ -2006,45 +2006,66 @@ rack round-trip true
   env fh2_0 # a 10 # d 200 # s 64 # r 400
 > lfo es9gt0 # rate 2
   lfo es9gt0 # rate 2 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875"
+> ochd es9main # rate 0.03 # spread 40
+  lfo es9main # rate "0.03 0.052 0.084 0.153 0.238 0.427 0.697 1.2" # phase 0 # sin 0 # tri 0.8
+> ochd es9main # shape sin # tri 0.2
+  lfo es9main # rate "0.03 0.052 0.084 0.153 0.238 0.427 0.697 1.2" # phase 0 # tri 0.2
+> quadrature es9main # rate 0.5
+  lfo es9main # rate "0.5 0.5 0.5 0.5 0.75 0.75 0.75 0.75" # phase "0 0.25 0.5 0.75 0 0.25 0.5 0.75"
+> drift es98cv0
+  lfo es98cv0 # rate "0.05 0.069 0.086 0.107 0.131 0.165 0.204 0.256" # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # sin 0 # rnd 0.6
+> divider es9gt0 # by "1 2 3 4 6 8 12 16"
+  euclid es9gt0 # hits 1 # steps "1 2 3 4 6 8 12 16" # rate 1
+> toussaint es9gt1
+  euclid es9gt1 # hits "3 5 4 2 7 5 5 9" # steps "8 8 7 5 12 12 16 16" # rate "2 2 2 2 3 3 4 4"
+> polymeter es9gt0 # hits 4
+  euclid es9gt0 # hits 4 # steps "5 6 7 8 9 10 11 12"
+> scatter es9gt1 # seed 7
+  euclid es9gt1 # hits "6 2 3 4 4 6 4 6" # steps "16 8 9 11 8 16 11 13"
+> chord es98cv0 # root D3 # quality min9
+  note es98cv0 # note "D3 F3 A3 C4 E4 D4 F4 A4"
 == refusals
-squiggle es9main # rate 1 | refused: not a kind of polysignal: squiggle (lfo, euclid, clock, note, env)
+squiggle es9main # rate 1 | refused: not a kind of polysignal or a block: squiggle (lfo, euclid, clock, note, env; or a block: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, chord)
 lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
 euclid es9gt0 # hits many | refused: hits wants a whole number, not many
 lfo | refused: a line starts with a kind and a bank, as in lfo es9main: lfo
+ochd es9main # shape blob | refused: ochd: shape is sin, tri, saw or sqr, not blob
+chord es98cv0 # quality fancy | refused: chord: no quality fancy (maj min maj7 min7 dom7 min9 sus2 sus4 dim aug)
+divider es9gt0 # by "2 x" | refused: divider: by wants whole numbers, not x
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
 -- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind.
 
 lfo es9main
-  0.5 @0 tri 0.6   -- 1
-  1 @0.25 tri 0.6   -- 2
-  2 @0 tri 0.6   -- 3
-  4 @0.25 tri 0.6   -- 4
-  0.5 @0 tri 0.6   -- 5
-  1 @0.25 tri 0.6   -- 6
-  2 @0 tri 0.6   -- 7
-  4 @0.25 tri 0.6   -- 8
+  0.5 @0 sin 0.8   -- 1
+  0.5 @0.25 sin 0.8   -- 2
+  0.5 @0.5 sin 0.8   -- 3
+  0.5 @0.75 sin 0.8   -- 4
+  0.75 @0 sin 0.8   -- 5
+  0.75 @0.25 sin 0.8   -- 6
+  0.75 @0.5 sin 0.8   -- 7
+  0.75 @0.75 sin 0.8   -- 8
 
-lfo es9gt0
-  2 @0 sin 0.8   -- 1
-  2 @0.125 sin 0.8   -- 2
-  2 @0.25 sin 0.8   -- 3
-  2 @0.375 sin 0.8   -- 4
-  2 @0.5 sin 0.8   -- 5
-  2 @0.625 sin 0.8   -- 6
-  2 @0.75 sin 0.8   -- 7
-  2 @0.875 sin 0.8   -- 8
+euclid es9gt0
+  4 5 @4   -- 1
+  4 6 @4   -- 2
+  4 7 @4   -- 3
+  4 8 @4   -- 4
+  4 9 @4   -- 5
+  4 10 @4   -- 6
+  4 11 @4   -- 7
+  4 12 @4   -- 8
 
-clock es9gt1
-  1/8 x1 25%   -- 1
-  1/8 x2 25%   -- 2
-  1/8 x3 25%   -- 3
-  1/8 x4 25%   -- 4
-  1/8 x5 25%   -- 5
-  1/8 x6 25%   -- 6
-  1/8 x7 25%   -- 7
-  1/8 x8 25%   -- 8
+euclid es9gt1
+  6 16 @4   -- 1
+  2 8 @4   -- 2
+  3 9 @4   -- 3
+  4 11 @4   -- 4
+  4 8 @4   -- 5
+  6 16 @4   -- 6
+  4 11 @4   -- 7
+  6 13 @4   -- 8
 
 note midi1
   C2   -- 1
@@ -2057,14 +2078,14 @@ note midi1
   E4   -- 8
 
 note es98cv0
-  C3   -- 1
-  E3   -- 2
-  G3   -- 3
-  B3   -- 4
-  C3   -- 5
-  E3   -- 6
-  G3   -- 7
-  B3   -- 8
+  D3   -- 1
+  F3   -- 2
+  A3   -- 3
+  C4   -- 4
+  E4   -- 5
+  D4   -- 6
+  F4   -- 7
+  A4   -- 8
 
 env fh2_0
   a 10 d 200 s 64 r 400 vel 96 time 2   -- 1
