@@ -19,6 +19,7 @@ module Reef.Vetula.Chord
   , borrowedChords
   , interchangeChords
   , diatonicTriads
+  , diatonicSevenths
   , triadNode
   , latticeFamily
   , latticeChild
@@ -180,6 +181,20 @@ diatonicTriads key =
   let s = scaleSet key
       n = length s
   in mapWithIndex (\i _ -> triadAt s n i) s
+
+-- | One diatonic seventh chord per scale degree: the triad with the scale's
+-- | seventh above the root stacked on (degree, +2, +4, +6). Ids follow the
+-- | triads' (n..2n-1), so the two sets can sit in one pool.
+diatonicSevenths :: Key -> Array ChordNode
+diatonicSevenths key =
+  let s = scaleSet key
+      n = length s
+      at j = fromMaybe 0 (s !! mod j n)
+      seventh i =
+        let t = triadAt s n i
+            pcs = nub (t.pcs <> [ at (i + 6) ])
+        in t { id = n + i, pcs = pcs, voicing = voicingMidi (closeVoicing { centre: 4 } (Chord pcs)) }
+  in mapWithIndex (\i _ -> seventh i) s
 
 triadAt :: Array Int -> Int -> Int -> ChordNode
 triadAt s n i =
