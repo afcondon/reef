@@ -39,6 +39,11 @@ cardsTests = do
   assertEqual' "chN name: chords by name"
     { actual: chordsSeq (parseCardIn lookup 9 "ch3 bolt-tractor-horse \"0 1\"")
     , expected: Just { chords: bolt, seqText: "0 1", channel: 3 } }
+  assertEqual' "chN \"name\": a quoted name is a name"
+    { actual: chordsSeq (parseCardIn lookup 6 "ch3 \"bolt-tractor-horse\" # voice drop2 # arpup 4 # every 4 # strum 14")
+    , expected: Just { chords: bolt, seqText: "<0 1 2>", channel: 3 } }
+  assertEqual' "cardProgression: chN \"name\""
+    { actual: cardProgression "ch3 \"bolt-tractor-horse\" # arpup 4", expected: Just "bolt-tractor-horse" }
   assertEqual' "chords written in are unchanged"
     { actual: chordsSeq (parseCardIn lookup 9 "ch3 \"<[a3,c5,e5,a5]>\" \"0\"")
     , expected: Just { chords: [ [ 45, 60, 64, 69 ] ], seqText: "0", channel: 3 } }

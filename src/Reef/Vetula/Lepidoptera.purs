@@ -389,6 +389,7 @@ parseCard line = parseCardIn (const Nothing) 0 line
 -- |
 -- |     ch3 "<[c4,e4,g4] [a3,c4,e4]>" "0 1 2 3" # arpup 4   -- chords written in
 -- |     ch3 bolt-tractor-horse "0 1 2 3" # arpup 4           -- chords by name
+-- |     ch3 "bolt-tractor-horse" # arpup 4                   -- the same, quoted
 -- |     vetula "bolt-tractor-horse" # arpup 8                -- a voice, as Limulus writes it
 -- |
 -- | The last plays on channel `n` (card 3 is `v3 $`, channel 3), and, with no
@@ -405,11 +406,23 @@ parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
       v = voiceOf n (Just name) (joinWith " " (if ownSeq then rest else [ "\"\"" ] <> rest))
       chords = fromMaybe [] (lookup name)
     pure (specOf v chords) { seqText = if ownSeq then v.seqText else barSeq (length chords) }
-  _ -> parseVoiceLine (trim line) <#> \v -> specOf v (maybe [] chordsOf v.source)
+  toks | Just channel <- toks !! 0 >>= parseCh -> do
+    let
+      src = case toks !! 1 of
+        Just "-" -> Nothing
+        t -> t
+      rest = drop 2 toks
+      -- no sequence of its own: `# …` follows the source directly
+      ownSeq = maybe true isQuoted (rest !! 0)
+      v = voiceOf channel src (joinWith " " (if ownSeq then rest else [ "\"\"" ] <> rest))
+      chords = maybe [] chordsOf src
+      named = maybe false (not <<< isChords) src
+    pure (specOf v chords) { seqText = if ownSeq || not named then v.seqText else barSeq (length chords) }
+  _ -> Nothing
   where
   chordsOf src
-    | isQuoted src = parseProgression src
-    | otherwise = fromMaybe [] (lookup src)
+    | isChords src = parseProgression src
+    | otherwise = fromMaybe [] (lookup (unquote src))
   specOf v chords =
     { channel: v.channel
     , chords
@@ -432,9 +445,13 @@ cardProgression :: String -> Maybe String
 cardProgression line = case stripPunct (tokenize (trim line)) of
   toks | toks !! 0 == Just "vetula" -> unquote <$> toks !! 1
        | isJustArr (toks !! 0 >>= parseCh) -> case toks !! 1 of
-           Just s | s /= "-" && not (isQuoted s) -> Just s
+           Just s | s /= "-" && not (isChords s) -> Just (unquote s)
            _ -> Nothing
   _ -> Nothing
+
+-- | Chords written in (`"<[c4,e4,g4] …>"`), as against a name, quoted or not.
+isChords :: String -> Boolean
+isChords s = contains (Pattern "[") s
 
 isQuoted :: String -> Boolean
 isQuoted s = isJustArr (stripPrefix (Pattern "\"") s)
