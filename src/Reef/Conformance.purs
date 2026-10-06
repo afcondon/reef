@@ -347,8 +347,8 @@ routeRun = intercalate "\n" (map one (range 0 (length tables - 1)) <> keys <> fe
     [ "d 0 2 3 5 7 9 10", "fs 4 7 16", "c", "", "q 0 2", "a 0 x" ]
   -- the Vetula rows, fed: the same table with nothing known, with a key and
   -- voice 3, then voice 3's card edited under its route
-  ctx = { key: either (const Nothing) Just (Route.parseKey "d 0 2 3 5 7 9 10"), voices: [ { channel: 3, harmony: "<c'maj e'min>" } ] }
-  ctx' = ctx { voices = [ { channel: 3, harmony: "<f'maj7 g'dom7>/2" } ] }
+  ctx = { key: either (const Nothing) Just (Route.parseKey "d 0 2 3 5 7 9 10"), voices: [ { voice: 3, harmony: "<c'maj e'min>" } ] }
+  ctx' = ctx { voices = [ { voice: 3, harmony: "<f'maj7 g'dom7>/2" } ] }
   vt = either (const []) identity (Route.parse "odonus.grid <- vetula key\nodonus.out <- vetula 3")
   fed =
     [ "fed none->ctx | " <> intercalate "," (map wire (Route.feedInputs (Route.resolve Route.noContext vt) (Route.resolve ctx vt)))

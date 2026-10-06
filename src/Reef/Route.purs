@@ -11,13 +11,14 @@
 -- | - `scale "<dorian lydian>/4" d`: a pattern of Tidal's scale names, on a root;
 -- | - `harmony "<c'maj7 a'min7>/2"`: a Tidal note pattern of chords, as voiced;
 -- | - `chromatic`: null quantisation, Tidal's `scale "chromatic"`;
--- | - `vetula key`: Vetula's scale; `vetula 3`: Vetula's voice 3, its chords.
+-- | - `vetula key`: Vetula's scale; `vetula R`: Vetula's voice R, its chords
+-- |   (voices are P..W, `Reef.Vetula.VoiceName`; a number is only ever a channel).
 -- |
 -- | The table is text, one route a line, as the router keeps it on the stage
 -- | (`routing/harmony`) and Limulus can show it:
 -- |
 -- |     odonus.grid <- scale "<dorian lydian>/4" d
--- |     odonus.out <- vetula 3
+-- |     odonus.out <- vetula R
 -- |
 -- | The rig applies a change as Odonus inputs, the same gestures `odonus $
 -- | scale …` and `harmony …` make. Vetula's two sources need what Vetula is
@@ -66,6 +67,7 @@ import Data.Traversable (traverse)
 import Reef.Input as I
 import Reef.Move (pitchClass)
 import Reef.PitchSet (PitchSet(..))
+import Reef.Vetula.VoiceName (voiceLetter, voiceOfName)
 
 data Input = OdonusGrid | OdonusOut
 
@@ -121,13 +123,13 @@ sourceText t = case split (Pattern " ") t of
   -- the output. Tidal's own `scale "chromatic"`, by name.
   [ "chromatic" ] -> Right (Scale { pattern: "chromatic", root: 0 })
   [ "vetula", "key" ] -> Right VetulaKey
-  [ "vetula", n ] | Just v <- Int.fromString n -> Right (VetulaVoice v)
+  [ "vetula", n ] | Just v <- voiceOfName n -> Right (VetulaVoice v)
   _ -> case quoted t of
     Just { head: "scale", body, after } -> do
       root <- if after == "" then Right 0 else pitchClass after
       Right (Scale { pattern: body, root })
     Just { head: "harmony", body, after: "" } -> Right (Harmony body)
-    _ -> Left ("no source '" <> t <> "' (scale \"…\" ROOT, harmony \"…\", chromatic, vetula key, vetula N)")
+    _ -> Left ("no source '" <> t <> "' (scale \"…\" ROOT, harmony \"…\", chromatic, vetula key, vetula P..W)")
 
 -- | `head "body" after`, split at the first and last quote.
 quoted :: String -> Maybe { head :: String, body :: String, after :: String }
@@ -153,7 +155,7 @@ printSource = case _ of
   Scale s -> "scale \"" <> s.pattern <> "\"" <> (if s.root == 0 then "" else " " <> noteName s.root)
   Harmony h -> "harmony \"" <> h <> "\""
   VetulaKey -> "vetula key"
-  VetulaVoice n -> "vetula " <> show n
+  VetulaVoice n -> "vetula " <> voiceLetter n
 
 noteName :: Int -> String
 noteName pc = fromMaybe (show pc) (index [ "c", "cs", "d", "ds", "e", "f", "fs", "g", "gs", "a", "as", "b" ] pc)
@@ -165,7 +167,7 @@ setRoute input source routes =
   where
   others = filter (\r -> r.input /= input) routes <> [ { input, source } ]
 
--- | **One route, as Limulus writes it** (`route $ odonus.grid <- vetula 2`):
+-- | **One route, as Limulus writes it** (`route $ odonus.grid <- vetula Q`):
 -- | the table with that input's route set, or with `none` taken away. The rest
 -- | of the table is as it was. The same syntax as a table line, so the
 -- | Dashboard, Limulus and Odonus's labels all describe one table.
@@ -206,10 +208,10 @@ printKey :: Key -> String
 printKey k = joinWith " " ([ noteName k.root ] <> map show k.offsets)
 
 -- | What the rig knows of Vetula: its key, if the page has said, and the
--- | harmony each voice (by channel) is playing, as a Tidal note pattern.
+-- | harmony each voice (by voice number: P = 1) is playing, as a Tidal note pattern.
 type Context =
   { key :: Maybe Key
-  , voices :: Array { channel :: Int, harmony :: String }
+  , voices :: Array { voice :: Int, harmony :: String }
   }
 
 noContext :: Context
@@ -234,7 +236,7 @@ resolve ctx rs = { grid: feed (sourceOf OdonusGrid rs), out: feed (sourceOf Odon
     Just (Scale s) -> FeedScale s
     Just (Harmony h) -> FeedHarmony h
     Just VetulaKey -> maybe Unfed FeedKey ctx.key
-    Just (VetulaVoice n) -> maybe Unfed (FeedHarmony <<< _.harmony) (find (\v -> v.channel == n) ctx.voices)
+    Just (VetulaVoice n) -> maybe Unfed (FeedHarmony <<< _.harmony) (find (\v -> v.voice == n) ctx.voices)
     Nothing -> Unfed
 
 -- | The Odonus inputs that take it from feeding `old` to feeding `new`: for
