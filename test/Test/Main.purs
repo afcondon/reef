@@ -24,12 +24,14 @@ import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
 import Test.Assert (assert', assertEqual')
 import Test.Calibration (calibrationTests)
+import Test.Cards (cardsTests)
 import Test.Rample (rampleTests)
 import Test.Voices (voicesTests)
 
 main :: Effect Unit
 main = do
   voicesTests
+  cardsTests
   rampleTests
   calibrationTests
   assertEqual' "Odonus stepEmit conformance (defaultOdonus, scale source, 32 steps)"

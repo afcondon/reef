@@ -54,16 +54,22 @@ module Reef.Vetula.Lepidoptera
   , roundTrips
   , printCard
   , parseCard
+  , parseCardIn
+  , cardProgression
+  , progressionKey
+  , progressionOfKey
+  , printProgression
+  , readProgression
   ) where
 
 import Prelude
 
-import Data.Array (drop, filter, find, index, length, mapMaybe, mapWithIndex, null, snoc, updateAt, (!!))
+import Data.Array (drop, filter, find, index, length, mapMaybe, mapWithIndex, null, range, snoc, updateAt, (!!))
 import Data.Foldable (foldl)
 import Data.Int as Int
 import Data.Number as Number
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.String (Pattern(..), contains, stripPrefix)
+import Data.String (Pattern(..), contains, stripPrefix, stripSuffix)
 import Data.String.Common (joinWith, split, trim)
 import Reef.Macro (Form(..), parseLane, tokenize)
 import Reef.PatternArg (PatternArg(..), argSrc, printArg)
@@ -218,16 +224,20 @@ parseVoiceLine l =
                Just "-" -> Nothing
                Just s -> Just s
                Nothing -> Nothing
-             laneStr = joinWith " " (drop 2 toks)
-             folded = foldMods (firstStepMods laneStr)
-         in Just
-              { channel
-              , source: src
-              , seqText: firstStepHead laneStr
-              , stack: folded.stack
-              , term: folded.term
-              , muted: folded.muted
-              }
+         in Just (voiceOf channel src (joinWith " " (drop 2 toks)))
+
+-- | A voice from its channel, its source token and the rest of its line.
+voiceOf :: Int -> Maybe String -> String -> VoiceEntry
+voiceOf channel source laneStr =
+  { channel
+  , source
+  , seqText: firstStepHead laneStr
+  , stack: folded.stack
+  , term: folded.term
+  , muted: folded.muted
+  }
+  where
+  folded = foldMods (firstStepMods laneStr)
 
 parseCh :: String -> Maybe Int
 parseCh t = stripPrefix (Pattern "ch") t >>= Int.fromString
@@ -360,24 +370,95 @@ type VoiceSpec =
 printCard :: VoiceSpec -> String
 printCard spec = printVoice
   { channel: spec.channel
-  , source: if null spec.chords then Nothing else Just (quote ("<" <> joinWith " " (map bracket spec.chords) <> ">"))
+  , source: if null spec.chords then Nothing else Just (printProgression spec.chords)
   , seqText: trim spec.seqText
   , stack: spec.stack
   , term: spec.term
   , muted: spec.muted
   }
+
+-- | A card whose chords are written in it (or `-`). A card naming a
+-- | progression reads with `parseCardIn`, which knows the names. (Every
+-- | argument is written out, here and below: purerl exports a function at the
+-- | arity it is defined with, and the rig calls these from Erlang.)
+parseCard :: String -> Maybe VoiceSpec
+parseCard line = parseCardIn (const Nothing) 0 line
+
+-- | **A card, its named progression looked up** (docs/kb/plans/
+-- | vetula-visibility-audit.md, step 4b). Card `n` reads in three forms:
+-- |
+-- |     ch3 "<[c4,e4,g4] [a3,c4,e4]>" "0 1 2 3" # arpup 4   -- chords written in
+-- |     ch3 bolt-tractor-horse "0 1 2 3" # arpup 4           -- chords by name
+-- |     vetula "bolt-tractor-horse" # arpup 8                -- a voice, as Limulus writes it
+-- |
+-- | The last plays on channel `n` (card 3 is `v3 $`, channel 3), and, with no
+-- | sequence of its own, one chord per bar in order, as the progression was
+-- | built. `lookup` gives a name's chords as they stand now; a name it does not
+-- | know gives none, and the card is silent until the name is saved.
+parseCardIn :: (String -> Maybe (Array (Array Int))) -> Int -> String -> Maybe VoiceSpec
+parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
+  toks | toks !! 0 == Just "vetula" -> do
+    name <- unquote <$> toks !! 1
+    let
+      rest = drop 2 toks
+      ownSeq = maybe false isQuoted (rest !! 0)
+      v = voiceOf n (Just name) (joinWith " " (if ownSeq then rest else [ "\"\"" ] <> rest))
+      chords = fromMaybe [] (lookup name)
+    pure (specOf v chords) { seqText = if ownSeq then v.seqText else barSeq (length chords) }
+  _ -> parseVoiceLine (trim line) <#> \v -> specOf v (maybe [] chordsOf v.source)
+  where
+  chordsOf src
+    | isQuoted src = parseProgression src
+    | otherwise = fromMaybe [] (lookup src)
+  specOf v chords =
+    { channel: v.channel
+    , chords
+    , seqText: v.seqText
+    , stack: v.stack
+    , term: v.term
+    , muted: v.muted
+    }
+
+-- | One chord per bar, in order: `<0 1 2 3>`.
+barSeq :: Int -> String
+barSeq k
+  | k <= 0 = ""
+  | otherwise = "<" <> joinWith " " (map show (range 0 (k - 1))) <> ">"
+
+-- | The progression a card names, if it names one rather than writing its
+-- | chords in. A card that names one belongs to whoever wrote it (Limulus):
+-- | Vetula does not print it back.
+cardProgression :: String -> Maybe String
+cardProgression line = case stripPunct (tokenize (trim line)) of
+  toks | toks !! 0 == Just "vetula" -> unquote <$> toks !! 1
+       | isJustArr (toks !! 0 >>= parseCh) -> case toks !! 1 of
+           Just s | s /= "-" && not (isQuoted s) -> Just s
+           _ -> Nothing
+  _ -> Nothing
+
+isQuoted :: String -> Boolean
+isQuoted s = isJustArr (stripPrefix (Pattern "\"") s)
+
+unquote :: String -> String
+unquote s = fromMaybe s (stripPrefix (Pattern "\"") s >>= stripSuffix (Pattern "\""))
+
+-- | **A saved progression on the stage**: `vetula/progression/<name>`, which
+-- | Vetula writes when the progression is saved and the rig reads to play the
+-- | cards that name it. Its text is the chords as one quoted line
+-- | (`printProgression`), read with `readProgression`.
+progressionKey :: String -> String
+progressionKey name = "vetula/progression/" <> name
+
+progressionOfKey :: String -> Maybe String
+progressionOfKey key = stripPrefix (Pattern "vetula/progression/") key
+
+printProgression :: Array (Array Int) -> String
+printProgression chords = quote ("<" <> joinWith " " (map bracket chords) <> ">")
   where
   bracket c = "[" <> joinWith "," (map tidalNoteName c) <> "]"
 
-parseCard :: String -> Maybe VoiceSpec
-parseCard line = parseVoiceLine (trim line) <#> \v ->
-  { channel: v.channel
-  , chords: maybe [] parseProgression v.source
-  , seqText: v.seqText
-  , stack: v.stack
-  , term: v.term
-  , muted: v.muted
-  }
+readProgression :: String -> Array (Array Int)
+readProgression text = parseProgression text
 
 docFromVoices :: String -> Array VoiceSpec -> PerfDoc
 docFromVoices key specs =
