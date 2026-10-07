@@ -112,7 +112,7 @@ seqHarmony chords0 seqText shapes
 -- | Replace each chord index that stands as an atom with its chord. A number
 -- | after a modifier (`*2`, `@3`, `!2`, `?0.5`, `/2`, `%4`, `:1`) or inside a
 -- | Euclid's brackets `(3,8)` is not an index and is left alone; an index past
--- | the end is a rest, as Vetula plays it.
+-- | the end wraps, as Vetula plays it (a progression is a stream of itself).
 substitute :: Array (Array Int) -> String -> String
 substitute chords src = go "" ' ' 0 (CU.toCharArray src)
   where
@@ -131,7 +131,8 @@ substitute chords src = go "" ' ' 0 (CU.toCharArray src)
             case head rest of
               Just '.' -> go (acc <> word) (fromMaybe c (last digits)) depth rest
               _ ->
-                let chord = Int.fromString word >>= (chords !! _)
+                let n = length chords
+                    chord = Int.fromString word >>= \i -> if n == 0 then Nothing else chords !! (mod (mod i n + n) n)
                 in go (acc <> maybe "~" chordText chord) 'x' depth rest
       | otherwise -> go (acc <> CU.singleton c) c depth tail
   atomStart p = all (_ /= p) [ '*', '/', '@', '!', '?', '%', ':', '.', '\'' ] && not (isDigit p) && not (isLetter p)
