@@ -13,6 +13,7 @@ import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
 import Data.Maybe (Maybe(..))
+import Reef.Vetula.Perf (wrapAt)
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Routing as Routing
 import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
@@ -338,6 +339,10 @@ main = do
   assertEqual' "Vetula MIDI-render golden (block + arp, 128 pulses)"
     { actual: vetulaMidiRun, expected: vetulaMidiGolden }
   log "Reef Vetula MIDI-render golden: OK"
+  -- an index past the progression's end wraps: a stream of itself (D3)
+  assertEqual' "Vetula sequence indices wrap"
+    { actual: map (wrapAt [ 10, 11, 12 ]) [ 0, 3, 4, -1, 7 ], expected: map Just [ 10, 10, 11, 12, 11 ] }
+  log "Reef Vetula index wrap: OK"
 
 -- | The frozen render of `Reef.Conformance.run`. Head 0 walks the default
 -- | PitchSet (C minor, cells = discrete indices) — a clean ascending two-octave

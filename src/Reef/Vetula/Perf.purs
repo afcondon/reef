@@ -45,6 +45,7 @@ module Reef.Vetula.Perf
   , VMidiOut
   , renderMidiAt
   , midiChannels
+  , wrapAt
   ) where
 
 import Prelude
@@ -174,7 +175,7 @@ odoCursorAt perf pulse prevCursor =
 -- | The pitch-class set of the progression chord at `cursor` (empty if out of range)
 -- | — what a → odo voice feeds Odonus's chord overlay.
 odoPcsAt :: Perf -> Int -> Array Int
-odoPcsAt perf cursor = maybe [] _.pcs (perf.chords !! cursor)
+odoPcsAt perf cursor = maybe [] _.pcs (wrapAt perf.chords cursor)
 
 -- | One MIDI note a → midi voice sounds at a pulse: absolute note, velocity, and the
 -- | gate length in PULSES (the runtime multiplies by the current step-ms, so this
@@ -231,7 +232,7 @@ renderAlphaBlockMidiAt alphabets v clock pulse
             Nothing -> []
             Just segIx ->
               let seg = fromMaybe emptySeg (segs !! segIx)
-                  notes = fromMaybe [] (alphabets !! seg.ix)
+                  notes = fromMaybe [] (wrapAt alphabets seg.ix)
               in case v.renderer of
                 VBlock ->
                   if pos == seg.start
@@ -254,7 +255,7 @@ renderAlphaBlockMidiAt alphabets v clock pulse
                     let prevNotes =
                           if segIx <= 0 then []
                           else fromMaybe []
-                                 (alphabets !! (fromMaybe emptySeg (segs !! (segIx - 1))).ix)
+                                 (wrapAt alphabets (fromMaybe emptySeg (segs !! (segIx - 1))).ix)
                         entering = filter (\nn -> not (elem nn prevNotes)) notes
                     in map (\nn -> { note: nn, velocity: 84, durPulses: strumSustain alphabets segs segIx nn }) entering
   where
@@ -314,7 +315,7 @@ strumSustain alphabets segs segIx nn = toNumber (go segIx 0) * 0.98
   go k acc = case segs !! k of
     Nothing -> acc
     Just s ->
-      if elem nn (fromMaybe [] (alphabets !! s.ix))
+      if elem nn (fromMaybe [] (wrapAt alphabets s.ix))
         then go (k + 1) (acc + s.len)
         else acc
 
@@ -350,3 +351,12 @@ renderMidiAt perf pulse = (foldl step { ord: 0, out: [] } perf.voices).out
 -- | in the conformance digest (channel is routing, not note-generation).
 midiChannels :: Perf -> Array Int
 midiChannels perf = map _.channel (filter (\v -> v.dest == VToMidi) perf.voices)
+
+-- | **A sequence index past the progression's end wraps** (AC, 2026-10-07):
+-- | a progression is an endless stream of itself, so a voice's own sequence
+-- | `"0 1 2 3"` over three chords plays 0 1 2 0, never a rest. Negative
+-- | indices count from the end, as the note alphabet's do.
+wrapAt :: forall a. Array a -> Int -> Maybe a
+wrapAt xs i =
+  let n = length xs
+  in if n == 0 then Nothing else xs !! (mod (mod i n + n) n)
