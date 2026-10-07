@@ -7,7 +7,7 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Console (log)
-import Reef.Vetula.Lepidoptera (cardProgression, parseCard, parseCardIn, printProgression, progressionKey, progressionOfKey, readProgression)
+import Reef.Vetula.Lepidoptera (cardProgression, parseCard, parseCardIn, printProgression, printProgressionIn, progressionKey, progressionOfKey, readProgression, readStaged)
 import Test.Assert (assert', assertEqual')
 
 cardsTests :: Effect Unit
@@ -15,12 +15,22 @@ cardsTests = do
   let
     bolt = [ [ 57, 72, 76, 81 ], [ 53, 72, 77, 81 ], [ 55, 74, 79, 83 ] ]
     lookup = case _ of
-      "bolt-tractor-horse" -> Just bolt
+      "bolt-tractor-horse" -> Just { chords: bolt, beats: [] }
+      "tapped" -> Just { chords: bolt, beats: [ 4, 2, 2 ] }
       _ -> Nothing
     chordsSeq = map (\s -> { chords: s.chords, seqText: s.seqText, channel: s.channel })
 
   assertEqual' "a progression round-trips through its stage text"
     { actual: readProgression (printProgression bolt), expected: bolt }
+  assertEqual' "a tapped rhythm round-trips through the stage text"
+    { actual: readStaged (printProgressionIn [ 4, 2, 2 ] bolt), expected: { chords: bolt, beats: [ 4, 2, 2 ] } }
+  assertEqual' "an untapped progression has no rhythm"
+    { actual: (readStaged (printProgression bolt)).beats, expected: [] }
+  assertEqual' "vetula \"name\" over a tapped progression plays it as tapped"
+    { actual: chordsSeq (parseCardIn lookup 4 "vetula \"tapped\" # arpup 8")
+    , expected: Just { chords: bolt, seqText: "[0@4 1@2 2@2]/2", channel: 4 } }
+  assertEqual' "its own sequence still wins over the rhythm"
+    { actual: map _.seqText (parseCardIn lookup 4 "vetula \"tapped\" \"0 1\""), expected: Just "0 1" }
   assertEqual' "progression keys"
     { actual: progressionOfKey (progressionKey "bolt-tractor-horse"), expected: Just "bolt-tractor-horse" }
 

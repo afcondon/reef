@@ -59,7 +59,10 @@ module Reef.Vetula.Lepidoptera
   , progressionKey
   , progressionOfKey
   , printProgression
+  , printProgressionIn
   , readProgression
+  , Staged
+  , readStaged
   ) where
 
 import Prelude
@@ -74,7 +77,7 @@ import Data.String.Common (joinWith, split, trim)
 import Reef.Macro (Form(..), parseLane, tokenize)
 import Reef.PatternArg (PatternArg(..), argSrc, printArg)
 import Reef.Vetula.PerformTypes (ArpDir(..), Layer, PerfFx(..), PerfSel(..), PerfTerm(..), When(..), mkLayer, printArpDir, termShort)
-import Reef.Vetula.NoteText (parseProgression, tidalNoteName)
+import Reef.Vetula.NoteText (parseBeats, parseProgression, rhythmSeq, tidalNoteName, weighted)
 
 -- | A named chord set the voices reference. `chords` are note-lists in *stored
 -- | order* (NOT sorted — voicing order drives arp direction, so it must survive).
@@ -396,7 +399,7 @@ parseCard line = parseCardIn (const Nothing) 0 line
 -- | sequence of its own, one chord per bar in order, as the progression was
 -- | built. `lookup` gives a name's chords as they stand now; a name it does not
 -- | know gives none, and the card is silent until the name is saved.
-parseCardIn :: (String -> Maybe (Array (Array Int))) -> Int -> String -> Maybe VoiceSpec
+parseCardIn :: (String -> Maybe Staged) -> Int -> String -> Maybe VoiceSpec
 parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
   toks | toks !! 0 == Just "vetula" -> do
     name <- unquote <$> toks !! 1
@@ -404,8 +407,8 @@ parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
       rest = drop 2 toks
       ownSeq = maybe false isQuoted (rest !! 0)
       v = voiceOf n (Just name) (joinWith " " (if ownSeq then rest else [ "\"\"" ] <> rest))
-      chords = fromMaybe [] (lookup name)
-    pure (specOf v chords) { seqText = if ownSeq then v.seqText else barSeq (length chords) }
+      staged = fromMaybe { chords: [], beats: [] } (lookup name)
+    pure (specOf v staged.chords) { seqText = if ownSeq then v.seqText else stagedSeq staged }
   toks | Just channel <- toks !! 0 >>= parseCh -> do
     let
       src = case toks !! 1 of
@@ -417,12 +420,18 @@ parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
       v = voiceOf channel src (joinWith " " (if ownSeq then rest else [ "\"\"" ] <> rest))
       chords = maybe [] chordsOf src
       named = maybe false (not <<< isChords) src
-    pure (specOf v chords) { seqText = if ownSeq || not named then v.seqText else barSeq (length chords) }
+      staged = { chords, beats: maybe [] beatsOf src }
+    pure (specOf v chords) { seqText = if ownSeq || not named then v.seqText else stagedSeq staged }
   _ -> Nothing
   where
   chordsOf src
     | isChords src = parseProgression src
-    | otherwise = fromMaybe [] (lookup (unquote src))
+    | otherwise = maybe [] _.chords (lookup (unquote src))
+  beatsOf src
+    | isChords src = []
+    | otherwise = maybe [] _.beats (lookup (unquote src))
+  -- with no sequence of its own: as tapped, else one chord a bar
+  stagedSeq s = fromMaybe (barSeq (length s.chords)) (if length s.beats == length s.chords then rhythmSeq s.beats else Nothing)
   specOf v chords =
     { channel: v.channel
     , chords
@@ -470,12 +479,24 @@ progressionOfKey :: String -> Maybe String
 progressionOfKey key = stripPrefix (Pattern "vetula/progression/") key
 
 printProgression :: Array (Array Int) -> String
-printProgression chords = quote ("<" <> joinWith " " (map bracket chords) <> ">")
+printProgression chords = printProgressionIn [] chords
+
+-- | With a rhythm (each chord's beats), as Tidal weights: `"[[…]@4 […]@2]/2"`.
+printProgressionIn :: Array Int -> Array (Array Int) -> String
+printProgressionIn beats chords =
+  quote (fromMaybe ("<" <> joinWith " " brackets <> ">") (weighted beats brackets))
   where
-  bracket c = "[" <> joinWith "," (map tidalNoteName c) <> "]"
+  brackets = map (\c -> "[" <> joinWith "," (map tidalNoteName c) <> "]") chords
 
 readProgression :: String -> Array (Array Int)
 readProgression text = parseProgression text
+
+-- | A saved progression as a card reads it: its chords, and their lengths
+-- | in beats if it was given a rhythm (empty: one chord a bar).
+type Staged = { chords :: Array (Array Int), beats :: Array Int }
+
+readStaged :: String -> Staged
+readStaged text = { chords: parseProgression text, beats: parseBeats text }
 
 docFromVoices :: String -> Array VoiceSpec -> PerfDoc
 docFromVoices key specs =

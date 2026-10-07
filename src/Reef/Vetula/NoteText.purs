@@ -9,15 +9,20 @@
 -- | cards (docs/kb/plans/gpl-boundary-review.md, step 3); Triggerfish re-exports it.
 module Reef.Vetula.NoteText
   ( progressionSource
+  , progressionSourceIn
   , parseProgression
+  , parseBeats
+  , weighted
+  , rhythmSeq
   , tidalNoteName
   ) where
 
 import Prelude
 
-import Data.Array (drop, filter, head, index, length, mapMaybe, mapWithIndex, sort)
+import Data.Array (any, drop, filter, head, index, length, mapMaybe, mapWithIndex, sort, take, zipWith)
+import Data.Foldable (sum)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.String (Pattern(..), split, stripPrefix)
 import Data.String.CodeUnits as SCU
 import Data.String.Common (joinWith, toLower, trim)
@@ -45,16 +50,54 @@ chordBracket c = "[" <> joinWith "," (map tidalNoteName (sort (playNotes c))) <>
 -- | natural reading of a progression), with the all-in-one-cycle form offered as
 -- | a commented alternative.
 progressionSource :: String -> Array ChordNode -> String
-progressionSource keyLabel steps =
+progressionSource keyLabel steps = progressionSourceIn keyLabel [] steps
+
+-- | The same, with a **rhythm**: each chord's length in beats (four to a
+-- | bar), tapped in. With one length a chord, the pattern carries them as
+-- | Tidal weights (`weighted`), so the source still plays as it was tapped;
+-- | otherwise, one chord a cycle.
+progressionSourceIn :: String -> Array Int -> Array ChordNode -> String
+progressionSourceIn keyLabel beats steps =
   joinWith "\n"
     [ "-- vetula progression · " <> show (length steps) <> " chords · " <> keyLabel
     , "-- " <> joinWith "   " (mapWithIndex (\i c -> show (i + 1) <> " " <> c.label) steps)
-    , "note \"<" <> joinWith " " brackets <> ">\""
+    , "note \"" <> fromMaybe ("<" <> joinWith " " brackets <> ">") (weighted beats brackets) <> "\""
     , "-- all in one cycle:"
     , "-- note \"" <> joinWith " " brackets <> "\""
     ]
   where
   brackets = map chordBracket steps
+
+-- | Steps with their lengths in beats as one pattern a bar of four beats to
+-- | the cycle: `[a@4 b@2 c@2 d@8]/4`. `Nothing` unless there is one length
+-- | (a whole number of beats, at least one) a step.
+weighted :: Array Int -> Array String -> Maybe String
+weighted beats steps
+  | length beats /= length steps || length steps == 0 || any (_ < 1) beats = Nothing
+  | otherwise =
+      let total = sum beats
+          bars = if total `mod` 4 == 0 then show (total / 4) else show (Int.toNumber total / 4.0)
+      in Just ("[" <> joinWith " " (zipWith (\s b -> s <> "@" <> show b) steps beats) <> "]/" <> bars)
+
+-- | A voice's sequence over a progression with a rhythm: its chords in
+-- | order, each its length (`[0@4 1@2 2@2 3@8]/4`).
+rhythmSeq :: Array Int -> Maybe String
+rhythmSeq beats = weighted beats (mapWithIndex (\i _ -> show i) beats)
+
+-- | The lengths a source gives its chords, in beats: the `@n` after each
+-- | chord's closing bracket, outside comments. Empty when the source has no
+-- | rhythm (no chord carries a weight).
+parseBeats :: String -> Array Int
+parseBeats text =
+  let body = joinWith " " (filter (\l -> stripPrefix (Pattern "--") (trim l) == Nothing) (split (Pattern "\n") text))
+      k = length (parseProgression text)
+      -- the text after each `]`; a chord's is the first k
+      afters = take k (drop 1 (split (Pattern "]") body))
+      weightOf a = case stripPrefix (Pattern "@") a of
+        Just rest -> Int.fromString (SCU.takeWhile (\c -> c >= '0' && c <= '9') rest)
+        Nothing -> Nothing
+      ws = map weightOf afters
+  in if any isJust ws then map (fromMaybe 1) ws else []
 
 -- ---------------------------------------------------------------------------
 -- Round trip — parse a Tidal `note "<…>"` block back into note lists, so a
