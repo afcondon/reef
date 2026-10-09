@@ -17,6 +17,7 @@ module Reef.Render
   , gateMs
   , ratchetHits
   , renderHits
+  , subOffsetMs
   ) where
 
 import Prelude
@@ -51,7 +52,16 @@ ratchetHits f gate =
        let sub = gate / toNumber rat
        in map (\k -> { offsetMs: toNumber k * sub, durMs: sub * 0.85 }) (range 0 (rat - 1))
 
--- | The full schedule for a fired note: its ratchet hits over the gate window. Both
--- | runtimes iterate these, scheduling each hit at the step's onset + `offsetMs`.
+-- | Where inside its model step a fired note falls, in ms: 0 for a head at
+-- | speed 1 or below, and between 0 and the step for the extra ticks of a
+-- | faster head (`Reef.Odonus.headTicks`).
+subOffsetMs :: Number -> Fired -> Number
+subOffsetMs stepMs f =
+  if f.offDen <= 0 then 0.0 else stepMs * toNumber f.offNum / toNumber f.offDen
+
+-- | The full schedule for a fired note: its ratchet hits over the gate window,
+-- | placed at the note's own tick inside the step. Both runtimes iterate these,
+-- | scheduling each hit at the step's onset + `offsetMs`.
 renderHits :: Odonus -> Number -> Fired -> Array Hit
-renderHits odo stepMs f = ratchetHits f (gateMs odo stepMs f)
+renderHits odo stepMs f =
+  map (\h -> h { offsetMs = h.offsetMs + subOffsetMs stepMs f }) (ratchetHits f (gateMs odo stepMs f))

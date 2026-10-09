@@ -95,7 +95,7 @@ module Reef.Odonus
 
 import Prelude
 
-import Data.Array (catMaybes, elem, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
+import Data.Array (catMaybes, concat, elem, mapMaybe, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
 import Data.Foldable (foldl)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -522,83 +522,69 @@ stepSeq order cells len dir st = case dir of
     in
       { pos: nextSeq order cells len st.pos ns, pend: ns }
 
--- | Run `n` base ticks. The Euclidean rhythm CLOCKS the melodic advance: on each
--- | tick that lands on a pulse of E(pulses, esteps) the head steps to its next
--- | (skip-aware, direction-aware) cell; a rest tick holds. `et` advances every
--- | tick — it samples the rhythm — while `pos` only moves on a pulse, so no cell
--- | is skipped past silently.
-advanceEuclid
-  :: Array Int -> Array Cell -> Int -> Dir -> Int -> Int -> Int
-  -> { pos :: Int, pend :: Int, et :: Int } -> { pos :: Int, pend :: Int, et :: Int }
-advanceEuclid order cells len dir pulses es n st
-  | n <= 0 = st
-  | otherwise =
-      let stepped = if euclidHit pulses es st.et
-                      then stepSeq order cells len dir { pos: st.pos, pend: st.pend }
-                      else { pos: st.pos, pend: st.pend }
-      in advanceEuclid order cells len dir pulses es (n - 1)
-           { pos: stepped.pos, pend: stepped.pend, et: (st.et + 1) `mod` es }
+-- | One whole tick of a head's own clock, inside a model step: where in the
+-- | step it falls (`num / den` of it, so exact on both runtimes), whether it
+-- | was a pulse (the head stepped onto a cell and should sound it), and the
+-- | cell it is on afterwards.
+type Tick = { num :: Int, den :: Int, pulsed :: Boolean, cursor :: Int }
 
-advanceHead :: Array Cell -> Head -> Head
-advanceHead cells h =
+-- | Advance one head through one model step. SPEED MULTIPLIES THE HEAD'S
+-- | CLOCK (AC, 2026-10-09): a head at speed 2 has two ticks of its own in
+-- | each model step, and each of them is a whole tick of everything the head
+-- | does: its Euclidean counter, its duration hold, and a step of the melody
+-- | that sounds. So a 5-in-16 rhythm at speed 2 cycles in half the time and
+-- | every pulse in it plays, at its own place inside the step.
+-- |
+-- | The phase is counted in exact 1/8-step units. A tick falls where the
+-- | count reaches a multiple of `stepDenom`, and the step covers counts
+-- | `[acc, acc + speed)`, so a tick is at the START of its own span: a head at
+-- | speed ½ plays on the first of its two steps, on the beat.
+headTicks :: Array Cell -> Head -> { head :: Head, ticks :: Array Tick }
+headTicks cells h0 =
+  let
+    a = h0.accumulator
+    s = speedNumOf h0
+    first = if a == 0 then 0 else stepDenom
+    count = (a + s + stepDenom - 1) `div` stepDenom - (a + stepDenom - 1) `div` stepDenom
+    go k h acc
+      | k >= count = { head: h { accumulator = (a + s) `mod` stepDenom }, ticks: acc }
+      | otherwise =
+          let r = tickHead cells h
+          in go (k + 1) r.head (snoc acc { num: first + k * stepDenom - a, den: s, pulsed: r.pulsed, cursor: r.head.cursor })
+  in
+    go 0 h0 []
+
+-- | One tick of a head's own clock: on the duration clock, the hold counts
+-- | down and the head steps when it runs out; on the Euclidean clock, the
+-- | head steps on a pulse.
+tickHead :: Array Cell -> Head -> { head :: Head, pulsed :: Boolean }
+tickHead cells h =
   let
     order = orderOf h.patternIx
     len = clampI 1 16 h.len
     es = clampI 1 maxEsteps h.esteps
-    -- Exact integer phase: accumulate 1/8-step units, whole base ticks are the
-    -- integer quotient, the carry is the remainder. (Both ≥ 0 ⇒ unsigned div/mod.)
-    newAcc = h.accumulator + speedNumOf h
-    ticks = newAcc `div` stepDenom
-    remain = newAcc `mod` stepDenom
-    r = advanceEuclid order cells len (decodeDir h.direction) h.pulses es ticks
-          { pos: h.seqPos, pend: h.pendStep, et: h.etick }
-    d = advanceDur order cells len (decodeDir h.direction) h.offset ticks
-          { pos: h.seqPos, pend: h.pendStep, hold: h.hold }
+    dir = decodeDir h.direction
+    cursorAt pos = gridAt order (modPos (pos + h.offset) len)
   in
     if h.clock == 1 then
-      h { seqPos = d.pos
-        , cursor = gridAt order (modPos (d.pos + h.offset) len)
-        , accumulator = remain, pendStep = d.pend, hold = d.hold }
+      if h.hold > 1 then { head: h { hold = h.hold - 1 }, pulsed: false }
+      else
+        let
+          st = stepSeq order cells len dir { pos: h.seqPos, pend: h.pendStep }
+          cur = cursorAt st.pos
+          d = maybe 1 (\c -> clampI 1 8 c.dur) (cells !! cur)
+        in { head: h { seqPos = st.pos, cursor = cur, pendStep = st.pend, hold = d }, pulsed: true }
     else
-      h { seqPos = r.pos
-        , cursor = gridAt order (modPos (r.pos + h.offset) len)
-        , accumulator = remain, pendStep = r.pend, etick = r.et }
-
--- | Run `n` base ticks on the duration clock: the head holds a cell for that
--- | cell's `dur` ticks, then steps to its next (skip-aware, direction-aware)
--- | cell, and holds that one for its own `dur`. `hold` 0 moves on at once.
-advanceDur
-  :: Array Int -> Array Cell -> Int -> Dir -> Int -> Int
-  -> { pos :: Int, pend :: Int, hold :: Int } -> { pos :: Int, pend :: Int, hold :: Int }
-advanceDur order cells len dir off n st
-  | n <= 0 = st
-  | st.hold > 1 = advanceDur order cells len dir off (n - 1) st { hold = st.hold - 1 }
-  | otherwise =
       let
-        s = stepSeq order cells len dir { pos: st.pos, pend: st.pend }
-        cur = gridAt order (modPos (s.pos + off) len)
-        d = maybe 1 (\c -> clampI 1 8 c.dur) (cells !! cur)
+        hit = euclidHit h.pulses es h.etick
+        st = if hit then stepSeq order cells len dir { pos: h.seqPos, pend: h.pendStep }
+             else { pos: h.seqPos, pend: h.pendStep }
       in
-        advanceDur order cells len dir off (n - 1) { pos: s.pos, pend: s.pend, hold: d }
+        { head: h { seqPos = st.pos, cursor = cursorAt st.pos, pendStep = st.pend, etick = (h.etick + 1) `mod` es }
+        , pulsed: hit }
 
--- | Did this head land on a Euclidean pulse during this model step? Recomputes the
--- | same `ticks` window `advanceHead` runs, over the PRE-step `etick`/`accumulator`
--- | — true iff any of those base ticks is a pulse (so the head advanced + should
--- | sound). Speed < 1 with no whole tick ⇒ no pulse ⇒ the head holds.
-pulsedThisStep :: Head -> Boolean
-pulsedThisStep h =
-  let es = clampI 1 maxEsteps h.esteps
-      ticks = (h.accumulator + speedNumOf h) `div` stepDenom
-  in
-    -- on the duration clock, a pulse is the tick its hold runs out on
-    if h.clock == 1 then ticks > 0 && ticks >= max 1 h.hold
-    else anyPulse h.pulses es h.etick ticks
-
-anyPulse :: Int -> Int -> Int -> Int -> Boolean
-anyPulse pulses es et n
-  | n <= 0 = false
-  | euclidHit pulses es et = true
-  | otherwise = anyPulse pulses es ((et + 1) `mod` es) (n - 1)
+advanceHead :: Array Cell -> Head -> Head
+advanceHead cells h = (headTicks cells h).head
 
 step :: Odonus -> Odonus
 step o = o { heads = map (advanceHead o.cells) o.heads }
@@ -610,27 +596,30 @@ cursorsOf o = map _.cursor o.heads
 -- | cell is marked glide (→ MIDI portamento / CV slew), the cell's note length
 -- | and ratchet (retrigger) count, and the cell's base velocity.
 type Fired =
-  { headIdx :: Int, pitch :: Int, glide :: Boolean, dur :: Int, ratchet :: Int, vel :: Int }
+  { headIdx :: Int, pitch :: Int, glide :: Boolean, dur :: Int, ratchet :: Int, vel :: Int
+  -- where in the model step it falls: `offNum / offDen` of the step (0 for a
+  -- head at speed 1 or below; 0 and ½ for the two notes of a head at 2)
+  , offNum :: Int, offDen :: Int }
 
--- | Advance one tick and report what fired: an unmuted head that landed on a
--- | Euclidean PULSE this tick sounds the cell it advanced onto. The Euclidean
--- | rhythm clocks the advance (see `advanceEuclid`), so every pulse both moves the
--- | melody one cell and sounds it — no cell is skipped past silently. A head whose
--- | tick was a rest (or whose speed < 1 gave no whole tick) holds and stays quiet.
+-- | Advance one model step and report what fired: every tick of each head's
+-- | own clock that was a PULSE sounds the cell the head stepped onto, at that
+-- | tick's place in the step, unless the head is muted or the cell is gated
+-- | off or skipped. So no cell a head steps onto is passed over silently,
+-- | whatever its speed.
 stepEmit :: Odonus -> { odo :: Odonus, fired :: Array Fired }
 stepEmit o =
   let
-    oldHeads = o.heads
-    o2 = step o
-    firedFor idx hd =
-      let pulsed = maybe false pulsedThisStep (oldHeads !! idx)
-      in case o2.cells !! hd.cursor of
-        Just c | pulsed && not hd.mute && c.gate && not c.skip ->
-          Just { headIdx: idx, pitch: renderCell o2 hd c, glide: c.glide
-               , dur: c.dur, ratchet: c.ratchet, vel: c.vel }
-        _ -> Nothing
+    rs = map (headTicks o.cells) o.heads
+    o2 = o { heads = map _.head rs }
+    firedFor idx r = mapMaybe (fire idx r.head) r.ticks
+    fire idx hd t = case o2.cells !! t.cursor of
+      Just c | t.pulsed && not hd.mute && c.gate && not c.skip ->
+        Just { headIdx: idx, pitch: renderCell o2 hd c, glide: c.glide
+             , dur: c.dur, ratchet: c.ratchet, vel: c.vel
+             , offNum: t.num, offDen: t.den }
+      _ -> Nothing
   in
-    { odo: o2, fired: catMaybes (mapWithIndex firedFor o2.heads) }
+    { odo: o2, fired: concat (mapWithIndex firedFor rs) }
 
 -- ---------------------------------------------------------------------------
 -- editing
