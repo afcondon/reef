@@ -19,6 +19,7 @@
 -- | N`) still reads, as the pattern meaning the same, or as the scale.
 module Reef.Odonus.Patch
   ( OdonusPatch
+  , clockFor
   , printPatch
   , parsePatch
   , Phase
@@ -34,18 +35,17 @@ module Reef.Odonus.Patch
 
 import Prelude
 
-import Data.Array (concatMap, find, findIndex, length, mapWithIndex, range, snoc, uncons, unsnoc, (!!))
+import Data.Array (concatMap, find, findIndex, head, length, mapWithIndex, range, snoc, uncons, unsnoc, zipWith, (!!))
 import Data.Either (Either(..), hush)
-import Data.Foldable (minimumBy)
+import Data.Foldable (foldl, sum)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Number as Number
 import Data.Ord (abs)
 import Data.String.CodeUnits as CU
 import Data.String.Common (joinWith, toLower)
-import Data.Tuple (Tuple(..), fst)
 import Reef.Gen (GenKind(..), GenSource, genDefaultAmt, genDefaultRate, genKinds)
-import Reef.Odonus (Head, Odonus, defaultOdonus, patternLibrary, setHarmony, setScalePattern, speedOf, speedTable)
+import Reef.Odonus (Head, Odonus, defaultOdonus, patternLibrary, setHarmony, setScalePattern, speedOf)
 import Reef.Scale (Distribution(..), normaliseIvls, rootName, rootNames, scaleTypes)
 import Reef.Vetula.Harmony (clockHarmony)
 
@@ -405,7 +405,7 @@ patchP = do
   durs <- field "durs" (list intP)
   ratchets <- field "ratchets" (list intP)
   vels <- field "vels" (list intP)
-  heads <- field "heads" (list headP)
+  heads0 <- field "heads" (list headP)
   gen <- field "gen" (list genP)
   punctP '}'
   let
@@ -421,11 +421,13 @@ patchP = do
       , octaveShift = octave, degShift = scalarT, gatePct = gatePct
       , span = fromMaybe defaultOdonus.span span
       , cells = cells, heads = heads }
+    clock = clockFor stepDiv (map _.speed heads0)
+    heads = zipWith (\h m -> h.head { speedIx = m - 1 }) heads0 clock.mults
     odo = setScalePattern sc.pattern (setHarmony (quant stepDiv) base)
   pure
     { name, odo
     , gen, genSpread: Int.toNumber marbles.spread / 100.0, genBias: Int.toNumber marbles.bias / 100.0
-    , swing: Int.toNumber swing / 100.0, velHumanize: velH, stepDiv }
+    , swing: Int.toNumber swing / 100.0, velHumanize: velH, stepDiv: clock.div }
   where
   at :: forall a. Array a -> Int -> a -> a
   at arr i d = fromMaybe d (arr !! i)
@@ -482,11 +484,11 @@ sourceP = word >>= case _ of
         clockHarmony sets clock 0
   w -> failP ("no quantize source " <> w)
 
-headP :: P Head
+headP :: P { head :: Head, speed :: Number }
 headP = do
   kw "head"
   pat <- patternIxOf <$> word
-  spd <- speedIxOf <$> numP
+  spd <- numP
   dir <- dirOf <$> word
   kw "transp"
   tr <- intP
@@ -509,9 +511,11 @@ headP = do
     Just (Word "mute") -> word *> pure true
     _ -> pure false
   pure
-    { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
-    , speedIx: spd, direction: dir, transp: tr, mute, patternIx: pat
-    , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0 }
+    { head:
+        { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
+        , speedIx: 0, direction: dir, transp: tr, mute, patternIx: pat
+        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0 }
+    , speed: spd }
 
 genP :: P GenSource
 genP = do
@@ -583,9 +587,24 @@ patternSlug i = toLower (maybe "rows" _.name (patternLibrary !! i))
 patternIxOf :: String -> Int
 patternIxOf slug = fromMaybe 0 (findIndex (\p -> toLower p.name == slug) patternLibrary)
 
-speedIxOf :: Number -> Int
-speedIxOf v =
-  maybe 4 fst (minimumBy (comparing (\(Tuple _ s) -> abs (s - v))) (mapWithIndex Tuple speedTable))
+-- | A patch's clock, as the divider and per-head multipliers it means now.
+-- |
+-- | A patch saved before 2026-10-09 has a STEP LENGTH of 1 to 16 sixteenths
+-- | and head speeds from ⅛ to 8, fractions included; one saved since has a
+-- | divider and multipliers of 1 to 8. Either way a head played `speed ÷
+-- | stepDiv` model steps per sixteenth, so the new clock is the divider that
+-- | gives every head that same rate as a whole multiplier: the patch's own
+-- | divider if it does (so a new patch reads back unchanged), else the
+-- | smallest that does, else the closest.
+clockFor :: Int -> Array Number -> { div :: Int, mults :: Array Int }
+clockFor stepDiv speeds =
+  { div: best, mults: multsAt best }
+  where
+  rates = map (_ / Int.toNumber (max 1 stepDiv)) speeds
+  multsAt d = map (\r -> clamp 1 8 (Int.round (r * Int.toNumber d))) rates
+  err d = sum (zipWith (\r m -> abs (r * Int.toNumber d - Int.toNumber m)) rates (multsAt d))
+  candidates = (if stepDiv >= 1 && stepDiv <= 8 then [ stepDiv ] else []) <> range 1 8
+  best = foldl (\b d -> if err d < err b - 1.0e-9 then d else b) (fromMaybe 1 (head candidates)) candidates
 
 dirSlug :: Int -> String
 dirSlug = case _ of

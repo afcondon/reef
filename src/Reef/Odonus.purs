@@ -95,7 +95,7 @@ module Reef.Odonus
 
 import Prelude
 
-import Data.Array (catMaybes, concat, elem, mapMaybe, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
+import Data.Array (concat, elem, mapMaybe, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
 import Data.Foldable (foldl)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -420,8 +420,13 @@ releaseScale o = o { scalePattern = Nothing, scaleHeld = Nothing }
 harmonyPCs :: Odonus -> Array Int
 harmonyPCs o = maybe (pitchClassesOf (scaleOf o)) (const (currentChordPCs o)) o.chord
 
+-- | A head's SPEED is a clock MULTIPLIER, ×1 to ×8 (AC, 2026-10-09), over a
+-- | model step that is itself the 16th clock DIVIDED by the page's STEP
+-- | LENGTH (÷1 to ÷8). So a head plays `16ths ÷ div × mult`, every rate is an
+-- | integer ratio, and a head slower than another is one with a smaller
+-- | multiplier: to slow everything, divide the clock.
 speedTable :: Array Number
-speedTable = [ 0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0 ]
+speedTable = [ 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 ]
 
 speedOf :: Head -> Number
 speedOf h = fromMaybe 1.0 (speedTable !! h.speedIx)
@@ -435,7 +440,7 @@ stepDenom :: Int
 stepDenom = 8
 
 speedNumTable :: Array Int
-speedNumTable = [ 1, 2, 4, 6, 8, 12, 16, 24, 32, 48, 64 ]
+speedNumTable = [ 8, 16, 24, 32, 40, 48, 56, 64 ]
 
 speedNumOf :: Head -> Int
 speedNumOf h = fromMaybe stepDenom (speedNumTable !! h.speedIx)
@@ -454,10 +459,12 @@ mkHead speedIx direction transp mute patternIx =
 -- | 1/8…8× table: 4=1.0, 2=0.5, 6=2.0, 3=0.75.)
 defaultHeads :: Array Head
 defaultHeads =
-  [ mkHead 4 0 0 false 0       -- I:   Rows, 1.0× fwd
-  , mkHead 2 0 7 true 1        -- II:  Serpentine, 0.5× +7
-  , mkHead 6 1 (-12) true 3    -- III: Spiral, 2.0× rev −12
-  , mkHead 3 2 3 true 2        -- IV:  Columns, 0.75× pend +3
+  -- over the page's default ÷4 (a quarter note per model step), these are
+  -- the rates the heads have always had: 16ths, 8ths, 32nds, dotted 8ths
+  [ mkHead 3 0 0 false 0       -- I:   Rows, ×4 fwd
+  , mkHead 1 0 7 true 1        -- II:  Serpentine, ×2 +7
+  , mkHead 7 1 (-12) true 3    -- III: Spiral, ×8 rev −12
+  , mkHead 2 2 3 true 2        -- IV:  Columns, ×3 pend +3
   ]
 
 -- | Cells hold raw knob values now (0..`knobMax`), so the default spreads the 16
