@@ -16,7 +16,7 @@ import Data.Maybe (Maybe(..))
 import Reef.Vetula.Perf (wrapAt)
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Routing as Routing
-import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -197,6 +197,10 @@ main = do
   assertEqual' "Odonus harmony golden (followHarmony, 40 steps)"
     { actual: harmonyRun, expected: harmonyGolden }
   log "Reef Odonus harmony golden: OK"
+  -- Heads by pattern: which heads play, sampled each step (Reef.Odonus.followHeads).
+  assertEqual' "Odonus heads-pattern golden (followHeads, 80 steps)"
+    { actual: headsRun, expected: headsGolden }
+  log "Reef Odonus heads-pattern golden: OK"
   -- Scales by name: the scale follows the host-sampled pattern of names,
   -- holds through a rest, yields to a hand on the scale, and lets go back
   -- to the authored scale. SetScalePattern crosses the wire codec.
@@ -2180,3 +2184,86 @@ snap c'maj9 46>48 47>48 48>48 49>48 50>52 51>52 52>52 53>52 54>55 55>55 56>55 57
  28 | h0 p75 d1 r1 v100 | grid scale out -
  29 | h0 p79 d1 r1 v100 | grid scale out -
  30 | h0 p80 d1 r1 v100 | grid scale out -"""
+
+-- | The frozen golden for `headsRun` (conformance/heads-golden.txt).
+headsGolden :: String
+headsGolden = """  1 | h0 p50 d1 r1 v100
+  2 | h0 p51 d1 r1 v100
+  3 | h0 p55 d1 r1 v100
+  4 | h0 p56 d1 r1 v100
+  5 | h0 p58 d1 r1 v100
+  6 | h0 p62 d1 r1 v100
+  7 | h0 p63 d1 r1 v100
+  8 | h0 p67 d1 r1 v100
+  9 | h0 p68 d1 r1 v100
+ 10 | h0 p70 d1 r1 v100
+ 11 | h0 p74 d1 r1 v100
+ 12 | h0 p75 d1 r1 v100
+ 13 | h0 p79 d1 r1 v100
+ 14 | h0 p80 d1 r1 v100
+ 15 | h0 p82 d1 r1 v100
+ 16 | h0 p48 d1 r1 v100
+ 17 | h1 p75 d1 r1 v100
+ 18 | -
+ 19 | h1 p77 d1 r1 v100
+ 20 | -
+ 21 | h1 p82 d1 r1 v100
+ 22 | -
+ 23 | h1 p89 d1 r1 v100
+ 24 | -
+ 25 | h1 p87 d1 r1 v100
+ 26 | -
+ 27 | h1 p86 d1 r1 v100
+ 28 | -
+ 29 | h1 p82 d1 r1 v100
+ 30 | -
+ 31 | h1 p55 d1 r1 v100
+ 32 | -
+ 33 | h2 p56 d1 r1 v100  h2 p58 d1 r1 v100  h3 p62 d1 r1 v100
+ 34 | h2 p50 d1 r1 v100  h2 p46 d1 r1 v100  h3 p53 d1 r1 v100
+ 35 | h2 p44 d1 r1 v100  h2 p55 d1 r1 v100  h3 p79 d1 r1 v100
+ 36 | h2 p63 d1 r1 v100  h2 p67 d1 r1 v100
+ 37 | h2 p68 d1 r1 v100  h2 p70 d1 r1 v100  h3 p70 d1 r1 v100
+ 38 | h2 p62 d1 r1 v100  h2 p51 d1 r1 v100  h3 p60 d1 r1 v100
+ 39 | h2 p43 d1 r1 v100  h2 p39 d1 r1 v100  h3 p51 d1 r1 v100
+ 40 | h2 p38 d1 r1 v100  h2 p36 d1 r1 v100
+ 41 | h2 p56 d1 r1 v100  h2 p58 d1 r1 v100  h3 p60 d1 r1 v100
+ 42 | h2 p50 d1 r1 v100  h2 p46 d1 r1 v100  h3 p70 d1 r1 v100
+ 43 | h2 p44 d1 r1 v100  h2 p55 d1 r1 v100  h3 p79 d1 r1 v100
+ 44 | h2 p63 d1 r1 v100  h2 p67 d1 r1 v100
+ 45 | h2 p68 d1 r1 v100  h2 p70 d1 r1 v100  h3 p53 d1 r1 v100
+ 46 | h2 p62 d1 r1 v100  h2 p51 d1 r1 v100  h3 p62 d1 r1 v100
+ 47 | h2 p43 d1 r1 v100  h2 p39 d1 r1 v100  h3 p72 d1 r1 v100
+ 48 | h2 p38 d1 r1 v100  h2 p36 d1 r1 v100
+ 49 | -
+ 50 | -
+ 51 | -
+ 52 | -
+ 53 | -
+ 54 | -
+ 55 | -
+ 56 | -
+ 57 | -
+ 58 | -
+ 59 | -
+ 60 | -
+ 61 | -
+ 62 | -
+ 63 | -
+ 64 | -
+ 65 | h0 p50 d1 r1 v100
+ 66 | h0 p51 d1 r1 v100
+ 67 | h0 p55 d1 r1 v100
+ 68 | h0 p56 d1 r1 v100
+ 69 | h0 p58 d1 r1 v100
+ 70 | h0 p62 d1 r1 v100
+ 71 | h0 p63 d1 r1 v100
+ 72 | h0 p67 d1 r1 v100
+ 73 | h0 p68 d1 r1 v100
+ 74 | h0 p70 d1 r1 v100
+ 75 | h0 p74 d1 r1 v100
+ 76 | h0 p75 d1 r1 v100
+ 77 | h0 p79 d1 r1 v100
+ 78 | h0 p80 d1 r1 v100
+ 79 | h0 p82 d1 r1 v100
+ 80 | h0 p48 d1 r1 v100"""

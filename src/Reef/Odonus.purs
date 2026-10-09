@@ -91,6 +91,8 @@ module Reef.Odonus
   , setOctaveShift
   , setDegShift
   , setGatePct
+  , setHeadsPattern
+  , followHeads
   , setOdoClock
   , toggleScaleNote
   , setSpread
@@ -209,6 +211,9 @@ type OdonusOf h =
   , chord :: Maybe (Array Int) -- the chord the output snaps to past the scale (pitch
                                 -- classes, 0-11); filled each step from `harmony`
                                 -- by followHarmony. Nothing = the scale alone
+  , headsPattern :: Maybe String -- a Tidal pattern of head numbers (`"<1 2 [3,4]>"`):
+                                 -- the heads it names at a step play, the rest are
+                                 -- muted; sampled by the host, see followHeads
   , harmony :: Maybe String -- a Tidal note pattern (`"<c'maj7 a'min7>/2"`) the
                             -- overlay follows; sampled by the host, see followHarmony
   , scalePattern :: Maybe String -- a pattern of Tidal scale names (`"<dorian
@@ -338,6 +343,18 @@ currentChordPCs o = sort (nub (map pc12 (fromMaybe [] o.chord)))
 -- | `followHarmony` calls it each step with what the harmony pattern gives.
 followChord :: Maybe (Array Int) -> Odonus -> Odonus
 followChord mpcs o = o { chord = mpcs }
+
+-- | **Heads by pattern** (AC, 2026-10-09: four variations of a bassline,
+-- | sequenced from Limulus). Set, or with `Nothing` clear, the Tidal pattern
+-- | of head numbers that decides which heads play. Clearing leaves the mutes
+-- | where the pattern last put them.
+setHeadsPattern :: Maybe String -> Odonus -> Odonus
+setHeadsPattern p o = o { headsPattern = p }
+
+-- | The heads the pattern names at this step (1 to 4, as the panel counts)
+-- | play; every other head is muted. A rest names none, so all are silent.
+followHeads :: Array Int -> Odonus -> Odonus
+followHeads named o = o { heads = mapWithIndex (\i h -> h { mute = not (elem (i + 1) named) }) o.heads }
 
 -- | Set (or, with `Nothing`, clear) the Tidal pattern the chord overlay
 -- | follows. Clearing turns the overlay off, back to the scale; setting leaves
@@ -518,7 +535,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, chord: Nothing, harmony: Nothing
+  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, chord: Nothing, harmony: Nothing
   , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing }
 
 -- ---------------------------------------------------------------------------

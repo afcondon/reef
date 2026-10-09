@@ -48,6 +48,20 @@ echo "== chordRun (32-step chord-quantised render): node vs erl =="
 diff /tmp/reef-chord-node.txt /tmp/reef-chord-erl.txt && echo "  \u2705 chordRun node == erl (chord-quantise render identical over 32 steps)"
 diff "$CHORD_GOLDEN" /tmp/reef-chord-node.txt && echo "  \u2705 chordRun matches frozen golden"
 
+# --- heads as a Tidal pattern (Reef.Conformance.headsRun) --------------------
+# Which heads play, sampled each step (a stub stands in for Littorina), the
+# SetHeadsPattern and each SetSampled across the wire codec, 80 steps.
+HEADS_GOLDEN="$REEF/conformance/heads-golden.txt"
+echo "== headsRun (80-step heads-pattern render): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { headsRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(headsRun);' \
+  ) > /tmp/reef-heads-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':headsRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-heads-erl.txt
+diff /tmp/reef-heads-node.txt /tmp/reef-heads-erl.txt && echo "  ✅ headsRun node == erl"
+diff "$HEADS_GOLDEN" /tmp/reef-heads-node.txt && echo "  ✅ headsRun matches frozen golden"
+
 # --- harmony as a Tidal pattern (Reef.Conformance.harmonyRun) ----------------
 # The chord overlay following a host-sampled harmony (a stub sampler stands in
 # for Littorina), SetHarmony through the wire codec, 40 steps of sounding pitch.

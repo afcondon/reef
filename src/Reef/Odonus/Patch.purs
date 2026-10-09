@@ -75,7 +75,7 @@ printPatch p =
     scaleText ivls = maybe (ints ivls) _.name
       (find (\t -> normaliseIvls t.intervals == normaliseIvls ivls) scaleTypes)
   in
-    joinWith "\n"
+    joinWith "\n" $
       [ "odonusPatch " <> quote p.name
       , "  { scale: " <> rootName o.rootPc <> " " <> scaleText (fromMaybe o.scaleIvls o.scaleHeld)
           <> maybe "" (\sp -> " " <> quote sp) o.scalePattern
@@ -85,7 +85,8 @@ printPatch p =
       , "  , scalarTransp: " <> show o.degShift
       , "  , gate: " <> show o.gatePct
       , "  , quantize: " <> maybe "scale" (\h -> "harmony " <> quote h) o.harmony
-      , "  , swing: " <> pct p.swing
+      ] <> maybe [] (\h -> [ "  , heads: " <> quote h ]) o.headsPattern <>
+      [ "  , swing: " <> pct p.swing
       , "  , velHumanize: " <> show p.velHumanize
       , "  , clock: " <> decimal (clockOf o)
       , "  , marbles: { spread: " <> pct p.genSpread <> ", bias: " <> pct p.genBias <> " }"
@@ -392,6 +393,7 @@ patchP = do
   scalarT <- field "scalarTransp" intP
   gatePct <- field "gate" intP
   quant <- field "quantize" sourceP
+  headsPat <- optionalP (field "heads" strP)
   swing <- field "swing" intP
   velH <- field "velHumanize" intP
   -- a step length, from before the Odonus clock (2026-10-09), is read past
@@ -420,7 +422,7 @@ patchP = do
       { rootPc = sc.root, scaleIvls = sc.ivls, dist = dist
       , octaveShift = octave, degShift = scalarT, gatePct = gatePct
       , span = fromMaybe defaultOdonus.span span
-      , cells = cells, heads = heads }
+      , cells = cells, heads = heads, headsPattern = headsPat }
     heads = map (\h -> h.head { speedIx = rateIxOf h.speed }) heads0
     clockIx = maybe defaultOdonus.clockIx rateIxOf clockV
     odo = setScalePattern sc.pattern (setHarmony (quant (fromMaybe 1 stepDiv)) base { clockIx = clockIx })

@@ -32,6 +32,7 @@ module Reef.Engine
   , Patterns
   , patternsOf
   , samplePatterns
+  , odoPatterns
   ) where
 
 import Prelude
@@ -40,7 +41,7 @@ import Data.Array as Array
 import Data.Maybe (Maybe(..))
 import Reef.Gen (GenInput, runGen)
 import Reef.Input (Input(..))
-import Reef.Odonus (Fired, stepEmit)
+import Reef.Odonus (Fired, Odonus, stepEmit)
 import Reef.Odonus (followHarmony, followScale) as Odonus
 
 -- | The whole synced state a tick advances: the Odonus record, the gen-source
@@ -87,14 +88,22 @@ type Patterns =
   , scale :: Maybe String
   , outScale :: Maybe { pattern :: String, root :: Int }
   , gridHarmony :: Maybe String
+  , heads :: Maybe String
   }
 
 patternsOf :: SimState -> Patterns
-patternsOf s = { harmony: s.odo.harmony, scale: s.odo.scalePattern, outScale: s.odo.outScale, gridHarmony: s.odo.gridHarmony }
+patternsOf s = odoPatterns s.odo
+
+-- | The patterns an Odonus holds, for a host that has the model alone.
+odoPatterns :: Odonus -> Patterns
+odoPatterns o = { harmony: o.harmony, scale: o.scalePattern, outScale: o.outScale, gridHarmony: o.gridHarmony, heads: o.headsPattern }
 
 samplePatterns :: (String -> Array Int) -> (String -> Array Int) -> Patterns -> Input
-samplePatterns harmony scale p = SetSampled chord sc grid
+samplePatterns harmony scale p = SetSampled chord sc grid heads
   where
+  -- the heads to play, as numbers (`harmony` gives a note pattern's numbers
+  -- as written); a rest is an empty list, every head silent
+  heads = harmony <$> p.heads
   -- the output's set: a scale on its own root (outScale), or a chord
   chord = case p.outScale of
     Just out -> map (\i -> (i + out.root) `mod` 12) <$> nonEmpty (scale out.pattern)

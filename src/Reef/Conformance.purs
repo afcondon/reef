@@ -39,6 +39,7 @@ module Reef.Conformance
   , vetulaMidiRun
   , chordRun
   , harmonyRun
+  , headsRun
   , scaleRun
   , outScaleRun
   , voicingRun
@@ -189,6 +190,41 @@ harmonyRun =
       r = stepTick (applyInput (wire (sampleInput (sample i) (const []) st1)) st1)
     in
       { st: r.sim, out: snoc acc.out (renderStep i r.fired) }
+
+-- | Heads by pattern (`Reef.Odonus.followHeads`): which heads play, as a
+-- | Tidal pattern of head numbers, sampled by the host. A stub stands in for
+-- | Littorina: `"<1 2 [3,4] ~>"` names head 1 for a bar (16 steps), then 2,
+-- | then 3 and 4 together, then none. The heads run unmuted at their default
+-- | rates, so the render shows each taking over on its bar; from step 72 the
+-- | pattern is cleared and the last mutes stand. `SetHeadsPattern` and the
+-- | sample both cross the wire codec.
+headsRun :: String
+headsRun =
+  let
+    s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 0 79)
+  in
+    intercalate "\n" final.out
+  where
+  pat = "<1 2 [3,4] ~>"
+  script i = case i of
+    0 -> [ SetHeadsPattern (Just pat) ]
+    72 -> [ SetHeadsPattern Nothing ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  sample i txt
+    | txt == pat = case (i / 16) `mod` 4 of
+        0 -> [ 1 ]
+        1 -> [ 2 ]
+        2 -> [ 3, 4 ]
+        _ -> []
+    | otherwise = []
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick (applyInput (wire (sampleInput (sample i) (const []) st1)) st1)
+    in
+      { st: r.sim, out: snoc acc.out (renderStep (i + 1) r.fired) }
 
 -- | Scales by name (`Reef.Odonus.followScale`). A stub stands in for the
 -- | host's Littorina sampler: `"<dorian lydian>"` gives dorian for eight

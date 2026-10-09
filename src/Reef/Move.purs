@@ -113,6 +113,7 @@ restore is s = concatMap undo is
     SetHeadTransp i _ -> catMaybes [ (\h -> SetHeadTransp i h.transp) <$> heads !! i ]
     SetGatePct _ -> [ SetGatePct s.odo.gatePct ]
     SetHarmony _ -> [ SetHarmony s.odo.harmony ]
+    SetHeadsPattern _ -> [ SetHeadsPattern s.odo.headsPattern ]
     -- one of a scale pattern and a chord pattern shapes the grid
     SetScalePattern _ -> [ SetGridHarmony s.odo.gridHarmony, SetScalePattern s.odo.scalePattern ]
     SetGridHarmony _ -> [ SetScalePattern s.odo.scalePattern, SetGridHarmony s.odo.gridHarmony ]
@@ -144,6 +145,7 @@ verbs =
   , "len N N N N"
   , "clock dur|step [dur|step ...]"
   , "offset N N N N"
+  , "heads \"PATTERN\" | off"
   , "harmony \"PATTERN\" | off"
   , "scale \"PATTERN\" | off"
   , "outscale \"PATTERN\" [ROOT] | off"
@@ -340,6 +342,9 @@ term ts = case uncons ts of
       r <- term after
       Right { move: For bars r.move, rest: r.rest }
     _ -> Left "for BARS (MOVE)"
+  Just { head: Word "heads", tail }
+    | Just { head: Quoted p, tail: after } <- uncons tail -> Right { move: Gestures [ SetHeadsPattern (Just p) ], rest: after }
+    | Just { head: Word "off", tail: after } <- uncons tail -> Right { move: Gestures [ SetHeadsPattern Nothing ], rest: after }
   Just { head: Word "harmony", tail } -> case uncons tail of
     Just { head: Quoted p, tail: after } -> Right { move: Gestures [ SetHarmony (Just p) ], rest: after }
     Just { head: Word "off", tail: after } -> Right { move: Gestures [ SetHarmony Nothing ], rest: after }
