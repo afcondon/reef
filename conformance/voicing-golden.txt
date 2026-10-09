@@ -5,33 +5,33 @@ voicing [-12,-5,4,11,14] -> [0,7,16,23,26] root 48 period (Just 36)
 voicing [0,4,7,12] -> [0,4,7,12] root 48 period (Just 24)
 voicing [7,0,4,0] -> [0,4,7] root 48 period (Just 12)
 snap c'maj9 46>48 47>48 48>48 49>48 50>52 51>52 52>52 53>52 54>55 55>55 56>55 57>59 58>59 59>59 60>59 61>62 62>62 63>62 64>62 65>62 66>62 67>72 68>72 69>72 70>72 71>72 72>72 73>72 74>76 75>76 76>76
-  1 | h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  2 | h0 p52 d1 r1 v100  h0 p52 d1 r1 v100  h0 p55 d1 r1 v100  h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  3 | h0 p55 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  4 | h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  5 | h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  6 | h0 p52 d1 r1 v100  h0 p52 d1 r1 v100  h0 p55 d1 r1 v100  h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  7 | h0 p55 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  8 | h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
-  9 | h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
- 10 | h0 p52 d1 r1 v100  h0 p52 d1 r1 v100  h0 p55 d1 r1 v100  h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
- 11 | h0 p55 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 12 | h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 13 | h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 14 | h0 p52 d1 r1 v100  h0 p52 d1 r1 v100  h0 p55 d1 r1 v100  h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 15 | h0 p55 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 16 | h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 17 | h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p48 d1 r1 v100  h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 18 | h0 p52 d1 r1 v100  h0 p52 d1 r1 v100  h0 p55 d1 r1 v100  h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 19 | h0 p55 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100  h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 20 | h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p62 d1 r1 v100  h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
- 21 | h0 p50 d1 r1 v100  h0 p51 d1 r1 v100  h0 p55 d1 r1 v100  h0 p56 d1 r1 v100 | grid scale out -
- 22 | h0 p58 d1 r1 v100  h0 p62 d1 r1 v100  h0 p63 d1 r1 v100  h0 p67 d1 r1 v100 | grid scale out -
- 23 | h0 p68 d1 r1 v100  h0 p70 d1 r1 v100  h0 p74 d1 r1 v100  h0 p75 d1 r1 v100 | grid scale out -
- 24 | h0 p79 d1 r1 v100  h0 p80 d1 r1 v100  h0 p82 d1 r1 v100  h0 p48 d1 r1 v100 | grid scale out -
- 25 | h0 p50 d1 r1 v100  h0 p51 d1 r1 v100  h0 p55 d1 r1 v100  h0 p56 d1 r1 v100 | grid scale out -
- 26 | h0 p58 d1 r1 v100  h0 p62 d1 r1 v100  h0 p63 d1 r1 v100  h0 p67 d1 r1 v100 | grid scale out -
- 27 | h0 p68 d1 r1 v100  h0 p70 d1 r1 v100  h0 p74 d1 r1 v100  h0 p75 d1 r1 v100 | grid scale out -
- 28 | h0 p79 d1 r1 v100  h0 p80 d1 r1 v100  h0 p82 d1 r1 v100  h0 p48 d1 r1 v100 | grid scale out -
- 29 | h0 p50 d1 r1 v100  h0 p51 d1 r1 v100  h0 p55 d1 r1 v100  h0 p56 d1 r1 v100 | grid scale out -
- 30 | h0 p58 d1 r1 v100  h0 p62 d1 r1 v100  h0 p63 d1 r1 v100  h0 p67 d1 r1 v100 | grid scale out -
+  1 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  2 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  3 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  4 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  5 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  6 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  7 | h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  8 | h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+  9 | h0 p55 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+ 10 | h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out -
+ 11 | h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 12 | h0 p59 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 13 | h0 p62 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 14 | h0 p62 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 15 | h0 p62 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 16 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 17 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 18 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 19 | h0 p48 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 20 | h0 p52 d1 r1 v100 | grid [0,4,7,11,14]/(Just 24) out [0,4,7,11,14]
+ 21 | h0 p58 d1 r1 v100 | grid scale out -
+ 22 | h0 p62 d1 r1 v100 | grid scale out -
+ 23 | h0 p63 d1 r1 v100 | grid scale out -
+ 24 | h0 p67 d1 r1 v100 | grid scale out -
+ 25 | h0 p68 d1 r1 v100 | grid scale out -
+ 26 | h0 p70 d1 r1 v100 | grid scale out -
+ 27 | h0 p74 d1 r1 v100 | grid scale out -
+ 28 | h0 p75 d1 r1 v100 | grid scale out -
+ 29 | h0 p79 d1 r1 v100 | grid scale out -
+ 30 | h0 p80 d1 r1 v100 | grid scale out -

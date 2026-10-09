@@ -33,8 +33,12 @@ module Reef.Odonus
   , setAllNotes
   , setNotes
   , setCellDur
+  , rateTable
+  , unitRateIx
   , speedTable
   , speedOf
+  , clockOf
+  , headRate
   , setHeadSpeedIx
   , setHeadDir
   , setHeadTransp
@@ -87,6 +91,7 @@ module Reef.Odonus
   , setOctaveShift
   , setDegShift
   , setGatePct
+  , setOdoClock
   , toggleScaleNote
   , setSpread
   , recallScene
@@ -97,6 +102,7 @@ import Prelude
 
 import Data.Array (concat, elem, mapMaybe, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
 import Data.Foldable (foldl)
+import Data.Int (toNumber)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
@@ -140,7 +146,7 @@ orderOf ix = maybe defaultOrder _.order (patternLibrary !! ix)
 type HeadOf r =
   { cursor :: Int
   , seqPos :: Int
-  , accumulator :: Int   -- phase carry in 1/8-step units (`stepDenom`), 0..stepDenom-1.
+  , accumulator :: Int   -- phase toward the head's next step, in `phaseUnit`ths of it
                          -- INTEGER, not a fractional float: it cannot drift across
                          -- runtimes and serialises identically in state snapshots (a
                          -- Number diverges in JSON formatting JS vs BEAM — cf the seed).
@@ -199,6 +205,7 @@ type OdonusOf h =
   , octaveShift :: Int    -- global ± periods (coarse), applied in index space
   , degShift :: Int       -- global ± indices (fine scalar transpose)
   , gatePct :: Int        -- gated-note length as % of step spacing (>100 = legato)
+  , clockIx :: Int        -- Odonus's clock, an index into `rateTable` (×1 = the beat)
   , chord :: Maybe (Array Int) -- the chord the output snaps to past the scale (pitch
                                 -- classes, 0-11); filled each step from `harmony`
                                 -- by followHarmony. Nothing = the scale alone
@@ -420,30 +427,60 @@ releaseScale o = o { scalePattern = Nothing, scaleHeld = Nothing }
 harmonyPCs :: Odonus -> Array Int
 harmonyPCs o = maybe (pitchClassesOf (scaleOf o)) (const (currentChordPCs o)) o.chord
 
--- | A head's SPEED is a clock MULTIPLIER, ×1 to ×8 (AC, 2026-10-09), over a
--- | model step that is itself the 16th clock DIVIDED by the page's STEP
--- | LENGTH (÷1 to ÷8). So a head plays `16ths ÷ div × mult`, every rate is an
--- | integer ratio, and a head slower than another is one with a smaller
--- | multiplier: to slow everything, divide the clock.
-speedTable :: Array Number
-speedTable = [ 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0 ]
+-- | THE CLOCK (AC, 2026-10-09). Odonus takes the system clock (Link's beat,
+-- | from Diaphus) through its own multiplier/divider, `clockIx`, and each head
+-- | takes Odonus's clock through its own, `speedIx`. Both choose from the same
+-- | nine ratios, ÷4 to ×4, so a head steps at `beat × odonus × head`: from one
+-- | step per 16 beats to one per 64th. Every tick of a head's clock advances it
+-- | exactly one step (a Euclidean pattern lets only its "on" ticks through).
+-- | A dotted rhythm is ÷1.5; ×1.5 is three in the time of two.
+rateTable :: Array { num :: Int, den :: Int }
+rateTable =
+  [ { num: 1, den: 4 }, { num: 1, den: 3 }, { num: 1, den: 2 }, { num: 2, den: 3 }
+  , { num: 1, den: 1 }
+  , { num: 3, den: 2 }, { num: 2, den: 1 }, { num: 3, den: 1 }, { num: 4, den: 1 } ]
 
+-- | ×1, the middle of `rateTable`.
+unitRateIx :: Int
+unitRateIx = 4
+
+rateAt :: Int -> { num :: Int, den :: Int }
+rateAt ix = fromMaybe { num: 1, den: 1 } (rateTable !! ix)
+
+-- | The ratios as numbers, for display and for note lengths.
+speedTable :: Array Number
+speedTable = map (\r -> toNumber r.num / toNumber r.den) rateTable
+
+-- | A head's multiplier of Odonus's clock.
 speedOf :: Head -> Number
 speedOf h = fromMaybe 1.0 (speedTable !! h.speedIx)
 
--- | The phase accumulator counts 1/8-step units; `stepDenom` is that 8. Every
--- | speed is a whole multiple of 1/8 (0.125 is the finest), so the phase advances
--- | in exact integers — provably drift-free across runtimes, where a fractional
--- | float `accumulator` would only be EMPIRICALLY identical (and would serialise
--- | differently JS vs BEAM). `speedNumTable` is `speedTable * stepDenom`.
-stepDenom :: Int
-stepDenom = 8
+-- | Odonus's multiplier of the beat.
+clockOf :: Odonus -> Number
+clockOf o = fromMaybe 1.0 (speedTable !! o.clockIx)
 
-speedNumTable :: Array Int
-speedNumTable = [ 8, 16, 24, 32, 40, 48, 56, 64 ]
+-- | Steps per BEAT for a head: Odonus's ratio times the head's, exact.
+headRate :: Odonus -> Head -> { num :: Int, den :: Int }
+headRate o h =
+  let a = rateAt o.clockIx
+      b = rateAt h.speedIx
+  in { num: a.num * b.num, den: a.den * b.den }
 
-speedNumOf :: Head -> Int
-speedNumOf h = fromMaybe stepDenom (speedNumTable !! h.speedIx)
+-- | The model steps once per 16th NOTE (a quarter of a beat), whatever the
+-- | clocks, as the scheduler and the BEAM always have. A head at ×4 or slower
+-- | overall takes at most one step per model step; a faster one (Odonus ×4
+-- | with a head above ×1) takes up to four, each at its own place inside it.
+-- | A head's phase is counted in exact integer units, `phaseUnit` to one of
+-- | its steps, so every ratio lands on the same tick on both runtimes: a head
+-- | at `n/d` steps per beat gains `phaseUnit × n / (4 d)` units per model
+-- | step, a whole number for every `d` the table can make (each divides 144).
+phaseUnit :: Int
+phaseUnit = 2304
+
+phaseGain :: Odonus -> Head -> Int
+phaseGain o h =
+  let r = headRate o h
+  in (phaseUnit / 4) * r.num / r.den
 
 replicate16 :: forall a. a -> Array a
 replicate16 = replicate 16
@@ -454,17 +491,16 @@ mkHead speedIx direction transp mute patternIx =
   , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16
   , clock: 0, hold: 0 }
 
--- | Head I runs (Rows, 1.0×); II–IV start muted with distinct patterns + fugue
--- | offsets — unmute to build the canon. (Speed indices into the widened
--- | 1/8…8× table: 4=1.0, 2=0.5, 6=2.0, 3=0.75.)
+-- | Head I runs (Rows); II–IV start muted with distinct patterns + fugue
+-- | offsets — unmute to build the canon.
 defaultHeads :: Array Head
 defaultHeads =
-  -- over the page's default ÷4 (a quarter note per model step), these are
-  -- the rates the heads have always had: 16ths, 8ths, 32nds, dotted 8ths
-  [ mkHead 3 0 0 false 0       -- I:   Rows, ×4 fwd
-  , mkHead 1 0 7 true 1        -- II:  Serpentine, ×2 +7
-  , mkHead 7 1 (-12) true 3    -- III: Spiral, ×8 rev −12
-  , mkHead 2 2 3 true 2        -- IV:  Columns, ×3 pend +3
+  -- over Odonus's default ×2 (8ths), the rates the heads have always had:
+  -- 16ths, 8ths, 32nds, and three to the beat
+  [ mkHead 6 0 0 false 0       -- I:   Rows, ×2 fwd
+  , mkHead 4 0 7 true 1        -- II:  Serpentine, ×1 +7
+  , mkHead 8 1 (-12) true 3    -- III: Spiral, ×4 rev −12
+  , mkHead 5 2 3 true 2        -- IV:  Columns, ×1.5 pend +3
   ]
 
 -- | Cells hold raw knob values now (0..`knobMax`), so the default spreads the 16
@@ -482,7 +518,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, chord: Nothing, harmony: Nothing
+  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, chord: Nothing, harmony: Nothing
   , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing }
 
 -- ---------------------------------------------------------------------------
@@ -535,29 +571,25 @@ stepSeq order cells len dir st = case dir of
 -- | cell it is on afterwards.
 type Tick = { num :: Int, den :: Int, pulsed :: Boolean, cursor :: Int }
 
--- | Advance one head through one model step. SPEED MULTIPLIES THE HEAD'S
--- | CLOCK (AC, 2026-10-09): a head at speed 2 has two ticks of its own in
--- | each model step, and each of them is a whole tick of everything the head
--- | does: its Euclidean counter, its duration hold, and a step of the melody
--- | that sounds. So a 5-in-16 rhythm at speed 2 cycles in half the time and
--- | every pulse in it plays, at its own place inside the step.
--- |
--- | The phase is counted in exact 1/8-step units. A tick falls where the
--- | count reaches a multiple of `stepDenom`, and the step covers counts
--- | `[acc, acc + speed)`, so a tick is at the START of its own span: a head at
--- | speed ½ plays on the first of its two steps, on the beat.
-headTicks :: Array Cell -> Head -> { head :: Head, ticks :: Array Tick }
-headTicks cells h0 =
+-- | Advance one head through one model step (a 16th note). The head's phase
+-- | gains `phaseGain` units, and each time it crosses a whole step
+-- | (`phaseUnit`) the head's clock ticks, at the point inside the model step
+-- | where the crossing falls. Each tick is a whole tick of everything the head
+-- | does: its Euclidean counter, its duration hold, and a step of its melody
+-- | that sounds. A tick falls at the START of its span, so a head slower than
+-- | the model step plays on the first model step of its span, on the beat.
+headTicks :: Odonus -> Head -> { head :: Head, ticks :: Array Tick }
+headTicks o h0 =
   let
     a = h0.accumulator
-    s = speedNumOf h0
-    first = if a == 0 then 0 else stepDenom
-    count = (a + s + stepDenom - 1) `div` stepDenom - (a + stepDenom - 1) `div` stepDenom
+    g = phaseGain o h0
+    first = if a == 0 then 0 else phaseUnit
+    count = (a + g + phaseUnit - 1) `div` phaseUnit - (a + phaseUnit - 1) `div` phaseUnit
     go k h acc
-      | k >= count = { head: h { accumulator = (a + s) `mod` stepDenom }, ticks: acc }
+      | k >= count = { head: h { accumulator = (a + g) `mod` phaseUnit }, ticks: acc }
       | otherwise =
-          let r = tickHead cells h
-          in go (k + 1) r.head (snoc acc { num: first + k * stepDenom - a, den: s, pulsed: r.pulsed, cursor: r.head.cursor })
+          let r = tickHead o.cells h
+          in go (k + 1) r.head (snoc acc { num: first + k * phaseUnit - a, den: g, pulsed: r.pulsed, cursor: r.head.cursor })
   in
     go 0 h0 []
 
@@ -590,11 +622,11 @@ tickHead cells h =
         { head: h { seqPos = st.pos, cursor = cursorAt st.pos, pendStep = st.pend, etick = (h.etick + 1) `mod` es }
         , pulsed: hit }
 
-advanceHead :: Array Cell -> Head -> Head
-advanceHead cells h = (headTicks cells h).head
+advanceHead :: Odonus -> Head -> Head
+advanceHead o h = (headTicks o h).head
 
 step :: Odonus -> Odonus
-step o = o { heads = map (advanceHead o.cells) o.heads }
+step o = o { heads = map (advanceHead o) o.heads }
 
 cursorsOf :: Odonus -> Array Int
 cursorsOf o = map _.cursor o.heads
@@ -616,7 +648,7 @@ type Fired =
 stepEmit :: Odonus -> { odo :: Odonus, fired :: Array Fired }
 stepEmit o =
   let
-    rs = map (headTicks o.cells) o.heads
+    rs = map (headTicks o) o.heads
     o2 = o { heads = map _.head rs }
     firedFor idx r = mapMaybe (fire idx r.head) r.ticks
     fire idx hd t = case o2.cells !! t.cursor of
@@ -848,6 +880,10 @@ setDegShift n o = o { degShift = clampI 0 8 n }
 setGatePct :: Int -> Odonus -> Odonus
 setGatePct n o = o { gatePct = clampI 10 200 n }
 
+-- | Odonus's clock: its multiplier of the beat, an index into `rateTable`.
+setOdoClock :: Int -> Odonus -> Odonus
+setOdoClock ix o = o { clockIx = clampI 0 (length rateTable - 1) ix }
+
 -- | Make every head a copy of head I, phase-aligned and unmuted: four voices
 -- | in exact unison. The starting point for Steve Reich phasing — from here,
 -- | nudge one head's LEN (metric phasing, Clapping-Music style) or OFF (static
@@ -937,6 +973,7 @@ recallGesture live scene =
     , degShift = scene.degShift
     , span = scene.span
     , gatePct = scene.gatePct
+    , clockIx = scene.clockIx
     }
   where
   carry lh sh = sh

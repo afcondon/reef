@@ -25,20 +25,22 @@ import Prelude
 import Data.Array (range, (!!))
 import Data.Int (toNumber)
 import Data.Maybe (maybe)
-import Reef.Odonus (Fired, Odonus, speedOf)
+import Reef.Odonus (Fired, Odonus, headRate)
 
 -- | One scheduled note for a fired cell: `offsetMs` from the step's onset, and how
 -- | long it sounds. A plain gated note is a single hit at offset 0; a ratcheted
 -- | cell is several evenly-spaced hits filling the gate window.
 type Hit = { offsetMs :: Number, durMs :: Number }
 
--- | The gate window (ms) for a fired note: the step spacing, divided by the head's
--- | speed (a faster head plays shorter notes), scaled by the gate %. Matches the
--- | frontend's `gateMsFor` exactly (>100% gatePct = legato overlap).
+-- | The gate window (ms) for a fired note: one step of its head's own clock
+-- | (the model step is a 16th note, `stepMs`, and a head at `n/d` steps per
+-- | beat spends `4 d / n` of them on a step), times the cell's LENGTH, scaled by
+-- | the gate % (>100% = legato overlap). The page and the BEAM both call this.
 gateMs :: Odonus -> Number -> Fired -> Number
 gateMs odo stepMs f =
-  let spd = maybe 1.0 speedOf (odo.heads !! f.headIdx)
-  in stepMs / max 1.0 spd * (toNumber odo.gatePct / 100.0) * toNumber f.dur
+  let r = maybe { num: 1, den: 1 } (headRate odo) (odo.heads !! f.headIdx)
+      headStepMs = 4.0 * stepMs * toNumber r.den / toNumber r.num
+  in headStepMs * (toNumber odo.gatePct / 100.0) * toNumber f.dur
 
 -- | Subdivide the gate window into the cell's `ratchet` evenly-spaced retriggers,
 -- | each sounding 85% of its slot (so they stay articulate). A single hit when

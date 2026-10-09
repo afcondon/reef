@@ -54,7 +54,7 @@ import Reef.Odonus
   , clearPitchSet, setOutScale, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
-  , setDegShift, setHarmony, setScalePattern, setGridHarmony, followGridHarmony, releaseScale, followChord, setGatePct, setHeadDir, setHeadEuclidSteps
+  , setDegShift, setHarmony, setScalePattern, setGridHarmony, followGridHarmony, releaseScale, followChord, setGatePct, setOdoClock, setHeadDir, setHeadEuclidSteps
   , setHeadClock, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
@@ -120,6 +120,7 @@ data Input
   | SetOctaveShift Int
   | SetDegShift Int
   | SetGatePct Int
+  | SetOdoClock Int
   | SetPitchSet PitchSet
   | ClearPitchSet
   -- harmony: a Tidal note pattern the output snaps to past the scale (Reef.Move's
@@ -222,6 +223,7 @@ applyInput = case _ of
   SetOctaveShift n -> onOdo (setOctaveShift n)
   SetDegShift n -> onOdo (setDegShift n)
   SetGatePct n -> onOdo (setGatePct n)
+  SetOdoClock n -> onOdo (setOdoClock n)
   SetPitchSet ps -> onOdo (setPitchSet ps <<< releaseScale)
   ClearPitchSet -> onOdo clearPitchSet
   SetHarmony h -> onOdo (setHarmony h)
@@ -322,6 +324,7 @@ toWire = case _ of
   SetOctaveShift n -> w0 { tag = "SetOctaveShift", a = n }
   SetDegShift n -> w0 { tag = "SetDegShift", a = n }
   SetGatePct n -> w0 { tag = "SetGatePct", a = n }
+  SetOdoClock n -> w0 { tag = "SetOdoClock", a = n }
   SetPitchSet ps -> w0 { tag = "SetPitchSet", ps = Just ps }
   ClearPitchSet -> w0 { tag = "ClearPitchSet" }
   SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
@@ -384,6 +387,7 @@ fromWire w = case w.tag of
   "SetOctaveShift" -> Just (SetOctaveShift w.a)
   "SetDegShift" -> Just (SetDegShift w.a)
   "SetGatePct" -> Just (SetGatePct w.a)
+  "SetOdoClock" -> Just (SetOdoClock w.a)
   "SetPitchSet" -> map SetPitchSet w.ps
   "ClearPitchSet" -> Just ClearPitchSet
   "SetHarmony" -> Just (SetHarmony w.txt)

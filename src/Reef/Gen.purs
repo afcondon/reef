@@ -225,7 +225,7 @@ applyGen kind spread bias amt odo seed =
       let mag = 1 + round (amt01 * 3.0)   -- ±1..±4 speed steps
           { n: h, seed: s1 } = Marbles.nextInt 4 seed
           { n: d, seed: s2 } = Marbles.nextInt 2 s1
-          cur = maybe 0 _.speedIx (odo.heads !! h)
+          cur = maybe M.unitRateIx _.speedIx (odo.heads !! h)
       in { odo: M.setHeadSpeedIx h (cur + (if d == 0 then -mag else mag)) odo, seed: s2 }
     GKey ->
       -- Depth = adventurousness. Mostly nudge the tonal centre by a fifth; with
