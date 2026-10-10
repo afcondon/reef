@@ -1008,48 +1008,57 @@ articulationTestRouting =
 -- | A script of steps through the legato machine: plain notes, a slide (a
 -- | glide cell into a plain one), a run of glides, a tie, a ratchet, a note
 -- | half a step in (a fast head's second tick), a voice muted while it holds
--- | a slide, and a stop with a note held. Each step prints its sends and the
--- | held notes after it. Byte-identical node ↔ BEAM = the rig plays a line
+-- | a slide, and a stop with a note held; then a GATE of 150%, where a plain
+-- | note outlasts its step and the next one cuts it (the same pitch struck
+-- | again, another pitch legato). Each step prints its sends, the held notes
+-- | and the plain notes still sounding after it. Byte-identical node ↔ BEAM = the rig plays a line
 -- | as the page does, slides included.
 articulationRun :: String
 articulationRun = case RR.decodeVoiceRouting (RR.encodeVoiceRouting articulationTestRouting) of
   Left errs -> "ARTICULATION-DECODE-FAIL: " <> show errs
   Right routing ->
     let
-      final = foldl (step routing) { held: [ Nothing, Nothing, Nothing, Nothing ], polys: Art.polyStates routing, out: [] } (mapWithIndex Tuple script)
-      stop = Art.releaseAll routing final.held final.polys
+      final = foldl (step routing) { held: [ Nothing, Nothing, Nothing, Nothing ], sounding: [ Nothing, Nothing, Nothing, Nothing ], polys: Art.polyStates routing, out: [] } (mapWithIndex Tuple script)
+      stop = Art.releaseAll routing final.held final.sounding final.polys
     in
       intercalate "\n" (final.out <> [ "stop | " <> sendsText stop ])
   where
-  step routing acc (Tuple i { notes, muted }) =
+  step routing acc (Tuple i { notes, muted, gatePct }) =
     let
       r = Art.playStep routing
-        { odo: defaultOdonus, stepMs: 125.0, nowMs: 1000.0 + 125.0 * toNumber i, polys: acc.polys
-        , held: acc.held, newlyMuted: muted
+        { odo: defaultOdonus { gatePct = gatePct }, stepMs: 125.0, nowMs: 1000.0 + 125.0 * toNumber i, polys: acc.polys
+        , held: acc.held, sounding: acc.sounding, newlyMuted: muted
         , notes: map (\n -> { fired: n, velocity: n.vel }) notes }
     in
       { held: r.held
+      , sounding: r.sounding
       , polys: r.polys
-      , out: acc.out <> [ pad4 i <> " | " <> sendsText r.sends <> " | held " <> intercalate "," (map (maybe "-" show) r.held) ] }
+      , out: acc.out <> [ pad4 i <> " | " <> sendsText r.sends <> " | held " <> intercalate "," (map (maybe "-" show) r.held)
+                         <> " | sounding " <> intercalate "," (map (maybe "-" (\so -> show so.pitch <> "@" <> show (round so.untilMs))) r.sounding) ] }
   sendsText xs = if null xs then "-" else intercalate "  " (map sendText xs)
   fired h p glide ratchet offNum offDen =
     { headIdx: h, pitch: p, glide, dur: 1, ratchet, vel: 100, offNum, offDen }
   script =
-    [ { notes: [ fired 0 48 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [] }   -- plain
-    , { notes: [ fired 0 51 false 1 0 8 ], muted: [] }                          -- plain again: retrigger
-    , { notes: [ fired 0 53 true 1 0 8, fired 1 50 true 1 0 8 ], muted: [] }    -- glide: held
-    , { notes: [ fired 0 55 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [] }  -- slid into; Rample tie
-    , { notes: [ fired 0 55 true 1 0 8 ], muted: [] }                           -- glide
-    , { notes: [ fired 0 55 true 1 0 8 ], muted: [] }                           -- tie, still held
-    , { notes: [ fired 0 58 true 1 0 8 ], muted: [] }                           -- glide into glide
-    , { notes: [], muted: [ 0 ] }                                               -- muted while held
-    , { notes: [ fired 0 48 false 3 0 8, fired 1 60 false 2 0 8 ], muted: [] }  -- ratchets
-    , { notes: [ fired 0 50 false 1 0 16, fired 0 52 true 1 8 16 ], muted: [] } -- two ticks, the second held
-    , { notes: [ fired 1 80 false 1 0 8 ], muted: [] }                          -- off the Rample's card
-    , { notes: [ fired 2 48 false 1 0 8, fired 2 55 false 1 0 8, fired 3 60 false 1 0 8 ], muted: [] } -- a chord on the Saïch; Rings
-    , { notes: [ fired 2 52 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [] }  -- a third Saïch voice; the Rample
-    , { notes: [], muted: [] }                                                  -- notes end: voices fade out
-    , { notes: [ fired 2 60 false 1 0 8 ], muted: [] }                          -- one note, compacted down
+    [ { notes: [ fired 0 48 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [], gatePct: 90 }   -- plain
+    , { notes: [ fired 0 51 false 1 0 8 ], muted: [], gatePct: 90 }                          -- plain again: retrigger
+    , { notes: [ fired 0 53 true 1 0 8, fired 1 50 true 1 0 8 ], muted: [], gatePct: 90 }    -- glide: held
+    , { notes: [ fired 0 55 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [], gatePct: 90 }  -- slid into; Rample tie
+    , { notes: [ fired 0 55 true 1 0 8 ], muted: [], gatePct: 90 }                           -- glide
+    , { notes: [ fired 0 55 true 1 0 8 ], muted: [], gatePct: 90 }                           -- tie, still held
+    , { notes: [ fired 0 58 true 1 0 8 ], muted: [], gatePct: 90 }                           -- glide into glide
+    , { notes: [], muted: [ 0 ], gatePct: 90 }                                               -- muted while held
+    , { notes: [ fired 0 48 false 3 0 8, fired 1 60 false 2 0 8 ], muted: [], gatePct: 90 }  -- ratchets
+    , { notes: [ fired 0 50 false 1 0 16, fired 0 52 true 1 8 16 ], muted: [], gatePct: 90 } -- two ticks, the second held
+    , { notes: [ fired 1 80 false 1 0 8 ], muted: [], gatePct: 90 }                          -- off the Rample's card
+    , { notes: [ fired 2 48 false 1 0 8, fired 2 55 false 1 0 8, fired 3 60 false 1 0 8 ], muted: [], gatePct: 90 } -- a chord on the Saïch; Rings
+    , { notes: [ fired 2 52 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [], gatePct: 90 }  -- a third Saïch voice; the Rample
+    , { notes: [], muted: [], gatePct: 90 }                                                  -- notes end: voices fade out
+    , { notes: [ fired 2 60 false 1 0 8 ], muted: [], gatePct: 90 }                          -- one note, compacted down
+    , { notes: [ fired 0 48 false 1 0 8 ], muted: [], gatePct: 150 }            -- GATE 150%: outlasts its step
+    , { notes: [ fired 0 48 false 1 0 8 ], muted: [], gatePct: 150 }            -- the same pitch under it: struck again
+    , { notes: [ fired 0 50 false 1 0 8 ], muted: [], gatePct: 150 }            -- another pitch under it: legato
+    , { notes: [], muted: [], gatePct: 150 }                                    -- nothing new: it ends on its own
+    , { notes: [ fired 0 52 false 1 0 8 ], muted: [], gatePct: 150 }            -- and a stop with it sounding
     ]
 
 -- ── 8. the Vetula performance-scheduler net (Vetula lockstep V1) ──────────────

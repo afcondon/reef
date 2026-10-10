@@ -2287,19 +2287,24 @@ headsGolden = """  1 | h0 p50 d1 r1 v100
 
 -- | The frozen golden for `articulationRun` (conformance/articulation-golden.txt).
 articulationGolden :: String
-articulationGolden = """   0 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 48 v100 @0 d112500  note FH-2/3 48 v100 @1500 d112500  slew 8=99 lag5 @0  pulse 9=500 d112500 @2000  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  cc Rample/4 14=20 @-40000  note Rample/4 36 v100 @0 d225000 | held -,-,-,-
-   1 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 51 v100 @0 d112500  note FH-2/3 51 v100 @1500 d112500  slew 8=124 lag5 @0  pulse 9=500 d112500 @2000 | held -,-,-,-
-   2 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 53 v100 @0  note FH-2/3 53 v100 @1500 d112500  slew 8=140 lag5 @0  cv 9=500 @0  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  cc Rample/4 24=20 @-40000  note Rample/4 37 v100 @0 d225000 | held 53,50,-,-
-   3 | cc AUDIO4c USB2/1 65=127 @0  note AUDIO4c USB2/1 55 v100 @0 d112500  off AUDIO4c USB2/1 53 @56250  note FH-2/3 55 v100 @1500 d112500  slew 8=157 lag20 @0  pulse 9=500 d112500 @0  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  cc Rample/4 34=20 @-40000  note Rample/4 38 v100 @0 d225000 | held -,-,-,-
-   4 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 55 v100 @0  note FH-2/3 55 v100 @1500 d112500  slew 8=157 lag5 @0  cv 9=500 @0 | held 55,-,-,-
-   5 | note FH-2/3 55 v100 @1500 d112500  cv 9=500 @0 | held 55,-,-,-
-   6 | cc AUDIO4c USB2/1 65=127 @0  on AUDIO4c USB2/1 58 v100 @0  off AUDIO4c USB2/1 55 @60000  note FH-2/3 58 v100 @1500 d112500  slew 8=182 lag20 @0  cv 9=500 @0 | held 58,-,-,-
-   7 | off AUDIO4c USB2/1 58 @0  cv 9=0 @0 | held -,-,-,-
-   8 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 48 v100 @0 d31875  note AUDIO4c USB2/1 48 v100 @37500 d31875  note AUDIO4c USB2/1 48 v100 @75000 d31875  note FH-2/3 48 v100 @1500 d112500  slew 8=99 lag5 @0  pulse 9=500 d112500 @2000  cc Rample/2 14=99 @-40000  note Rample/2 61 v100 @0 d95625  note Rample/2 61 v100 @112500 d95625  cc Rample/4 44=99 @-40000  note Rample/4 39 v100 @0 d225000 | held -,-,-,-
-   9 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 50 v100 @0 d112500  note FH-2/3 50 v100 @1500 d112500  slew 8=115 lag5 @0  pulse 9=500 d112500 @2000  cc AUDIO4c USB2/1 65=0 @62500  on AUDIO4c USB2/1 52 v100 @62500  note FH-2/3 52 v100 @64000 d112500  slew 8=132 lag5 @62500  cv 9=500 @62500 | held 52,-,-,-
-  10 | - | held 52,-,-,-
-  11 | cv 16=99 @0  slew 20=68 lag0 @0  cv 17=158 @0  slew 20=130 lag0 @0  cv 13=200 @0  pulse 14=500 d5000 @4000 | held 52,-,-,-
-  12 | cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  slew 20=13 lag25 @0  cv 16=132 @0  slew 20=68 lag0 @0  cc Rample/4 14=20 @-40000  note Rample/4 36 v100 @0 d225000 | held 52,-,-,-
-  13 | slew 20=13 lag25 @0 | held 52,-,-,-
-  14 | cv 16=198 @0  slew 20=68 lag0 @0 | held 52,-,-,-
-stop | off AUDIO4c USB2/1 52 @0  cv 9=0 @0  slew 20=13 lag0 @0"""
+articulationGolden = """   0 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 48 v100 @0  note FH-2/3 48 v100 @1500 d112500  slew 8=99 lag5 @0  pulse 9=500 d112500 @2000  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  off AUDIO4c USB2/1 48 @112500  cc Rample/4 14=20 @-40000  note Rample/4 36 v100 @0 d225000 | held -,-,-,- | sounding -,50@1225,-,-
+   1 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 51 v100 @0  note FH-2/3 51 v100 @1500 d112500  slew 8=124 lag5 @0  pulse 9=500 d112500 @2000  off AUDIO4c USB2/1 51 @112500 | held -,-,-,- | sounding -,-,-,-
+   2 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 53 v100 @0  note FH-2/3 53 v100 @1500 d112500  slew 8=140 lag5 @0  cv 9=500 @0  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  cc Rample/4 24=20 @-40000  note Rample/4 37 v100 @0 d225000 | held 53,50,-,- | sounding -,-,-,-
+   3 | cc AUDIO4c USB2/1 65=127 @0  on AUDIO4c USB2/1 55 v100 @0  off AUDIO4c USB2/1 53 @56250  note FH-2/3 55 v100 @1500 d112500  slew 8=157 lag20 @0  pulse 9=500 d112500 @0  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  off AUDIO4c USB2/1 55 @112500  cc Rample/4 34=20 @-40000  note Rample/4 38 v100 @0 d225000 | held -,-,-,- | sounding -,50@1600,-,-
+   4 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 55 v100 @0  note FH-2/3 55 v100 @1500 d112500  slew 8=157 lag5 @0  cv 9=500 @0 | held 55,-,-,- | sounding -,-,-,-
+   5 | note FH-2/3 55 v100 @1500 d112500  cv 9=500 @0 | held 55,-,-,- | sounding -,-,-,-
+   6 | cc AUDIO4c USB2/1 65=127 @0  on AUDIO4c USB2/1 58 v100 @0  off AUDIO4c USB2/1 55 @60000  note FH-2/3 58 v100 @1500 d112500  slew 8=182 lag20 @0  cv 9=500 @0 | held 58,-,-,- | sounding -,-,-,-
+   7 | off AUDIO4c USB2/1 58 @0  cv 9=0 @0 | held -,-,-,- | sounding -,-,-,-
+   8 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 48 v100 @0 d31875  note AUDIO4c USB2/1 48 v100 @37500 d31875  on AUDIO4c USB2/1 48 v100 @75000  note FH-2/3 48 v100 @1500 d112500  slew 8=99 lag5 @0  pulse 9=500 d112500 @2000  cc Rample/2 14=99 @-40000  note Rample/2 61 v100 @0 d95625  note Rample/2 61 v100 @112500 d95625  off AUDIO4c USB2/1 48 @106875  cc Rample/4 44=99 @-40000  note Rample/4 39 v100 @0 d225000 | held -,-,-,- | sounding -,60@2208,-,-
+   9 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 50 v100 @0  note FH-2/3 50 v100 @1500 d112500  slew 8=115 lag5 @0  pulse 9=500 d112500 @2000  cc AUDIO4c USB2/1 65=0 @62500  on AUDIO4c USB2/1 52 v100 @62500  off AUDIO4c USB2/1 50 @62500  note FH-2/3 52 v100 @64000 d112500  slew 8=132 lag5 @62500  cv 9=500 @62500 | held 52,-,-,- | sounding -,-,-,-
+  10 | - | held 52,-,-,- | sounding -,80@2475,-,-
+  11 | cv 16=99 @0  slew 20=68 lag0 @0  cv 17=158 @0  slew 20=130 lag0 @0  cv 13=200 @0  pulse 14=500 d5000 @4000 | held 52,-,-,- | sounding -,-,-,60@2525
+  12 | cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000  slew 20=13 lag25 @0  cv 16=132 @0  slew 20=68 lag0 @0  cc Rample/4 14=20 @-40000  note Rample/4 36 v100 @0 d225000 | held 52,-,-,- | sounding -,50@2725,-,-
+  13 | slew 20=13 lag25 @0 | held 52,-,-,- | sounding -,-,-,-
+  14 | cv 16=198 @0  slew 20=68 lag0 @0 | held 52,-,-,- | sounding -,-,-,-
+  15 | cc AUDIO4c USB2/1 65=127 @0  on AUDIO4c USB2/1 48 v100 @0  off AUDIO4c USB2/1 52 @60000  note FH-2/3 48 v100 @1500 d187500  slew 8=99 lag20 @0  pulse 9=500 d187500 @0  slew 20=13 lag25 @0 | held -,-,-,- | sounding 48@3063,-,-,-
+  16 | cc AUDIO4c USB2/1 65=0 @0  off AUDIO4c USB2/1 48 @0  on AUDIO4c USB2/1 48 v100 @0  note FH-2/3 48 v100 @1500 d187500  slew 8=99 lag5 @0  pulse 9=500 d187500 @2000 | held -,-,-,- | sounding 48@3188,-,-,-
+  17 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 50 v100 @0  off AUDIO4c USB2/1 48 @0  note FH-2/3 50 v100 @1500 d187500  slew 8=115 lag5 @0  pulse 9=500 d187500 @2000 | held -,-,-,- | sounding 50@3313,-,-,-
+  18 | off AUDIO4c USB2/1 50 @62500 | held -,-,-,- | sounding -,-,-,-
+  19 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 52 v100 @0  note FH-2/3 52 v100 @1500 d187500  slew 8=132 lag5 @0  pulse 9=500 d187500 @2000 | held -,-,-,- | sounding 52@3563,-,-,-
+stop | off AUDIO4c USB2/1 52 @0  cv 9=0 @0"""

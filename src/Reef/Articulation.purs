@@ -20,11 +20,19 @@
 -- |   * on a TRIGGER (an FH-2 envelope or gate) or a Rample: nothing is held,
 -- |     since there is no pitch to slide along; each note is a strike.
 -- |
--- | A plain note steps and gates as itself, so consecutive plain notes
--- | retrigger.
+-- | **A line is one mono voice.** A plain note on a MIDI line goes out as a
+-- | note-on, and the voice remembers when it ends (`sounding`); its note-off
+-- | is sent by the step that end falls in, unless the voice's next note comes
+-- | first. Then the next note decides: the same pitch is cut and struck again
+-- | (a retrigger), a different pitch starts before the old one is let go (the
+-- | legato a GATE over 100% asks for, without portamento). A fixed-length
+-- | note would end on its own clock instead, and with GATE over 100% its
+-- | note-off landed after the next note-on: a repeated pitch was cut 41 ms in,
+-- | and Yarns fell back to stale held notes (AC, 2026-10-10, "wildly wrong").
 module Reef.Articulation
   ( Played
   , StepIn
+  , Sounding
   , playStep
   , releaseAll
   , plainSends
@@ -38,10 +46,11 @@ module Reef.Articulation
 
 import Prelude
 
-import Data.Array (catMaybes, concat, concatMap, drop, elem, take, filter, foldl, groupAllBy, head, length, mapWithIndex, null, range, updateAt, zipWith, (!!))
+import Data.Array (catMaybes, concat, concatMap, drop, elem, take, filter, foldl, groupAllBy, head, length, mapWithIndex, null, range, unsnoc, updateAt, zipWith, (!!))
 import Data.Array.NonEmpty as NEA
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
+import Data.Tuple (Tuple(..))
 import Reef.Calibration (realiseNote)
 import Reef.Odonus (Fired, Odonus)
 import Reef.Rample as Rample
@@ -52,7 +61,16 @@ import Reef.Voices as RV
 -- | What a step played, what each voice holds after it, and each
 -- | polyphonic instrument's allocator (`polys` then `samplers`, in the
 -- | routing's order).
-type Played = { sends :: Array Send, held :: Array (Maybe Int), polys :: Array RV.Voices }
+type Played =
+  { sends :: Array Send
+  , held :: Array (Maybe Int)
+  , sounding :: Array (Maybe Sounding)
+  , polys :: Array RV.Voices
+  }
+
+-- | A plain note a MIDI line is playing, and when it ends, in `nowMs`'s
+-- | time: its note-off is still to be sent.
+type Sounding = { pitch :: Int, untilMs :: Number }
 
 -- | One model step: the model after it (for note lengths), the step's length
 -- | in ms, what each voice held before it, the voices just muted (their held
@@ -69,6 +87,7 @@ type StepIn =
   , nowMs :: Number
   , polys :: Array RV.Voices
   , held :: Array (Maybe Int)
+  , sounding :: Array (Maybe Sounding)
   , newlyMuted :: Array Int
   , notes :: Array { fired :: Fired, velocity :: Int }
   }
@@ -78,18 +97,19 @@ type StepIn =
 playStep :: VoiceRouting -> StepIn -> Played
 playStep routing s =
   let
-    voiced = foldl note released s.notes
+    voiced = retire (foldl note released s.notes)
     timed = map (\n -> { headIdx: n.fired.headIdx, pitch: n.fired.pitch, velocity: n.velocity
                         , atMs: subOffsetMs s.stepMs n.fired, gateMs: gateMs s.odo s.stepMs n.fired }) s.notes
     poly = playPolys routing s.nowMs timed
       (if length s.polys == length routing.polys + length routing.samplers then s.polys else polyStates routing)
   in
-    { sends: voiced.sends <> poly.sends, held: voiced.held, polys: poly.states }
+    { sends: voiced.sends <> poly.sends, held: voiced.held, sounding: voiced.sounding, polys: poly.states }
   where
   released = foldl
-    (\acc v -> { sends: acc.sends <> releaseVoice routing v (join (acc.held !! v)) 0.0
-               , held: fromMaybe acc.held (updateAt v Nothing acc.held) })
-    { sends: [], held: s.held }
+    (\acc v -> { sends: acc.sends <> releaseVoice routing v (heldOrSounding acc.held acc.sounding v) 0.0
+               , held: fromMaybe acc.held (updateAt v Nothing acc.held)
+               , sounding: fromMaybe acc.sounding (updateAt v Nothing acc.sounding) })
+    { sends: [], held: s.held, sounding: s.sounding }
     s.newlyMuted
   note acc n =
     let
@@ -98,18 +118,52 @@ playStep routing s =
       prev = join (acc.held !! v)
       at = subOffsetMs s.stepMs f
       gate = gateMs s.odo s.stepMs f
+      -- the voice's plain note: ended before this one (its note-off is due
+      -- now), or still sounding under it (this note cuts it)
+      { ended, cut } = case join (acc.sounding !! v) of
+        Just so
+          | so.untilMs <= s.nowMs + at -> { ended: noteOffs routing v so.pitch (so.untilMs - s.nowMs), cut: Nothing }
+          | otherwise -> { ended: [], cut: Just so.pitch }
+        Nothing -> { ended: [], cut: Nothing }
       one = { pitch: f.pitch, velocity: n.velocity, glide: f.glide, ratchet: f.ratchet
-            , gateMs: gate, atMs: at, prev }
+            , gateMs: gate, atMs: at, prev, cut, mono: true }
       next = if f.glide then Just f.pitch else Nothing
+      sounds = if f.glide then Nothing else Just { pitch: f.pitch, untilMs: s.nowMs + noteEnd one }
     in
-      { sends: acc.sends <> voiceSends routing v one
-      , held: fromMaybe acc.held (updateAt v next acc.held) }
+      { sends: acc.sends <> ended <> voiceSends routing v one
+      , held: fromMaybe acc.held (updateAt v next acc.held)
+      , sounding: fromMaybe acc.sounding (updateAt v sounds acc.sounding) }
+  -- a plain note that ends before the next step: its note-off now
+  retire acc =
+    foldl
+      (\a (Tuple v so) -> case so of
+          Just x | x.untilMs < s.nowMs + s.stepMs ->
+            { sends: a.sends <> noteOffs routing v x.pitch (max 0.0 (x.untilMs - s.nowMs))
+            , held: a.held
+            , sounding: fromMaybe a.sounding (updateAt v Nothing a.sounding) }
+          _ -> a)
+      acc
+      (mapWithIndex Tuple acc.sounding)
+
+-- | What a voice holds, by a glide or as a plain note still sounding.
+heldOrSounding :: Array (Maybe Int) -> Array (Maybe Sounding) -> Int -> Maybe Int
+heldOrSounding held sounding v = case join (held !! v) of
+  Just q -> Just q
+  Nothing -> map _.pitch (join (sounding !! v))
+
+-- | Where a plain note ends, from the step's onset: its gate, or the last
+-- | ratchet's, which sounds 85% of its slot.
+noteEnd :: Note -> Number
+noteEnd n =
+  let rat = if n.ratchet < 1 || isJust n.prev then 1 else n.ratchet
+  in if rat <= 1 then n.atMs + n.gateMs
+     else n.atMs + n.gateMs - 0.15 * n.gateMs / toNumber rat
 
 -- | Let every voice go: what a stop sends, so no held note, open gate or
 -- | sounding allocated voice outlives the transport.
-releaseAll :: VoiceRouting -> Array (Maybe Int) -> Array RV.Voices -> Array Send
-releaseAll routing held polys =
-  concatMap (\v -> releaseVoice routing v (join (held !! v)) 0.0)
+releaseAll :: VoiceRouting -> Array (Maybe Int) -> Array (Maybe Sounding) -> Array RV.Voices -> Array Send
+releaseAll routing held sounding polys =
+  concatMap (\v -> releaseVoice routing v (heldOrSounding held sounding v) 0.0)
     (range 0 (max (length routing.voices) (length routing.lines) - 1))
     <> concat (zipWith (\p v -> polySends p 0.0 0.0 (RV.allOff 0.0 v).emits) routing.polys (take (length routing.polys) polys))
 
@@ -119,7 +173,7 @@ releaseAll routing held polys =
 plainSends :: VoiceRouting -> Int -> { pitch :: Int, velocity :: Int, gateMs :: Number, atMs :: Number } -> Array Send
 plainSends routing v n =
   voiceSends routing v { pitch: n.pitch, velocity: n.velocity, glide: false, ratchet: 1
-                       , gateMs: n.gateMs, atMs: n.atMs, prev: Nothing }
+                       , gateMs: n.gateMs, atMs: n.atMs, prev: Nothing, cut: Nothing, mono: false }
 
 -- | The heads muted between two states of the model: what was playing and is
 -- | now silent, whose held notes must be let go.
@@ -131,7 +185,13 @@ newlyMuted before after =
 
 type Note =
   { pitch :: Int, velocity :: Int, glide :: Boolean, ratchet :: Int
-  , gateMs :: Number, atMs :: Number, prev :: Maybe Int }
+  , gateMs :: Number, atMs :: Number, prev :: Maybe Int
+  -- the voice's plain note still sounding under this one (a line cuts it)
+  , cut :: Maybe Int
+  -- a line plays its plain notes as held notes, ended by the machine; a
+  -- replayed loop (`plainSends`) plays them at fixed length
+  , mono :: Boolean
+  }
 
 voiceSends :: VoiceRouting -> Int -> Note -> Array Send
 voiceSends routing v n =
@@ -149,6 +209,16 @@ releaseVoice routing v held at =
     Just q | leg.line && null leg.rample -> [ NoteOff { port: leg.port, channel: leg.channel, note: q, atMs: at + leg.offsetMs } ]
     _ -> []
   gateOff line = map (\bus -> CvSet { bus, value: 0.0, atMs: at }) line.gateBus
+
+-- | A plain note's end on a voice's MIDI lines. Its ES-9 lines need nothing:
+-- | their gate was a timed pulse.
+noteOffs :: VoiceRouting -> Int -> Int -> Number -> Array Send
+noteOffs routing v q at =
+  concatMap off (fromMaybe [] (routing.voices !! v))
+  where
+  off leg
+    | leg.line && null leg.rample = [ NoteOff { port: leg.port, channel: leg.channel, note: q, atMs: at + leg.offsetMs } ]
+    | otherwise = []
 
 -- ---------------------------------------------------------------------------
 -- MIDI legs
@@ -190,21 +260,34 @@ rampleSends n leg r
 -- | A LINE (a synth, the continuo): the legato machine.
 lineLegSends :: Note -> Leg -> Array Send
 lineLegSends n leg = case n.prev of
-  -- a tie: the held note carries on, and ends here if this note does not hold
+  -- a tie: the held note carries on; a plain one is now sounding, and the
+  -- machine ends it (or, off a line, it ends here)
   Just q | q == n.pitch ->
-    if n.glide then [] else [ NoteOff { port, channel, note: q, atMs: t + n.gateMs } ]
+    if n.glide || n.mono then [] else [ NoteOff { port, channel, note: q, atMs: t + n.gateMs } ]
   -- a slide: the new note starts before the held one ends, with portamento on
   Just q ->
     [ porta 127 ]
-      <> (if n.glide then [ NoteOn { port, channel, note: n.pitch, velocity: n.velocity, atMs: t } ]
+      <> (if n.glide || n.mono then [ on t ]
           else [ Note { port, channel, note: n.pitch, velocity: n.velocity, atMs: t, durMs: n.gateMs } ])
       <> [ NoteOff { port, channel, note: q, atMs: t + overlap } ]
   -- a fresh note: portamento off; held into the next if it glides
-  Nothing ->
-    [ porta 0 ]
-      <> (if n.glide then [ NoteOn { port, channel, note: n.pitch, velocity: n.velocity, atMs: t } ]
-          else ratchets n \at dur -> Note { port, channel, note: n.pitch, velocity: n.velocity, atMs: at, durMs: dur })
+  Nothing -> case n.cut of
+    -- the same pitch still sounding: let it go, then strike again
+    Just c | c == n.pitch -> [ porta 0, NoteOff { port, channel, note: c, atMs: t } ] <> fresh
+    -- another pitch still sounding: the new one first, legato, then let go
+    Just c -> [ porta 0 ] <> fresh <> [ NoteOff { port, channel, note: c, atMs: t } ]
+    Nothing -> [ porta 0 ] <> fresh
   where
+  on at = NoteOn { port, channel, note: n.pitch, velocity: n.velocity, atMs: at }
+  fresh
+    | n.glide = [ on t ]
+    | otherwise =
+        let hits = ratchets n \at dur -> Note { port, channel, note: n.pitch, velocity: n.velocity, atMs: at, durMs: dur }
+        in if not n.mono then hits
+           -- the last hit is held, and the machine ends it
+           else case unsnoc hits of
+             Just { init, last: Note l } -> init <> [ on l.atMs ]
+             _ -> hits
   port = leg.port
   channel = leg.channel
   t = n.atMs + leg.offsetMs
