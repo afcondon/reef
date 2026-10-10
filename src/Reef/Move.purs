@@ -114,6 +114,7 @@ restore is s = concatMap undo is
     SetGatePct _ -> [ SetGatePct s.odo.gatePct ]
     SetHarmony _ -> [ SetHarmony s.odo.harmony ]
     SetHeadsPattern _ -> [ SetHeadsPattern s.odo.headsPattern ]
+    SetOctavePattern _ -> [ SetOctavePattern s.odo.octavePattern ]
     -- one of a scale pattern and a chord pattern shapes the grid
     SetScalePattern _ -> [ SetGridHarmony s.odo.gridHarmony, SetScalePattern s.odo.scalePattern ]
     SetGridHarmony _ -> [ SetScalePattern s.odo.scalePattern, SetGridHarmony s.odo.gridHarmony ]
@@ -146,6 +147,7 @@ verbs =
   , "clock dur|step [dur|step ...]"
   , "offset N N N N"
   , "heads \"PATTERN\" | off"
+  , "octave \"PATTERN\" | off"
   , "harmony \"PATTERN\" | off"
   , "scale \"PATTERN\" | off"
   , "outscale \"PATTERN\" [ROOT] | off"
@@ -345,6 +347,9 @@ term ts = case uncons ts of
   Just { head: Word "heads", tail }
     | Just { head: Quoted p, tail: after } <- uncons tail -> Right { move: Gestures [ SetHeadsPattern (Just p) ], rest: after }
     | Just { head: Word "off", tail: after } <- uncons tail -> Right { move: Gestures [ SetHeadsPattern Nothing ], rest: after }
+  Just { head: Word "octave", tail }
+    | Just { head: Quoted p, tail: after } <- uncons tail -> Right { move: Gestures [ SetOctavePattern (Just p) ], rest: after }
+    | Just { head: Word "off", tail: after } <- uncons tail -> Right { move: Gestures [ SetOctavePattern Nothing ], rest: after }
   Just { head: Word "harmony", tail } -> case uncons tail of
     Just { head: Quoted p, tail: after } -> Right { move: Gestures [ SetHarmony (Just p) ], rest: after }
     Just { head: Word "off", tail: after } -> Right { move: Gestures [ SetHarmony Nothing ], rest: after }

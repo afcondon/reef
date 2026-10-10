@@ -93,6 +93,8 @@ module Reef.Odonus
   , setGatePct
   , setHeadsPattern
   , followHeads
+  , setOctavePattern
+  , followOctave
   , setOdoClock
   , toggleScaleNote
   , setSpread
@@ -102,11 +104,11 @@ module Reef.Odonus
 
 import Prelude
 
-import Data.Array (concat, elem, mapMaybe, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
+import Data.Array (concat, elem, head, mapMaybe, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
 import Data.Foldable (foldl)
 import Data.Int (toNumber)
 import Data.Int.Bits (and, shl, shr)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
 import Reef.PitchSet (nearestIn, periodsIn, quantiseToVoicing, realizeEqualShift, voicing) as PS
@@ -214,6 +216,11 @@ type OdonusOf h =
   , headsPattern :: Maybe String -- a Tidal pattern of head numbers (`"<1 2 [3,4]>"`):
                                  -- the heads it names at a step play, the rest are
                                  -- muted; sampled by the host, see followHeads
+  , octavePattern :: Maybe String -- a Tidal pattern of octaves (`"<0 0 0 -1>"`),
+                                  -- added to `octaveShift`; sampled by the host,
+                                  -- see followOctave
+  , octaveFollow :: Maybe Int     -- the octave it gave at the last step
+                                  -- (Nothing: none, so 0)
   , harmony :: Maybe String -- a Tidal note pattern (`"<c'maj7 a'min7>/2"`) the
                             -- overlay follows; sampled by the host, see followHarmony
   , scalePattern :: Maybe String -- a pattern of Tidal scale names (`"<dorian
@@ -282,7 +289,7 @@ renderCell o hd c =
             Nothing -> case o.pitchSet of
               Just ps -> PS.nearestIn ps target
               Nothing -> quantiseToScale (scaleOf o) target
-    in snapped + o.octaveShift * 12
+    in snapped + octaves o * 12
 
 -- | The raw NOTE-knob ceiling. Cells hold a value in `0..knobMax`, shown on the
 -- | knob face; the label shows what it currently quantises to. Fixed (independent
@@ -330,7 +337,7 @@ cellLabel o knob =
     ps = effectivePitchSet o
     h = PS.realizeEqualShift ps (PS.periodsIn ps o.span) knobMax o.degShift (clampI 0 knobMax knob)
     coloured = maybe h (\notes -> PS.quantiseToVoicing notes h) o.chord
-  in coloured + o.octaveShift * 12
+  in coloured + octaves o * 12
 
 -- | The pitch classes (0..11) of the chord the output is snapping to; none
 -- | while it follows the scale alone.
@@ -350,6 +357,24 @@ followChord mpcs o = o { chord = mpcs }
 -- | where the pattern last put them.
 setHeadsPattern :: Maybe String -> Odonus -> Odonus
 setHeadsPattern p o = o { headsPattern = p }
+
+-- | **Octaves by pattern** (AC, 2026-10-10: the bassline down an octave
+-- | every fourth bar, apart from the heads pattern). Set, or with `Nothing`
+-- | clear, a Tidal pattern of octaves that moves every head, on top of the
+-- | panel's OCT. Clearing returns to the panel's octave alone.
+setOctavePattern :: Maybe String -> Odonus -> Odonus
+setOctavePattern p o = o { octavePattern = p, octaveFollow = if isJust p then o.octaveFollow else Nothing }
+
+-- | The octave the pattern gives at this step: its first value, within ±4.
+-- | A rest keeps the octave it had.
+followOctave :: Array Int -> Odonus -> Odonus
+followOctave given o = case head given of
+  Just n -> o { octaveFollow = Just (clampI (-4) 4 n) }
+  Nothing -> o
+
+-- | Every head's octave: the panel's, and the pattern's on top.
+octaves :: forall h. OdonusOf h -> Int
+octaves o = o.octaveShift + fromMaybe 0 o.octaveFollow
 
 -- | The heads the pattern names at this step (1 to 4, as the panel counts)
 -- | play; every other head is muted. A rest names none, so all are silent.
@@ -535,7 +560,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, chord: Nothing, harmony: Nothing
+  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, octaveFollow: Nothing, chord: Nothing, harmony: Nothing
   , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing }
 
 -- ---------------------------------------------------------------------------

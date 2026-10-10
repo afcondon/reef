@@ -16,7 +16,7 @@ import Data.Maybe (Maybe(..))
 import Reef.Vetula.Perf (wrapAt)
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Routing as Routing
-import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -201,6 +201,10 @@ main = do
   assertEqual' "Odonus heads-pattern golden (followHeads, 80 steps)"
     { actual: headsRun, expected: headsGolden }
   log "Reef Odonus heads-pattern golden: OK"
+  -- Octaves by pattern, on top of the panel's OCT (Reef.Odonus.followOctave).
+  assertEqual' "Odonus octave-pattern golden (followOctave, 80 steps)"
+    { actual: octaveRun, expected: octaveGolden }
+  log "Reef Odonus octave-pattern golden: OK"
   -- How a voice's notes are played down every kind of leg (Reef.Articulation).
   assertEqual' "Articulation golden (legato, slides, ES-9 lines, triggers, Rample)"
     { actual: articulationRun, expected: articulationGolden }
@@ -2201,6 +2205,89 @@ snap c'maj9 46>48 47>48 48>48 49>48 50>52 51>52 52>52 53>52 54>55 55>55 56>55 57
  28 | h0 p75 d1 r1 v100 | grid scale out -
  29 | h0 p79 d1 r1 v100 | grid scale out -
  30 | h0 p80 d1 r1 v100 | grid scale out -"""
+
+-- | The frozen golden for `octaveRun` (conformance/octave-golden.txt).
+octaveGolden :: String
+octaveGolden = """  1 | h0 p38 d1 r1 v100
+  2 | h0 p39 d1 r1 v100
+  3 | h0 p43 d1 r1 v100
+  4 | h0 p44 d1 r1 v100
+  5 | h0 p46 d1 r1 v100
+  6 | h0 p50 d1 r1 v100
+  7 | h0 p51 d1 r1 v100
+  8 | h0 p55 d1 r1 v100
+  9 | h0 p56 d1 r1 v100
+ 10 | h0 p58 d1 r1 v100
+ 11 | h0 p62 d1 r1 v100
+ 12 | h0 p63 d1 r1 v100
+ 13 | h0 p67 d1 r1 v100
+ 14 | h0 p68 d1 r1 v100
+ 15 | h0 p70 d1 r1 v100
+ 16 | h0 p36 d1 r1 v100
+ 17 | h0 p26 d1 r1 v100
+ 18 | h0 p27 d1 r1 v100
+ 19 | h0 p31 d1 r1 v100
+ 20 | h0 p32 d1 r1 v100
+ 21 | h0 p34 d1 r1 v100
+ 22 | h0 p38 d1 r1 v100
+ 23 | h0 p39 d1 r1 v100
+ 24 | h0 p43 d1 r1 v100
+ 25 | h0 p44 d1 r1 v100
+ 26 | h0 p46 d1 r1 v100
+ 27 | h0 p50 d1 r1 v100
+ 28 | h0 p51 d1 r1 v100
+ 29 | h0 p55 d1 r1 v100
+ 30 | h0 p56 d1 r1 v100
+ 31 | h0 p58 d1 r1 v100
+ 32 | h0 p24 d1 r1 v100
+ 33 | h0 p50 d1 r1 v100
+ 34 | h0 p51 d1 r1 v100
+ 35 | h0 p55 d1 r1 v100
+ 36 | h0 p56 d1 r1 v100
+ 37 | h0 p58 d1 r1 v100
+ 38 | h0 p62 d1 r1 v100
+ 39 | h0 p63 d1 r1 v100
+ 40 | h0 p67 d1 r1 v100
+ 41 | h0 p68 d1 r1 v100
+ 42 | h0 p70 d1 r1 v100
+ 43 | h0 p74 d1 r1 v100
+ 44 | h0 p75 d1 r1 v100
+ 45 | h0 p79 d1 r1 v100
+ 46 | h0 p80 d1 r1 v100
+ 47 | h0 p82 d1 r1 v100
+ 48 | h0 p48 d1 r1 v100
+ 49 | h0 p50 d1 r1 v100
+ 50 | h0 p51 d1 r1 v100
+ 51 | h0 p55 d1 r1 v100
+ 52 | h0 p56 d1 r1 v100
+ 53 | h0 p58 d1 r1 v100
+ 54 | h0 p62 d1 r1 v100
+ 55 | h0 p63 d1 r1 v100
+ 56 | h0 p67 d1 r1 v100
+ 57 | h0 p68 d1 r1 v100
+ 58 | h0 p70 d1 r1 v100
+ 59 | h0 p74 d1 r1 v100
+ 60 | h0 p75 d1 r1 v100
+ 61 | h0 p79 d1 r1 v100
+ 62 | h0 p80 d1 r1 v100
+ 63 | h0 p82 d1 r1 v100
+ 64 | h0 p48 d1 r1 v100
+ 65 | h0 p38 d1 r1 v100
+ 66 | h0 p39 d1 r1 v100
+ 67 | h0 p43 d1 r1 v100
+ 68 | h0 p44 d1 r1 v100
+ 69 | h0 p46 d1 r1 v100
+ 70 | h0 p50 d1 r1 v100
+ 71 | h0 p51 d1 r1 v100
+ 72 | h0 p55 d1 r1 v100
+ 73 | h0 p56 d1 r1 v100
+ 74 | h0 p58 d1 r1 v100
+ 75 | h0 p62 d1 r1 v100
+ 76 | h0 p63 d1 r1 v100
+ 77 | h0 p67 d1 r1 v100
+ 78 | h0 p68 d1 r1 v100
+ 79 | h0 p70 d1 r1 v100
+ 80 | h0 p36 d1 r1 v100"""
 
 -- | The frozen golden for `headsRun` (conformance/heads-golden.txt).
 headsGolden :: String

@@ -89,6 +89,7 @@ type Patterns =
   , outScale :: Maybe { pattern :: String, root :: Int }
   , gridHarmony :: Maybe String
   , heads :: Maybe String
+  , octave :: Maybe String
   }
 
 patternsOf :: SimState -> Patterns
@@ -96,14 +97,16 @@ patternsOf s = odoPatterns s.odo
 
 -- | The patterns an Odonus holds, for a host that has the model alone.
 odoPatterns :: Odonus -> Patterns
-odoPatterns o = { harmony: o.harmony, scale: o.scalePattern, outScale: o.outScale, gridHarmony: o.gridHarmony, heads: o.headsPattern }
+odoPatterns o = { harmony: o.harmony, scale: o.scalePattern, outScale: o.outScale, gridHarmony: o.gridHarmony, heads: o.headsPattern, octave: o.octavePattern }
 
 samplePatterns :: (String -> Array Int) -> (String -> Array Int) -> Patterns -> Input
-samplePatterns harmony scale p = SetSampled chord sc grid heads
+samplePatterns harmony scale p = SetSampled chord sc grid heads octave
   where
   -- the heads to play, as numbers (`harmony` gives a note pattern's numbers
   -- as written); a rest is an empty list, every head silent
   heads = harmony <$> p.heads
+  -- the octave, as a number pattern's numbers, the same way
+  octave = harmony <$> p.octave
   -- the output's set: a scale on its own root (outScale), or a chord
   chord = case p.outScale of
     Just out -> map (\i -> (i + out.root) `mod` 12) <$> nonEmpty (scale out.pattern)

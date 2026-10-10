@@ -41,6 +41,7 @@ module Reef.Conformance
   , chordRun
   , harmonyRun
   , headsRun
+  , octaveRun
   , scaleRun
   , outScaleRun
   , voicingRun
@@ -220,6 +221,40 @@ headsRun =
         0 -> [ 1 ]
         1 -> [ 2 ]
         2 -> [ 3, 4 ]
+        _ -> []
+    | otherwise = []
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick (applyInput (wire (sampleInput (sample i) (const []) st1)) st1)
+    in
+      { st: r.sim, out: snoc acc.out (renderStep (i + 1) r.fired) }
+
+-- | Octaves by pattern (`Reef.Odonus.followOctave`): every head moved by a
+-- | Tidal pattern of octaves, on top of the panel's OCT (here -1). A stub
+-- | stands in for Littorina: `"<0 -1 1 ~>"` gives 0 for a bar (16 steps), then
+-- | -1, then 1, then a rest, which keeps 1. From step 64 the pattern is
+-- | cleared, back to the panel's octave alone. `SetOctavePattern` and the
+-- | sample both cross the wire codec.
+octaveRun :: String
+octaveRun =
+  let
+    s0 = { odo: defaultOdonus { octaveShift = -1 }, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 0 79)
+  in
+    intercalate "\n" final.out
+  where
+  pat = "<0 -1 1 ~>"
+  script i = case i of
+    0 -> [ SetOctavePattern (Just pat) ]
+    64 -> [ SetOctavePattern Nothing ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  sample i txt
+    | txt == pat = case (i / 16) `mod` 4 of
+        0 -> [ 0 ]
+        1 -> [ -1 ]
+        2 -> [ 1 ]
         _ -> []
     | otherwise = []
   advance acc i =

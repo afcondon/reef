@@ -76,6 +76,20 @@ echo "== headsRun (80-step heads-pattern render): node vs erl =="
 diff /tmp/reef-heads-node.txt /tmp/reef-heads-erl.txt && echo "  ✅ headsRun node == erl"
 diff "$HEADS_GOLDEN" /tmp/reef-heads-node.txt && echo "  ✅ headsRun matches frozen golden"
 
+# --- octaves as a Tidal pattern (Reef.Conformance.octaveRun) ------------------
+# Every head moved by a sampled octave on top of the panel's OCT (a stub stands
+# in for Littorina); SetOctavePattern and the sample cross the wire codec.
+OCTAVE_GOLDEN="$REEF/conformance/octave-golden.txt"
+echo "== octaveRun (80-step octave-pattern render): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { octaveRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(octaveRun);' \
+  ) > /tmp/reef-octave-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':octaveRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-octave-erl.txt
+diff /tmp/reef-octave-node.txt /tmp/reef-octave-erl.txt && echo "  ✅ octaveRun node == erl"
+diff "$OCTAVE_GOLDEN" /tmp/reef-octave-node.txt && echo "  ✅ octaveRun matches frozen golden"
+
 # --- harmony as a Tidal pattern (Reef.Conformance.harmonyRun) ----------------
 # The chord overlay following a host-sampled harmony (a stub sampler stands in
 # for Littorina), SetHarmony through the wire codec, 40 steps of sounding pitch.
