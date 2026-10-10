@@ -1044,8 +1044,8 @@ articulationTestRouting =
 -- | glide cell into a plain one), a run of glides, a tie, a ratchet, a note
 -- | half a step in (a fast head's second tick), a voice muted while it holds
 -- | a slide, and a stop with a note held; then a GATE of 150%, where a plain
--- | note outlasts its step and the next one cuts it (the same pitch struck
--- | again, another pitch legato). Each step prints its sends, the held notes
+-- | note outlasts its step and the next one cuts it, a gap ahead, and is
+-- | struck (legato is the GLIDE cell's alone). Each step prints its sends, the held notes
 -- | and the plain notes still sounding after it. Byte-identical node ↔ BEAM = the rig plays a line
 -- | as the page does, slides included.
 articulationRun :: String
@@ -1091,7 +1091,7 @@ articulationRun = case RR.decodeVoiceRouting (RR.encodeVoiceRouting articulation
     , { notes: [ fired 2 60 false 1 0 8 ], muted: [], gatePct: 90 }                          -- one note, compacted down
     , { notes: [ fired 0 48 false 1 0 8 ], muted: [], gatePct: 150 }            -- GATE 150%: outlasts its step
     , { notes: [ fired 0 48 false 1 0 8 ], muted: [], gatePct: 150 }            -- the same pitch under it: struck again
-    , { notes: [ fired 0 50 false 1 0 8 ], muted: [], gatePct: 150 }            -- another pitch under it: legato
+    , { notes: [ fired 0 50 false 1 0 8 ], muted: [], gatePct: 150 }            -- another pitch under it: struck too
     , { notes: [], muted: [], gatePct: 150 }                                    -- nothing new: it ends on its own
     , { notes: [ fired 0 52 false 1 0 8 ], muted: [], gatePct: 150 }            -- and a stop with it sounding
     ]

@@ -23,9 +23,10 @@
 -- | **A line is one mono voice.** A plain note on a MIDI line goes out as a
 -- | note-on, and the voice remembers when it ends (`sounding`); its note-off
 -- | is sent by the step that end falls in, unless the voice's next note comes
--- | first. Then the next note decides: the same pitch is cut and struck again
--- | (a retrigger), a different pitch starts before the old one is let go (the
--- | legato a GATE over 100% asks for, without portamento). A fixed-length
+-- | first. Then the next note cuts it, a gap ahead, and strikes: every plain
+-- | note gets its own gate, so a pinged Plaits is pinged for each (AC,
+-- | 2026-10-10). Legato is the GLIDE cell's alone; a GATE over 100% only
+-- | lengthens a note that a rest follows. A fixed-length
 -- | note would end on its own clock instead, and with GATE over 100% its
 -- | note-off landed after the next note-on: a repeated pitch was cut 41 ms in,
 -- | and Yarns fell back to stale held notes (AC, 2026-10-10, "wildly wrong").
@@ -122,7 +123,7 @@ playStep routing s =
       -- now), or still sounding under it (this note cuts it)
       { ended, cut } = case join (acc.sounding !! v) of
         Just so
-          | so.untilMs <= s.nowMs + at -> { ended: noteOffs routing v so.pitch (min (so.untilMs - s.nowMs) (at - apartMs)), cut: Nothing }
+          | so.untilMs <= s.nowMs + at -> { ended: noteOffs routing v so.pitch (min (so.untilMs - s.nowMs) (at - retriggerGapMs)), cut: Nothing }
           | otherwise -> { ended: [], cut: Just so.pitch }
         Nothing -> { ended: [], cut: Nothing }
       one = { pitch: f.pitch, velocity: n.velocity, glide: f.glide, ratchet: f.ratchet
@@ -272,10 +273,8 @@ lineLegSends n leg = case n.prev of
       <> [ NoteOff { port, channel, note: q, atMs: t + overlap } ]
   -- a fresh note: portamento off; held into the next if it glides
   Nothing -> case n.cut of
-    -- the same pitch still sounding: let it go, then strike again
-    Just c | c == n.pitch -> [ porta 0, NoteOff { port, channel, note: c, atMs: t - apartMs } ] <> fresh
-    -- another pitch still sounding: the new one first, legato, then let go
-    Just c -> [ porta 0 ] <> fresh <> [ NoteOff { port, channel, note: c, atMs: t + apartMs } ]
+    -- a note still sounding: let it go a gap ahead, then strike
+    Just c -> [ porta 0, NoteOff { port, channel, note: c, atMs: t - retriggerGapMs } ] <> fresh
     Nothing -> [ porta 0 ] <> fresh
   where
   on at = NoteOn { port, channel, note: n.pitch, velocity: n.velocity, atMs: at }
@@ -298,14 +297,14 @@ lineLegSends n leg = case n.prev of
   -- mono synth would fall back to the held pitch when the new note ended
   overlap = if n.glide then slideMs else min slideMs (n.gateMs / 2.0)
 
--- | How far apart a note-off and a note-on are put when they would otherwise
--- | share a moment. Two events stamped alike reach the synth in either order
--- | (measured through the AUDIO4c, 2026-10-10): an off arriving after the on
--- | it meant to precede kills the new note at once, a grainy blip. So a
--- | repeated pitch is let go this much before it is struck again, and a
--- | legato note's predecessor this much after.
-apartMs :: Number
-apartMs = 1.0
+-- | How long a line's gate is down between a note cut short and the next.
+-- | Never zero: two events stamped alike reach the synth in either order
+-- | (measured through the AUDIO4c, 2026-10-10), and an off arriving after the
+-- | on it meant to precede kills the new note at once, a grainy blip. And
+-- | long enough that a mono synth's gate visibly drops, so the next note is
+-- | struck, not slurred.
+retriggerGapMs :: Number
+retriggerGapMs = 3.0
 
 -- | A note's hits: one for its gate, or `ratchet` evenly spaced in it, each
 -- | sounding 85% of its slot. A glide is one sustained event, so it is never
