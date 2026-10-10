@@ -16,7 +16,7 @@ import Data.Maybe (Maybe(..))
 import Reef.Vetula.Perf (wrapAt)
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Routing as Routing
-import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -201,6 +201,10 @@ main = do
   assertEqual' "Odonus heads-pattern golden (followHeads, 80 steps)"
     { actual: headsRun, expected: headsGolden }
   log "Reef Odonus heads-pattern golden: OK"
+  -- How a voice's notes are played down every kind of leg (Reef.Articulation).
+  assertEqual' "Articulation golden (legato, slides, ES-9 lines, triggers, Rample)"
+    { actual: articulationRun, expected: articulationGolden }
+  log "Reef articulation golden: OK"
   -- Scales by name: the scale follows the host-sampled pattern of names,
   -- holds through a rest, yields to a hand on the scale, and lets go back
   -- to the authored scale. SetScalePattern crosses the wire codec.
@@ -314,9 +318,10 @@ main = do
   log "Reef harmony routes golden: OK"
   -- A voice's routing: every leg of the voice carries the note it is given.
   let
-    vr = { voices: [ [ { port: "IAC Driver Tidal", channel: 1, note: -1, offsetMs: 0.0, rample: [] }
-                     , { port: "FH-2", channel: 1, note: -1, offsetMs: 2.0, rample: [] } ]
-                   , [] ] }
+    vr = { voices: [ [ { port: "IAC Driver Tidal", channel: 1, note: -1, offsetMs: 0.0, rample: [], line: true }
+                     , { port: "FH-2", channel: 1, note: -1, offsetMs: 2.0, rample: [], line: false } ]
+                   , [] ]
+         , lines: [] }
     hit = { note: 60, velocity: 100, atMs: 0.0, durMs: 120.0, stepMs: 125.0 }
   assert' "Voice routing: both legs of voice 0, nothing from voice 1"
     ( Routing.voiceRoutingSends vr 0 hit ==
@@ -2267,3 +2272,18 @@ headsGolden = """  1 | h0 p50 d1 r1 v100
  78 | h0 p80 d1 r1 v100
  79 | h0 p82 d1 r1 v100
  80 | h0 p48 d1 r1 v100"""
+
+-- | The frozen golden for `articulationRun` (conformance/articulation-golden.txt).
+articulationGolden :: String
+articulationGolden = """   0 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 48 v100 @0 d112500  note FH-2/3 48 v100 @1500 d112500  slew 8=99 lag5 @0  pulse 9=500 d112500 @2000  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000 | held -,-
+   1 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 51 v100 @0 d112500  note FH-2/3 51 v100 @1500 d112500  slew 8=124 lag5 @0  pulse 9=500 d112500 @2000 | held -,-
+   2 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 53 v100 @0  note FH-2/3 53 v100 @1500 d112500  slew 8=140 lag5 @0  cv 9=500 @0  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000 | held 53,50
+   3 | cc AUDIO4c USB2/1 65=127 @0  note AUDIO4c USB2/1 55 v100 @0 d112500  off AUDIO4c USB2/1 53 @56250  note FH-2/3 55 v100 @1500 d112500  slew 8=157 lag20 @0  pulse 9=500 d112500 @0  cc Rample/2 14=20 @-40000  note Rample/2 61 v100 @0 d225000 | held -,-
+   4 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 55 v100 @0  note FH-2/3 55 v100 @1500 d112500  slew 8=157 lag5 @0  cv 9=500 @0 | held 55,-
+   5 | note FH-2/3 55 v100 @1500 d112500  cv 9=500 @0 | held 55,-
+   6 | cc AUDIO4c USB2/1 65=127 @0  on AUDIO4c USB2/1 58 v100 @0  off AUDIO4c USB2/1 55 @60000  note FH-2/3 58 v100 @1500 d112500  slew 8=182 lag20 @0  cv 9=500 @0 | held 58,-
+   7 | off AUDIO4c USB2/1 58 @0  cv 9=0 @0 | held -,-
+   8 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 48 v100 @0 d31875  note AUDIO4c USB2/1 48 v100 @37500 d31875  note AUDIO4c USB2/1 48 v100 @75000 d31875  note FH-2/3 48 v100 @1500 d112500  slew 8=99 lag5 @0  pulse 9=500 d112500 @2000  cc Rample/2 14=99 @-40000  note Rample/2 61 v100 @0 d95625  note Rample/2 61 v100 @112500 d95625 | held -,-
+   9 | cc AUDIO4c USB2/1 65=0 @0  note AUDIO4c USB2/1 50 v100 @0 d112500  note FH-2/3 50 v100 @1500 d112500  slew 8=115 lag5 @0  pulse 9=500 d112500 @2000  cc AUDIO4c USB2/1 65=0 @62500  on AUDIO4c USB2/1 52 v100 @62500  note FH-2/3 52 v100 @64000 d112500  slew 8=132 lag5 @62500  cv 9=500 @62500 | held 52,-
+  10 | - | held 52,-
+stop | off AUDIO4c USB2/1 52 @0  cv 9=0 @0"""

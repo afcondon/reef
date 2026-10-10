@@ -48,6 +48,20 @@ echo "== chordRun (32-step chord-quantised render): node vs erl =="
 diff /tmp/reef-chord-node.txt /tmp/reef-chord-erl.txt && echo "  \u2705 chordRun node == erl (chord-quantise render identical over 32 steps)"
 diff "$CHORD_GOLDEN" /tmp/reef-chord-node.txt && echo "  \u2705 chordRun matches frozen golden"
 
+# --- how a voice's notes are played (Reef.Conformance.articulationRun) -------
+# Legato, slides, ties, ratchets, triggers, a Rample and an ES-9 line, through
+# the codec: what the rig sends for a melodic voice, as the page would.
+ART_GOLDEN="$REEF/conformance/articulation-golden.txt"
+echo "== articulationRun (legato and ES-9 lines): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { articulationRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(articulationRun);' \
+  ) > /tmp/reef-art-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':articulationRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-art-erl.txt
+diff /tmp/reef-art-node.txt /tmp/reef-art-erl.txt && echo "  ✅ articulationRun node == erl"
+diff "$ART_GOLDEN" /tmp/reef-art-node.txt && echo "  ✅ articulationRun matches frozen golden"
+
 # --- heads as a Tidal pattern (Reef.Conformance.headsRun) --------------------
 # Which heads play, sampled each step (a stub stands in for Littorina), the
 # SetHeadsPattern and each SetSampled across the wire codec, 80 steps.

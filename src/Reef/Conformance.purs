@@ -35,6 +35,7 @@ module Reef.Conformance
   , balistesInputRun, balistesInputSteps
   , fixedRun, fixedRunSteps
   , routingRun
+  , articulationRun
   , vetulaRun, vetulaRunSteps
   , vetulaMidiRun
   , chordRun
@@ -73,12 +74,14 @@ import Reef.Move as Move
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round, toNumber)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Tuple (Tuple(..))
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
 import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed) as BSim
 import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
 import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
-import Reef.Routing (DrumRouting, Send(..), decodeDrumRouting, drumSends, encodeDrumRouting) as RR
+import Reef.Routing (DrumRouting, Send(..), VoiceRouting, decodeDrumRouting, decodeVoiceRouting, drumSends, encodeDrumRouting, encodeVoiceRouting) as RR
+import Reef.Articulation as Art
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, setHeadClock, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, sampleInput, stepTick)
@@ -924,10 +927,10 @@ routingTestTable =
       ]
   }
   where
-  midi port channel note offsetMs = { port, channel, note, offsetMs, rample: [] }
+  midi port channel note offsetMs = { port, channel, note, offsetMs, rample: [], line: false }
   voice s n begin end speed gain orbit chop offsetMs = { s, n, begin, end, speed, gain, orbit, chop, offsetMs }
   rample port channel voice slots pitchOfSlot0 settleMs =
-    { port, channel, note: 60 + voice, offsetMs: 0.0, rample: [ { voice, slots, pitchOfSlot0, settleMs } ] }
+    { port, channel, note: 60 + voice, offsetMs: 0.0, rample: [ { voice, slots, pitchOfSlot0, settleMs } ], line: false }
 
 -- | The drum routing net. The table is round-tripped THROUGH the codec, then
 -- | every hit is resolved by the shared `drumSends`: each kit note, one outside
@@ -949,17 +952,89 @@ routingRun = case RR.decodeDrumRouting (RR.encodeDrumRouting routingTestTable) o
     , { note: 44, velocity: 1, atMs: 0.0, durMs: 20.0, stepMs: 125.0 }
     , { note: 70, velocity: 100, atMs: 0.0, durMs: 20.0, stepMs: 125.0 }
     ]
-  sends xs = if null xs then "-" else intercalate "  " (map one xs)
-  one = case _ of
-    RR.Note n -> "note " <> n.port <> "/" <> show n.channel <> " " <> show n.note <> " v" <> show n.velocity
-      <> " @" <> micro n.atMs <> " d" <> micro n.durMs
-    RR.Control c -> "cc " <> c.port <> "/" <> show c.channel <> " " <> show c.controller <> "=" <> show c.value
-      <> " @" <> micro c.atMs
-    RR.Play p -> "play " <> p.s <> ":" <> show p.n <> " o" <> show p.orbit
-      <> " [" <> micro p.begin <> "," <> micro p.end <> "] x" <> micro p.speed
-      <> " g" <> micro p.gain <> " a" <> micro p.amp <> " @" <> micro p.atMs
-  -- Rounded to whole microseconds: purerl and JS `show` a Number differently.
-  micro ms = show (round (ms * 1000.0))
+  sends xs = if null xs then "-" else intercalate "  " (map sendText xs)
+
+-- | One send as the routing and articulation goldens print it. Times and
+-- | fractions are rounded to whole thousandths (`micro`): purerl and JS `show`
+-- | a Number differently.
+sendText :: RR.Send -> String
+sendText = case _ of
+  RR.Note n -> "note " <> n.port <> "/" <> show n.channel <> " " <> show n.note <> " v" <> show n.velocity
+    <> " @" <> micro n.atMs <> " d" <> micro n.durMs
+  RR.Control c -> "cc " <> c.port <> "/" <> show c.channel <> " " <> show c.controller <> "=" <> show c.value
+    <> " @" <> micro c.atMs
+  RR.Play p -> "play " <> p.s <> ":" <> show p.n <> " o" <> show p.orbit
+    <> " [" <> micro p.begin <> "," <> micro p.end <> "] x" <> micro p.speed
+    <> " g" <> micro p.gain <> " a" <> micro p.amp <> " @" <> micro p.atMs
+  RR.NoteOn n -> "on " <> n.port <> "/" <> show n.channel <> " " <> show n.note <> " v" <> show n.velocity
+    <> " @" <> micro n.atMs
+  RR.NoteOff n -> "off " <> n.port <> "/" <> show n.channel <> " " <> show n.note <> " @" <> micro n.atMs
+  RR.CvSet c -> "cv " <> show c.bus <> "=" <> micro c.value <> " @" <> micro c.atMs
+  RR.CvSlew c -> "slew " <> show c.bus <> "=" <> micro c.value <> " lag" <> micro c.lagSec <> " @" <> micro c.atMs
+  RR.CvPulse c -> "pulse " <> show c.bus <> "=" <> micro c.value <> " d" <> micro c.durMs <> " @" <> micro c.atMs
+  where
+  micro x = show (round (x * 1000.0))
+
+-- ── 7⅞. the articulation net (how a voice's notes are played) ───────────────
+
+-- | A voice routing with every kind of leg a melodic voice can have: on voice
+-- | 0, a MIDI line (a synth), an FH-2 envelope (a trigger) and an ES-9 line
+-- | with a calibration table and a gate; on voice 1, a Rample. Round-tripped
+-- | through the codec first.
+articulationTestRouting :: RR.VoiceRouting
+articulationTestRouting =
+  { voices:
+      [ [ { port: "AUDIO4c USB2", channel: 1, note: -1, offsetMs: 0.0, rample: [], line: true }
+        , { port: "FH-2", channel: 3, note: -1, offsetMs: 1.5, rample: [], line: false } ]
+      , [ { port: "Rample", channel: 2, note: 61, offsetMs: 0.0, line: false
+          , rample: [ { voice: 1, slots: 16, pitchOfSlot0: 48, settleMs: 40 } ] } ]
+      ]
+  , lines:
+      [ [ { pitchBus: 8, gateBus: [ 9 ]
+          , table: [ { label: "tona", points: [ { volts: 0.0, hz: 65.4 }, { volts: 1.0, hz: 131.8 }, { volts: 2.0, hz: 265.0 }, { volts: 3.0, hz: 528.0 } ] } ] } ]
+      , [] ]
+  }
+
+-- | A script of steps through the legato machine: plain notes, a slide (a
+-- | glide cell into a plain one), a run of glides, a tie, a ratchet, a note
+-- | half a step in (a fast head's second tick), a voice muted while it holds
+-- | a slide, and a stop with a note held. Each step prints its sends and the
+-- | held notes after it. Byte-identical node ↔ BEAM = the rig plays a line
+-- | as the page does, slides included.
+articulationRun :: String
+articulationRun = case RR.decodeVoiceRouting (RR.encodeVoiceRouting articulationTestRouting) of
+  Left errs -> "ARTICULATION-DECODE-FAIL: " <> show errs
+  Right routing ->
+    let
+      final = foldl (step routing) { held: [ Nothing, Nothing ], out: [] } (mapWithIndex Tuple script)
+      stop = Art.releaseAll routing final.held
+    in
+      intercalate "\n" (final.out <> [ "stop | " <> sendsText stop ])
+  where
+  step routing acc (Tuple i { notes, muted }) =
+    let
+      r = Art.playStep routing
+        { odo: defaultOdonus, stepMs: 125.0, held: acc.held, newlyMuted: muted
+        , notes: map (\n -> { fired: n, velocity: n.vel }) notes }
+    in
+      { held: r.held
+      , out: acc.out <> [ pad4 i <> " | " <> sendsText r.sends <> " | held " <> intercalate "," (map (maybe "-" show) r.held) ] }
+  sendsText xs = if null xs then "-" else intercalate "  " (map sendText xs)
+  fired h p glide ratchet offNum offDen =
+    { headIdx: h, pitch: p, glide, dur: 1, ratchet, vel: 100, offNum, offDen }
+  script =
+    [ { notes: [ fired 0 48 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [] }   -- plain
+    , { notes: [ fired 0 51 false 1 0 8 ], muted: [] }                          -- plain again: retrigger
+    , { notes: [ fired 0 53 true 1 0 8, fired 1 50 true 1 0 8 ], muted: [] }    -- glide: held
+    , { notes: [ fired 0 55 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [] }  -- slid into; Rample tie
+    , { notes: [ fired 0 55 true 1 0 8 ], muted: [] }                           -- glide
+    , { notes: [ fired 0 55 true 1 0 8 ], muted: [] }                           -- tie, still held
+    , { notes: [ fired 0 58 true 1 0 8 ], muted: [] }                           -- glide into glide
+    , { notes: [], muted: [ 0 ] }                                               -- muted while held
+    , { notes: [ fired 0 48 false 3 0 8, fired 1 60 false 2 0 8 ], muted: [] }  -- ratchets
+    , { notes: [ fired 0 50 false 1 0 16, fired 0 52 true 1 8 16 ], muted: [] } -- two ticks, the second held
+    , { notes: [ fired 1 80 false 1 0 8 ], muted: [] }                          -- off the Rample's card
+    ]
 
 -- ── 8. the Vetula performance-scheduler net (Vetula lockstep V1) ──────────────
 

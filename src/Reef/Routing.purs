@@ -17,10 +17,16 @@
 -- | whose pitch selects the jack, an FH-2 envelope is a note on channel =
 -- | envelope. A **voice** leg plays a sample through SuperDirt: rig only,
 -- | since a browser cannot send OSC, so in Local mode a lane plays its MIDI
--- | legs and not its voice. The ES-9 kinds are not here; nothing sends them.
+-- | legs and not its voice.
+-- |
+-- | **ES-9 lines** (2026-10-10, docs/kb/plans/hardware-through-the-rig.md):
+-- | a melodic voice may also drive a pitch CV and a gate on the ES-9, played
+-- | by the rig through es9-daemon. What a note sends down each kind, legato
+-- | and slides included, is `Reef.Articulation`'s.
 module Reef.Routing
   ( RampleLeg
   , Leg
+  , CvLine
   , VoiceLeg
   , DrumRouting
   , Hit
@@ -42,6 +48,7 @@ import Data.Either (Either)
 import Data.Int (toNumber)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Foreign (MultipleErrors)
+import Reef.Calibration (Table)
 import Reef.Rample as Rample
 import Simple.JSON (readJSON, writeJSON)
 
@@ -63,6 +70,10 @@ type RampleLeg =
 -- | - `note`: what the leg sends, or below 0 for the hit's own note. An FH-2
 -- |   gate sends its selector; a Rample, its trigger.
 -- | - `offsetMs`: the per-leg trim, so a doubled kick does not flam.
+-- | - `line`: whether legato means anything here (a synth, the continuo), as
+-- |   against a TRIGGER fired once per note (an FH-2 envelope or gate, a
+-- |   Rample). An FH-2 envelope resolves to the note it is given, as a synth
+-- |   does, so only this says it must not be tied or slid.
 -- | - `rample`: at most one. An array, not a `Maybe`, for the reason
 -- |   `Reef.Conspicillum.Protocol` gives: null round-trips through V8 and jsx
 -- |   in ways that agree until one day they do not.
@@ -72,6 +83,17 @@ type Leg =
   , note :: Int
   , offsetMs :: Number
   , rample :: Array RampleLeg
+  , line :: Boolean
+  }
+
+-- | A mono pitch line on the ES-9: the note as a calibrated voltage on
+-- | `pitchBus`, and a gate on `gateBus` (none when empty), es9-daemon's bus
+-- | numbers. `table` is the oscillator's calibration (none: a nominal 1 V/oct
+-- | from C2), carried in the routing so the rig needs no lookup of its own.
+type CvLine =
+  { pitchBus :: Int
+  , gateBus :: Array Int
+  , table :: Array Table
   }
 
 -- | A sample voice, as one leg of a lane: a sample of a SuperDirt bank (`s` is
@@ -118,6 +140,18 @@ data Send
   -- | goes through a fourth power, and matching that would take a `pow`, which
   -- | JS and the BEAM do not agree on to the last bit.
   | Play { s :: String, n :: Int, begin :: Number, end :: Number, speed :: Number, gain :: Number, amp :: Number, orbit :: Int, atMs :: Number }
+  -- | A note held until its `NoteOff`: legato needs the two apart, since a
+  -- | held note's end is not known when it starts.
+  | NoteOn { port :: String, channel :: Int, note :: Int, velocity :: Int, atMs :: Number }
+  | NoteOff { port :: String, channel :: Int, note :: Int, atMs :: Number }
+  -- | An ES-9 bus set to `value` (−1..1 is ±10 V), at once.
+  | CvSet { bus :: Int, value :: Number, atMs :: Number }
+  -- | An ES-9 bus moved to `value` through es9-daemon's smoother, whose lag
+  -- | (a time constant, in seconds) stays on the bus until set again.
+  | CvSlew { bus :: Int, value :: Number, lagSec :: Number, atMs :: Number }
+  -- | A pulse at `value` for `durMs`, then back to 0, timed by es9-daemon to
+  -- | the sample.
+  | CvPulse { bus :: Int, value :: Number, durMs :: Number, atMs :: Number }
 
 derive instance eqSend :: Eq Send
 
@@ -184,11 +218,12 @@ encodeDrumRouting = writeJSON
 decodeDrumRouting :: String -> Either MultipleErrors DrumRouting
 decodeDrumRouting = readJSON
 
--- | **A melodic machine's voices** (Odonus's four heads; later Vetula's), each
--- | with its live MIDI legs, resolved as the drum lanes' are. A voice is a
--- | stream: every leg carries the note it is given (or its own, for a gate or
--- | a Rample trigger), so there is no lane to find, only the voice's index.
-type VoiceRouting = { voices :: Array (Array Leg) }
+-- | **A melodic machine's voices** (Odonus's four heads; Vetula's sixteen
+-- | cards), each with its live MIDI legs, resolved as the drum lanes' are, and
+-- | its ES-9 lines. A voice is a stream: every leg carries the note it is
+-- | given (or its own, for a gate or a Rample trigger), so there is no lane to
+-- | find, only the voice's index.
+type VoiceRouting = { voices :: Array (Array Leg), lines :: Array (Array CvLine) }
 
 -- | What one note of voice `i` sends, down every leg of that voice. A voice
 -- | with no legs (or past the table) sends nothing.
