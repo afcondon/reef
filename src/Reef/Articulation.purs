@@ -122,7 +122,7 @@ playStep routing s =
       -- now), or still sounding under it (this note cuts it)
       { ended, cut } = case join (acc.sounding !! v) of
         Just so
-          | so.untilMs <= s.nowMs + at -> { ended: noteOffs routing v so.pitch (so.untilMs - s.nowMs), cut: Nothing }
+          | so.untilMs <= s.nowMs + at -> { ended: noteOffs routing v so.pitch (min (so.untilMs - s.nowMs) (at - apartMs)), cut: Nothing }
           | otherwise -> { ended: [], cut: Just so.pitch }
         Nothing -> { ended: [], cut: Nothing }
       one = { pitch: f.pitch, velocity: n.velocity, glide: f.glide, ratchet: f.ratchet
@@ -273,9 +273,9 @@ lineLegSends n leg = case n.prev of
   -- a fresh note: portamento off; held into the next if it glides
   Nothing -> case n.cut of
     -- the same pitch still sounding: let it go, then strike again
-    Just c | c == n.pitch -> [ porta 0, NoteOff { port, channel, note: c, atMs: t } ] <> fresh
+    Just c | c == n.pitch -> [ porta 0, NoteOff { port, channel, note: c, atMs: t - apartMs } ] <> fresh
     -- another pitch still sounding: the new one first, legato, then let go
-    Just c -> [ porta 0 ] <> fresh <> [ NoteOff { port, channel, note: c, atMs: t } ]
+    Just c -> [ porta 0 ] <> fresh <> [ NoteOff { port, channel, note: c, atMs: t + apartMs } ]
     Nothing -> [ porta 0 ] <> fresh
   where
   on at = NoteOn { port, channel, note: n.pitch, velocity: n.velocity, atMs: at }
@@ -297,6 +297,15 @@ lineLegSends n leg = case n.prev of
   -- the overlap that makes it a slide, kept inside a short note's gate, or a
   -- mono synth would fall back to the held pitch when the new note ended
   overlap = if n.glide then slideMs else min slideMs (n.gateMs / 2.0)
+
+-- | How far apart a note-off and a note-on are put when they would otherwise
+-- | share a moment. Two events stamped alike reach the synth in either order
+-- | (measured through the AUDIO4c, 2026-10-10): an off arriving after the on
+-- | it meant to precede kills the new note at once, a grainy blip. So a
+-- | repeated pitch is let go this much before it is struck again, and a
+-- | legato note's predecessor this much after.
+apartMs :: Number
+apartMs = 1.0
 
 -- | A note's hits: one for its gate, or `ratchet` evenly spaced in it, each
 -- | sounding 85% of its slot. A glide is one sustained event, so it is never
