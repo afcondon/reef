@@ -6,7 +6,7 @@ module Test.Main (main) where
 
 import Prelude
 
-import Data.Array (filter, mapWithIndex, range, take)
+import Data.Array (filter, length, mapWithIndex, range, take)
 import Data.Either (Either(..), hush)
 import Data.Int (toNumber)
 import Data.Int as Int
@@ -331,6 +331,18 @@ main = do
   assertEqual' "Voice routing round-trips its codec"
     { actual: map Routing.encodeVoiceRouting (hush (Routing.decodeVoiceRouting (Routing.encodeVoiceRouting vr)))
     , expected: Just (Routing.encodeVoiceRouting vr) }
+  -- A routing written by a page from before legs said whether they are lines
+  -- (a tab left open across the change) still reads: a voice leg is a line,
+  -- a drum leg a trigger, and there are no ES-9 lines or instruments.
+  let oldLeg = """{"rample":[],"port":"IAC Driver Tidal","offsetMs":0,"note":-1,"channel":1}"""
+  assertEqual' "An older page's voice routing still decodes"
+    { actual: map (\r -> { line: map _.line (join r.voices), extra: length r.lines + length r.polys + length r.samplers })
+                (hush (Routing.decodeVoiceRouting ("{\"voices\":[[" <> oldLeg <> "]]}")))
+    , expected: Just { line: [ true ], extra: 0 } }
+  assertEqual' "An older page's drum routing still decodes"
+    { actual: map (\r -> map _.line (join r.lanes))
+                (hush (Routing.decodeDrumRouting ("{\"notes\":[36],\"lanes\":[[" <> oldLeg <> "]],\"voices\":[[]]}")))
+    , expected: Just [ false ] }
   log "Reef voice routing: OK"
   -- The Vetula performance-scheduler net (Vetula lockstep V1). A representative
   -- performance (one progression fanned to voices with different per-chord dwell

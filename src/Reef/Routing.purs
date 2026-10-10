@@ -217,8 +217,28 @@ drumSends routing hit = case findIndex (_ == hit.note) routing.notes of
 encodeDrumRouting :: DrumRouting -> String
 encodeDrumRouting = writeJSON
 
+-- | A drum routing as written, by this page or an older one: a leg written
+-- | before legs said whether they are lines is a trigger, as every drum is.
 decodeDrumRouting :: String -> Either MultipleErrors DrumRouting
-decodeDrumRouting = readJSON
+decodeDrumRouting s = do
+  w :: { notes :: Array Int, lanes :: Array (Array LegWire), voices :: Array (Array VoiceLeg) } <- readJSON s
+  pure { notes: w.notes, lanes: map (map (legOf false)) w.lanes, voices: w.voices }
+
+-- | A leg as the wire carries it: `line` may be missing, from a page loaded
+-- | before legs said (2026-10-10), so a tab left open writes what the rig can
+-- | still read.
+type LegWire =
+  { port :: String
+  , channel :: Int
+  , note :: Int
+  , offsetMs :: Number
+  , rample :: Array RampleLeg
+  , line :: Maybe Boolean
+  }
+
+legOf :: Boolean -> LegWire -> Leg
+legOf dflt w = { port: w.port, channel: w.channel, note: w.note, offsetMs: w.offsetMs, rample: w.rample
+               , line: fromMaybe dflt w.line }
 
 -- | A polyphonic instrument on the ES-9, its voices chosen by an allocator
 -- | (`Reef.Voices`) shared by every head routed to it: `instrument` names the
@@ -270,5 +290,16 @@ voiceRoutingSends routing i hit = concatMap (\leg -> legSends leg hit) (fromMayb
 encodeVoiceRouting :: VoiceRouting -> String
 encodeVoiceRouting = writeJSON
 
+-- | A voice routing as written, by this page or an older one: a leg without
+-- | `line` is a line (a melodic voice's legs were notes), and a routing
+-- | without ES-9 lines or instruments has none.
 decodeVoiceRouting :: String -> Either MultipleErrors VoiceRouting
-decodeVoiceRouting = readJSON
+decodeVoiceRouting s = do
+  w :: { voices :: Array (Array LegWire), lines :: Maybe (Array (Array CvLine))
+       , polys :: Maybe (Array Es9Poly), samplers :: Maybe (Array Sampler) } <- readJSON s
+  pure
+    { voices: map (map (legOf true)) w.voices
+    , lines: fromMaybe [] w.lines
+    , polys: fromMaybe [] w.polys
+    , samplers: fromMaybe [] w.samplers
+    }
