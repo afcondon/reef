@@ -27,6 +27,8 @@ module Reef.Routing
   ( RampleLeg
   , Leg
   , CvLine
+  , Es9Poly
+  , Sampler
   , VoiceLeg
   , DrumRouting
   , Hit
@@ -218,12 +220,47 @@ encodeDrumRouting = writeJSON
 decodeDrumRouting :: String -> Either MultipleErrors DrumRouting
 decodeDrumRouting = readJSON
 
+-- | A polyphonic instrument on the ES-9, its voices chosen by an allocator
+-- | (`Reef.Voices`) shared by every head routed to it: `instrument` names the
+-- | profile (`saich`, `rings`), `heads` the voices that feed it, `byPitch`
+-- | the seating, then where its voices and its one control jack are, as
+-- | es9-daemon buses, and each voice's calibration (none: nominal).
+type Es9Poly =
+  { instrument :: String
+  , heads :: Array Int
+  , byPitch :: Boolean
+  , voiceBuses :: Array Int
+  , gateBuses :: Array Int
+  , ctrlBus :: Int
+  , tables :: Array (Array Table)
+  }
+
+-- | A sampler whose voices are chosen by an allocator: the Rample played as
+-- | one instrument, each note a slice (`pitchOfSlot0` up, `slots` of them)
+-- | struck on whichever of its voices is free, `triggers` being each voice's
+-- | trigger note on `port`/`channel`.
+type Sampler =
+  { heads :: Array Int
+  , port :: String
+  , channel :: Int
+  , triggers :: Array Int
+  , slots :: Int
+  , pitchOfSlot0 :: Int
+  }
+
 -- | **A melodic machine's voices** (Odonus's four heads; Vetula's sixteen
 -- | cards), each with its live MIDI legs, resolved as the drum lanes' are, and
 -- | its ES-9 lines. A voice is a stream: every leg carries the note it is
 -- | given (or its own, for a gate or a Rample trigger), so there is no lane to
 -- | find, only the voice's index.
-type VoiceRouting = { voices :: Array (Array Leg), lines :: Array (Array CvLine) }
+-- | Beside them, the instruments that allocate across voices: `polys` on the
+-- | ES-9 and `samplers` over MIDI.
+type VoiceRouting =
+  { voices :: Array (Array Leg)
+  , lines :: Array (Array CvLine)
+  , polys :: Array Es9Poly
+  , samplers :: Array Sampler
+  }
 
 -- | What one note of voice `i` sends, down every leg of that voice. A voice
 -- | with no legs (or past the table) sends nothing.

@@ -27,6 +27,9 @@ module Reef.Articulation
   , StepIn
   , playStep
   , releaseAll
+  , plainSends
+  , newlyMuted
+  , polyStates
   , slideMs
   , gateVolts
   , normalise
@@ -35,25 +38,36 @@ module Reef.Articulation
 
 import Prelude
 
-import Data.Array (concatMap, foldl, head, length, null, range, updateAt, (!!))
+import Data.Array (catMaybes, concat, concatMap, drop, elem, take, filter, foldl, groupAllBy, head, length, mapWithIndex, null, range, updateAt, zipWith, (!!))
+import Data.Array.NonEmpty as NEA
 import Data.Int (toNumber)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Reef.Calibration (realiseNote)
 import Reef.Odonus (Fired, Odonus)
 import Reef.Rample as Rample
 import Reef.Render (gateMs, subOffsetMs)
-import Reef.Routing (CvLine, Leg, Send(..), VoiceRouting)
+import Reef.Routing (CvLine, Es9Poly, Leg, Sampler, Send(..), VoiceRouting)
+import Reef.Voices as RV
 
--- | What a step played, and what each voice holds after it.
-type Played = { sends :: Array Send, held :: Array (Maybe Int) }
+-- | What a step played, what each voice holds after it, and each
+-- | polyphonic instrument's allocator (`polys` then `samplers`, in the
+-- | routing's order).
+type Played = { sends :: Array Send, held :: Array (Maybe Int), polys :: Array RV.Voices }
 
 -- | One model step: the model after it (for note lengths), the step's length
 -- | in ms, what each voice held before it, the voices just muted (their held
 -- | notes are let go first), and the notes fired, each with its velocity (the
 -- | page adds accent and humanise; the rig plays the cell's own).
+-- | `nowMs` is the step's onset on any steady clock (the rig's wall time, the
+-- | page's): an allocator remembers when its notes end, across steps, so it
+-- | works in absolute time, and its decisions come back relative to the step.
+-- | `polys` are the allocators as the last step left them (`polyStates` to
+-- | start, or when the routing's instruments change).
 type StepIn =
   { odo :: Odonus
   , stepMs :: Number
+  , nowMs :: Number
+  , polys :: Array RV.Voices
   , held :: Array (Maybe Int)
   , newlyMuted :: Array Int
   , notes :: Array { fired :: Fired, velocity :: Int }
@@ -63,7 +77,14 @@ type StepIn =
 -- | step's onset; and each voice's held note after it.
 playStep :: VoiceRouting -> StepIn -> Played
 playStep routing s =
-  foldl note released s.notes
+  let
+    voiced = foldl note released s.notes
+    timed = map (\n -> { headIdx: n.fired.headIdx, pitch: n.fired.pitch, velocity: n.velocity
+                        , atMs: subOffsetMs s.stepMs n.fired, gateMs: gateMs s.odo s.stepMs n.fired }) s.notes
+    poly = playPolys routing s.nowMs timed
+      (if length s.polys == length routing.polys + length routing.samplers then s.polys else polyStates routing)
+  in
+    { sends: voiced.sends <> poly.sends, held: voiced.held, polys: poly.states }
   where
   released = foldl
     (\acc v -> { sends: acc.sends <> releaseVoice routing v (join (acc.held !! v)) 0.0
@@ -84,12 +105,29 @@ playStep routing s =
       { sends: acc.sends <> voiceSends routing v one
       , held: fromMaybe acc.held (updateAt v next acc.held) }
 
--- | Let every voice go: what a stop sends, so no held note or open gate
--- | outlives the transport.
-releaseAll :: VoiceRouting -> Array (Maybe Int) -> Array Send
-releaseAll routing held =
+-- | Let every voice go: what a stop sends, so no held note, open gate or
+-- | sounding allocated voice outlives the transport.
+releaseAll :: VoiceRouting -> Array (Maybe Int) -> Array RV.Voices -> Array Send
+releaseAll routing held polys =
   concatMap (\v -> releaseVoice routing v (join (held !! v)) 0.0)
     (range 0 (max (length routing.voices) (length routing.lines) - 1))
+    <> concat (zipWith (\p v -> polySends p 0.0 0.0 (RV.allOff 0.0 v).emits) routing.polys (take (length routing.polys) polys))
+
+-- | One note played as itself, held into nothing: what a replayed loop sends
+-- | for each recorded note (it kept the notes, not their slides). Every leg
+-- | and line of voice `v`, as a fresh note.
+plainSends :: VoiceRouting -> Int -> { pitch :: Int, velocity :: Int, gateMs :: Number, atMs :: Number } -> Array Send
+plainSends routing v n =
+  voiceSends routing v { pitch: n.pitch, velocity: n.velocity, glide: false, ratchet: 1
+                       , gateMs: n.gateMs, atMs: n.atMs, prev: Nothing }
+
+-- | The heads muted between two states of the model: what was playing and is
+-- | now silent, whose held notes must be let go.
+newlyMuted :: Odonus -> Odonus -> Array Int
+newlyMuted before after =
+  catMaybes (mapWithIndex (\i h -> if h.mute && not (wasMuted i) then Just i else Nothing) after.heads)
+  where
+  wasMuted i = maybe true _.mute (before.heads !! i)
 
 type Note =
   { pitch :: Int, velocity :: Int, glide :: Boolean, ratchet :: Int
@@ -251,3 +289,117 @@ lineSends n line = pitch <> gates
         -- a fresh note: pitch first, then the gate
         Nothing -> CvPulse { bus, value: high, durMs: n.gateMs, atMs: n.atMs + settleMs }
 
+-- ---------------------------------------------------------------------------
+-- Instruments that allocate across voices
+-- ---------------------------------------------------------------------------
+
+-- | Each instrument's allocator, empty: the ES-9 instruments then the
+-- | samplers, as the routing lists them.
+polyStates :: VoiceRouting -> Array RV.Voices
+polyStates routing =
+  map (\p -> RV.empty (seated p (profileOf p.instrument))) routing.polys
+    <> map (const (RV.empty RV.rample)) routing.samplers
+
+-- | The allocator's profile for an instrument named in the routing.
+profileOf :: String -> RV.Instrument
+profileOf = case _ of
+  "rings" -> RV.rings
+  _ -> RV.saich
+
+-- | How the instrument seats its notes: by pitch when the routing asks, which
+-- | an instrument that allocates for itself ignores (it has one bus, and no
+-- | seating to order).
+seated :: Es9Poly -> RV.Instrument -> RV.Instrument
+seated p inst = case inst.silencing of
+  RV.SelfAllocating _ -> inst
+  _ -> inst { order = if p.byPitch then RV.ByPitch else RV.Arrival }
+
+type Timed = { headIdx :: Int, pitch :: Int, velocity :: Int, atMs :: Number, gateMs :: Number }
+
+-- | One step through every allocator. Elapsed notes are retired first, at the
+-- | step's onset, so a note arriving now can take a voice that just freed;
+-- | then the step's notes in groups by their time in it (a fast head's two
+-- | notes are two chords, not one), each instrument taking the heads routed
+-- | to it.
+playPolys :: VoiceRouting -> Number -> Array Timed -> Array RV.Voices -> { sends :: Array Send, states :: Array RV.Voices }
+playPolys routing nowMs notes states =
+  let
+    -- equal lengths on both sides: the BEAM's zipWith refuses unequal ones
+    es9 = zipWith (\p v -> es9Poly p (v { inst = seated p v.inst })) routing.polys (take (length routing.polys) states)
+    smp = zipWith sampler routing.samplers (drop (length routing.polys) states)
+    all = es9 <> smp
+  in
+    { sends: concatMap _.sends all, states: map _.state all }
+  where
+  groups = map (\g -> { at: (NEA.head g).atMs, notes: NEA.toArray g }) (groupAllBy (comparing _.atMs) notes)
+
+  es9Poly p v0 =
+    let
+      start = RV.expireAt nowMs v0
+      step acc g =
+        let
+          ex = RV.expireAt (nowMs + g.at) acc.v
+          mine = filter (\n -> elem n.headIdx p.heads) g.notes
+          on = foldl (\a n -> let r = RV.noteOn (nowMs + g.at) n.pitch n.gateMs a.v in { v: r.voices, sends: a.sends <> polySends p nowMs (nowMs + g.at) r.emits })
+                 { v: ex.voices, sends: polySends p nowMs (nowMs + g.at) ex.emits } mine
+        in { v: on.v, sends: acc.sends <> on.sends }
+      done = foldl step { v: start.voices, sends: polySends p nowMs nowMs start.emits } groups
+    in { sends: done.sends, state: done.v }
+
+  sampler smp v0 =
+    let
+      layer = { velocity: Nothing, slots: smp.slots, pitchOfSlot0: Just smp.pitchOfSlot0, slotPitches: Nothing }
+      settle = case RV.rample.silencing of
+        RV.PerVoiceStrike ps -> ps.settleMs
+        _ -> 40.0
+      step acc g =
+        let
+          -- a pitch the card does not hold is refused before it can take a voice
+          mine = filter (\n -> elem n.headIdx smp.heads && isJust (Rample.slotFor layer n.pitch)) g.notes
+          start = nowMs + g.at - settle
+          ex = RV.expireAt start acc.v
+          on = foldl (\a n -> let r = RV.noteOn start n.pitch n.gateMs a.v in { v: r.voices, sends: a.sends <> samplerSends smp layer nowMs n r.emits })
+                 { v: ex.voices, sends: [] } mine
+        in { v: on.v, sends: acc.sends <> on.sends }
+      done = foldl step { v: v0, sends: [] } groups
+    in { sends: done.sends, state: done.v }
+
+-- | An ES-9 instrument's decisions as sends, `nowMs` the step's onset and
+-- | `t` the moment they were made. A pitch is set, never slewed: its voice is
+-- | silent or has just ended, so there is nothing to glide from. The voice
+-- | count SLEWS, and that is the note-off envelope: the Saïch's mixer
+-- | crossfades between plateaus over the ramp. A self-allocating instrument's
+-- | strum is a pulse, timed to the sample by es9-daemon.
+polySends :: Es9Poly -> Number -> Number -> Array RV.Emit -> Array Send
+polySends p nowMs t = concatMap \e -> case e.action of
+  RV.Pitch voice note -> case p.voiceBuses !! voice of
+    Just bus -> [ CvSet { bus, value: normalise (voltsFor voice note), atMs: e.atMs - nowMs } ]
+    Nothing -> []
+  RV.Gate voice on -> case p.gateBuses !! voice of
+    Just bus -> [ CvSet { bus, value: normalise (if on then gateVolts else 0.0), atMs: e.atMs - nowMs } ]
+    Nothing -> []
+  RV.Mix _ volts ->
+    [ CvSlew { bus: p.ctrlBus, value: normalise volts, lagSec: max 0.0 (e.atMs - t) / 1000.0, atMs: t - nowMs } ]
+  RV.Trigger _ durMs ->
+    [ CvPulse { bus: p.ctrlBus, value: normalise gateVolts, durMs, atMs: e.atMs - nowMs } ]
+  -- `Es9Poly` has no decay bus yet, so a Rings note is not shaped (as from
+  -- the page before; the gap is the routing's, not this module's)
+  RV.Decay _ _ -> []
+  where
+  voltsFor voice note = case join (map head (p.tables !! voice)) of
+    Just table -> realiseNote table (toNumber note)
+    Nothing -> nominalVolts note
+
+-- | A sampler's decisions as sends: a voice's slice as its start-point
+-- | control, then its trigger at the note's velocity, for the note's gate.
+samplerSends :: Sampler -> Rample.Layer -> Number -> Timed -> Array RV.Emit -> Array Send
+samplerSends smp layer nowMs n = concatMap \e -> case e.action of
+  RV.Pitch i pitch -> case Rample.slotFor layer pitch of
+    Just slot -> [ Control { port: smp.port, channel: smp.channel, controller: Rample.startCC (i + 1)
+                           , value: Rample.ccForSlot slot smp.slots, atMs: e.atMs - nowMs } ]
+    Nothing -> []
+  RV.Trigger i _ -> case smp.triggers !! i of
+    Just note -> [ Note { port: smp.port, channel: smp.channel, note, velocity: n.velocity
+                        , atMs: e.atMs - nowMs, durMs: n.gateMs } ]
+    Nothing -> []
+  _ -> []

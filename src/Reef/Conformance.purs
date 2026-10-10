@@ -979,8 +979,10 @@ sendText = case _ of
 
 -- | A voice routing with every kind of leg a melodic voice can have: on voice
 -- | 0, a MIDI line (a synth), an FH-2 envelope (a trigger) and an ES-9 line
--- | with a calibration table and a gate; on voice 1, a Rample. Round-tripped
--- | through the codec first.
+-- | with a calibration table and a gate; on voice 1, a Rample; and the
+-- | instruments that allocate: a Saïch fed by voice 2 (one voice calibrated),
+-- | Rings by voice 3, and a Rample played as one instrument by voice 1.
+-- | Round-tripped through the codec first.
 articulationTestRouting :: RR.VoiceRouting
 articulationTestRouting =
   { voices:
@@ -991,9 +993,17 @@ articulationTestRouting =
       ]
   , lines:
       [ [ { pitchBus: 8, gateBus: [ 9 ]
-          , table: [ { label: "tona", points: [ { volts: 0.0, hz: 65.4 }, { volts: 1.0, hz: 131.8 }, { volts: 2.0, hz: 265.0 }, { volts: 3.0, hz: 528.0 } ] } ] } ]
+          , table: [ tona ] } ]
       , [] ]
+  , polys:
+      [ { instrument: "saich", heads: [ 2 ], byPitch: false, voiceBuses: [ 16, 17, 18, 19 ], gateBuses: []
+        , ctrlBus: 20, tables: [ [ tona ], [], [], [] ] }
+      , { instrument: "rings", heads: [ 3 ], byPitch: false, voiceBuses: [ 13 ], gateBuses: [], ctrlBus: 14, tables: [ [] ] } ]
+  , samplers:
+      [ { heads: [ 1 ], port: "Rample", channel: 4, triggers: [ 36, 37, 38, 39 ], slots: 16, pitchOfSlot0: 48 } ]
   }
+  where
+  tona = { label: "tona", points: [ { volts: 0.0, hz: 65.4 }, { volts: 1.0, hz: 131.8 }, { volts: 2.0, hz: 265.0 }, { volts: 3.0, hz: 528.0 } ] }
 
 -- | A script of steps through the legato machine: plain notes, a slide (a
 -- | glide cell into a plain one), a run of glides, a tie, a ratchet, a note
@@ -1006,18 +1016,20 @@ articulationRun = case RR.decodeVoiceRouting (RR.encodeVoiceRouting articulation
   Left errs -> "ARTICULATION-DECODE-FAIL: " <> show errs
   Right routing ->
     let
-      final = foldl (step routing) { held: [ Nothing, Nothing ], out: [] } (mapWithIndex Tuple script)
-      stop = Art.releaseAll routing final.held
+      final = foldl (step routing) { held: [ Nothing, Nothing, Nothing, Nothing ], polys: Art.polyStates routing, out: [] } (mapWithIndex Tuple script)
+      stop = Art.releaseAll routing final.held final.polys
     in
       intercalate "\n" (final.out <> [ "stop | " <> sendsText stop ])
   where
   step routing acc (Tuple i { notes, muted }) =
     let
       r = Art.playStep routing
-        { odo: defaultOdonus, stepMs: 125.0, held: acc.held, newlyMuted: muted
+        { odo: defaultOdonus, stepMs: 125.0, nowMs: 1000.0 + 125.0 * toNumber i, polys: acc.polys
+        , held: acc.held, newlyMuted: muted
         , notes: map (\n -> { fired: n, velocity: n.vel }) notes }
     in
       { held: r.held
+      , polys: r.polys
       , out: acc.out <> [ pad4 i <> " | " <> sendsText r.sends <> " | held " <> intercalate "," (map (maybe "-" show) r.held) ] }
   sendsText xs = if null xs then "-" else intercalate "  " (map sendText xs)
   fired h p glide ratchet offNum offDen =
@@ -1034,6 +1046,10 @@ articulationRun = case RR.decodeVoiceRouting (RR.encodeVoiceRouting articulation
     , { notes: [ fired 0 48 false 3 0 8, fired 1 60 false 2 0 8 ], muted: [] }  -- ratchets
     , { notes: [ fired 0 50 false 1 0 16, fired 0 52 true 1 8 16 ], muted: [] } -- two ticks, the second held
     , { notes: [ fired 1 80 false 1 0 8 ], muted: [] }                          -- off the Rample's card
+    , { notes: [ fired 2 48 false 1 0 8, fired 2 55 false 1 0 8, fired 3 60 false 1 0 8 ], muted: [] } -- a chord on the Saïch; Rings
+    , { notes: [ fired 2 52 false 1 0 8, fired 1 50 false 1 0 8 ], muted: [] }  -- a third Saïch voice; the Rample
+    , { notes: [], muted: [] }                                                  -- notes end: voices fade out
+    , { notes: [ fired 2 60 false 1 0 8 ], muted: [] }                          -- one note, compacted down
     ]
 
 -- ── 8. the Vetula performance-scheduler net (Vetula lockstep V1) ──────────────
