@@ -234,7 +234,7 @@ headsRun =
 -- | octaves driving the panel's OCT (set to -1 by hand first, which the
 -- | pattern overrides). A stub stands in for Littorina: `"<0 -1 1 ~>"` gives 0
 -- | for a bar (16 steps), then -1, then 1, then a rest, which keeps 1. From
--- | step 64 the pattern is cleared and OCT goes back to the -1 it started from. `SetOctavePattern` and the
+-- | step 64 the pattern is cleared and OCT stays where it last put it. `SetOctavePattern` and the
 -- | sample both cross the wire codec.
 octaveRun :: String
 octaveRun =
