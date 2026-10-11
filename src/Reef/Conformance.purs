@@ -230,11 +230,11 @@ headsRun =
     in
       { st: r.sim, out: snoc acc.out (renderStep (i + 1) r.fired) }
 
--- | Octaves by pattern (`Reef.Odonus.followOctave`): every head moved by a
--- | Tidal pattern of octaves, on top of the panel's OCT (here -1). A stub
--- | stands in for Littorina: `"<0 -1 1 ~>"` gives 0 for a bar (16 steps), then
--- | -1, then 1, then a rest, which keeps 1. From step 64 the pattern is
--- | cleared, back to the panel's octave alone. `SetOctavePattern` and the
+-- | Octaves by pattern (`Reef.Odonus.followOctave`): a Tidal pattern of
+-- | octaves driving the panel's OCT (set to -1 by hand first, which the
+-- | pattern overrides). A stub stands in for Littorina: `"<0 -1 1 ~>"` gives 0
+-- | for a bar (16 steps), then -1, then 1, then a rest, which keeps 1. From
+-- | step 64 the pattern is cleared and OCT stays where it last put it. `SetOctavePattern` and the
 -- | sample both cross the wire codec.
 octaveRun :: String
 octaveRun =

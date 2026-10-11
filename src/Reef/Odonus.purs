@@ -216,11 +216,9 @@ type OdonusOf h =
   , headsPattern :: Maybe String -- a Tidal pattern of head numbers (`"<1 2 [3,4]>"`):
                                  -- the heads it names at a step play, the rest are
                                  -- muted; sampled by the host, see followHeads
-  , octavePattern :: Maybe String -- a Tidal pattern of octaves (`"<0 0 0 -1>"`),
-                                  -- added to `octaveShift`; sampled by the host,
-                                  -- see followOctave
-  , octaveFollow :: Maybe Int     -- the octave it gave at the last step
-                                  -- (Nothing: none, so 0)
+  , octavePattern :: Maybe String -- a Tidal pattern of octaves (`"<0 0 0 -1>"`)
+                                  -- that sets `octaveShift`, the panel's OCT;
+                                  -- sampled by the host, see followOctave
   , harmony :: Maybe String -- a Tidal note pattern (`"<c'maj7 a'min7>/2"`) the
                             -- overlay follows; sampled by the host, see followHarmony
   , scalePattern :: Maybe String -- a pattern of Tidal scale names (`"<dorian
@@ -289,7 +287,7 @@ renderCell o hd c =
             Nothing -> case o.pitchSet of
               Just ps -> PS.nearestIn ps target
               Nothing -> quantiseToScale (scaleOf o) target
-    in snapped + octaves o * 12
+    in snapped + o.octaveShift * 12
 
 -- | The raw NOTE-knob ceiling. Cells hold a value in `0..knobMax`, shown on the
 -- | knob face; the label shows what it currently quantises to. Fixed (independent
@@ -337,7 +335,7 @@ cellLabel o knob =
     ps = effectivePitchSet o
     h = PS.realizeEqualShift ps (PS.periodsIn ps o.span) knobMax o.degShift (clampI 0 knobMax knob)
     coloured = maybe h (\notes -> PS.quantiseToVoicing notes h) o.chord
-  in coloured + octaves o * 12
+  in coloured + o.octaveShift * 12
 
 -- | The pitch classes (0..11) of the chord the output is snapping to; none
 -- | while it follows the scale alone.
@@ -360,21 +358,19 @@ setHeadsPattern p o = o { headsPattern = p }
 
 -- | **Octaves by pattern** (AC, 2026-10-10: the bassline down an octave
 -- | every fourth bar, apart from the heads pattern). Set, or with `Nothing`
--- | clear, a Tidal pattern of octaves that moves every head, on top of the
--- | panel's OCT. Clearing returns to the panel's octave alone.
+-- | clear, a Tidal pattern of octaves. It drives the panel's OCT itself, so
+-- | the control shows it (AC, 2026-10-11: an offset on top of OCT was
+-- | invisible, and a hand-set OCT then hid what the pattern said). Clearing
+-- | leaves OCT where the pattern last put it.
 setOctavePattern :: Maybe String -> Odonus -> Odonus
-setOctavePattern p o = o { octavePattern = p, octaveFollow = if isJust p then o.octaveFollow else Nothing }
+setOctavePattern p o = o { octavePattern = p }
 
--- | The octave the pattern gives at this step: its first value, within ±4.
--- | A rest keeps the octave it had.
+-- | The octave the pattern gives at this step, its first value, as OCT
+-- | (within OCT's range). A rest keeps the octave it had.
 followOctave :: Array Int -> Odonus -> Odonus
 followOctave given o = case head given of
-  Just n -> o { octaveFollow = Just (clampI (-4) 4 n) }
+  Just n -> setOctaveShift n o
   Nothing -> o
-
--- | Every head's octave: the panel's, and the pattern's on top.
-octaves :: forall h. OdonusOf h -> Int
-octaves o = o.octaveShift + fromMaybe 0 o.octaveFollow
 
 -- | The heads the pattern names at this step (1 to 4, as the panel counts)
 -- | play; every other head is muted. A rest names none, so all are silent.
@@ -560,7 +556,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, octaveFollow: Nothing, chord: Nothing, harmony: Nothing
+  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, chord: Nothing, harmony: Nothing
   , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing }
 
 -- ---------------------------------------------------------------------------
