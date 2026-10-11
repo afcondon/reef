@@ -219,6 +219,8 @@ type OdonusOf h =
   , octavePattern :: Maybe String -- a Tidal pattern of octaves (`"<0 0 0 -1>"`)
                                   -- that sets `octaveShift`, the panel's OCT;
                                   -- sampled by the host, see followOctave
+  , octaveBase :: Maybe Int       -- OCT as it was when that pattern started,
+                                  -- given back when it ends
   , harmony :: Maybe String -- a Tidal note pattern (`"<c'maj7 a'min7>/2"`) the
                             -- overlay follows; sampled by the host, see followHarmony
   , scalePattern :: Maybe String -- a pattern of Tidal scale names (`"<dorian
@@ -360,10 +362,14 @@ setHeadsPattern p o = o { headsPattern = p }
 -- | every fourth bar, apart from the heads pattern). Set, or with `Nothing`
 -- | clear, a Tidal pattern of octaves. It drives the panel's OCT itself, so
 -- | the control shows it (AC, 2026-10-11: an offset on top of OCT was
--- | invisible, and a hand-set OCT then hid what the pattern said). Clearing
--- | leaves OCT where the pattern last put it.
+-- | invisible, and a hand-set OCT then hid what the pattern said). The OCT
+-- | the pattern started from is kept, and ending the pattern (`octave off`,
+-- | a hush) gives it back: the pattern borrows the control while it runs.
+-- | A new pattern over a running one keeps the first one's starting OCT.
 setOctavePattern :: Maybe String -> Odonus -> Odonus
-setOctavePattern p o = o { octavePattern = p }
+setOctavePattern p o = case p of
+  Just _ -> o { octavePattern = p, octaveBase = Just (fromMaybe o.octaveShift o.octaveBase) }
+  Nothing -> o { octavePattern = Nothing, octaveShift = fromMaybe o.octaveShift o.octaveBase, octaveBase = Nothing }
 
 -- | The octave the pattern gives at this step, its first value, as OCT
 -- | (within OCT's range). A rest keeps the octave it had.
@@ -556,7 +562,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, chord: Nothing, harmony: Nothing
+  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, octaveBase: Nothing, chord: Nothing, harmony: Nothing
   , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing }
 
 -- ---------------------------------------------------------------------------
