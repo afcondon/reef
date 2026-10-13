@@ -5,9 +5,9 @@ slug "Fox Drum!" -> Fox-Drum
 slug "_x:y.z" -> x-y.z
 slug "--" -> 
 balistesPattern "fox drum" 16
-  [ lane "BD" 36 [ hit 0 120, hit 4 110, hit 8 120, hit 12 110 ]
-  , lane "SD" 38 [ cell 4 100 { prob: 50, cond: "1:2", ratchet: 2 }, hit 12 100 ]
-  , lane "CH" 42 [ hit 2 64, hit 6 64, hit 10 64, hit 14 64 ]
+  [ lane "BD" [ hit 0 120, hit 4 110, hit 8 120, hit 12 110 ]
+  , lane "SD" [ cell 4 100 { prob: 50, cond: "1:2", ratchet: 2 }, hit 12 100 ]
+  , lane "CH" [ hit 2 64, hit 6 64, hit 10 64, hit 14 64 ]
   ]
 reprint same: true
    0 | 36/120/0/55x1

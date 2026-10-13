@@ -25,7 +25,7 @@ import Data.Array (mapMaybe, range, span, uncons)
 import Data.Array as Array
 import Data.Foldable (foldl)
 import Data.Int as Int
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.String (Pattern(..), split, stripPrefix) as Str
 import Data.String.CodeUnits (fromCharArray, toCharArray)
 import Data.String.Common (joinWith)
@@ -41,10 +41,12 @@ printPattern p =
   "balistesPattern " <> show p.name <> " " <> show p.steps <> "\n"
     <> "  [ " <> joinWith "\n  , " (map (printLane p) (P.usedLanes p)) <> "\n  ]"
 
--- | One lane: `lane "<name>" <note> [ <cells> ]`, listing only its hits.
+-- | One lane: `lane "<name>" [ <cells> ]`, listing only its hits. The lane
+-- | is the drum; which note reaches an instrument is the routing's
+-- | (2026-10-13), so a rhythm names none.
 printLane :: P.FixedPattern -> Int -> String
 printLane p lane =
-  "lane " <> show (P.laneName lane) <> " " <> show (P.noteOf p lane)
+  "lane " <> show (P.laneName lane)
     <> " [ " <> joinWith ", " (mapMaybe atStep (range 0 (p.steps - 1))) <> " ]"
   where
   atStep step =
@@ -165,7 +167,7 @@ bracketed item ts0 = do
         rest <- tok (TSym ']') r.rest
         pure { value: acc', rest }
 
-type PLane = { nm :: String, note :: Int, cells :: Array { step :: Int, cell :: P.Cell } }
+type PLane = { nm :: String, cells :: Array { step :: Int, cell :: P.Cell } }
 
 patternP :: Array Token -> Maybe (Step P.FixedPattern)
 patternP ts0 = do
@@ -179,9 +181,10 @@ laneP :: Array Token -> Maybe (Step PLane)
 laneP ts0 = do
   ts1 <- tok (TWord "lane") ts0
   nm <- str ts1
-  note <- int nm.rest
-  cells <- bracketed cellP note.rest
-  pure { value: { nm: nm.value, note: note.value, cells: cells.value }, rest: cells.rest }
+  -- a rhythm written before notes moved to the routing names one: read past it
+  let afterNote = maybe nm.rest _.rest (int nm.rest)
+  cells <- bracketed cellP afterNote
+  pure { value: { nm: nm.value, cells: cells.value }, rest: cells.rest }
 
 cellP :: Array Token -> Maybe (Step { step :: Int, cell :: P.Cell })
 cellP ts0 = case uncons ts0 of
@@ -216,5 +219,5 @@ build name steps lanes = foldl applyLane (P.emptyPattern name steps) lanes
   where
   applyLane p l = case P.laneIndexOf l.nm of
     Nothing -> p
-    Just idx -> foldl (placeCell idx) (P.setNoteAt idx l.note p) l.cells
+    Just idx -> foldl (placeCell idx) p l.cells
   placeCell idx p c = P.modifyCell idx c.step (const c.cell) p

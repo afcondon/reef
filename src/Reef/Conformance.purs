@@ -800,7 +800,7 @@ balistesSimSteps = 128
 balSimSeed :: BSim.BalSim
 balSimSeed = BSim.defaultBalSim
   { x = 200, y = 60, densBd = 210, densSd = 180, densHh = 200
-  , randomness = 180, open = 120, push = [ 0, 12, -8, -8 ], notes = [ 36, 40, 42, 46 ] }
+  , randomness = 180, open = 120, push = [ 0, 12, -8, -8 ] }
 
 -- | The P1 net for Balistes. `balSimSeed` is round-tripped THROUGH the codec
 -- | (encodeBalSim then decodeBalSim — both reef functions, so both compile to JS and
@@ -852,7 +852,6 @@ balistesInputScript =
   , { tick: 20, input: RBI.BSetOpen 120 }
   , { tick: 32, input: RBI.BReseed }
   , { tick: 40, input: RBI.BSetPush 1 12 }
-  , { tick: 55, input: RBI.BSetNote 1 40 }
   , { tick: 64, input: RBI.BSetRatchet 2 4 3 }
   , { tick: 90, input: RBI.BReset }
   , { tick: 120, input: RBI.BSetDensity 2 240 }
@@ -907,12 +906,11 @@ fixedRunSteps = 128
 -- | A representative fixed rhythm exercising every eval hazard: BD quarters, SD
 -- | backbeats (one with a ratchet), CH eighths at probability 80 (drives the
 -- | deterministic cellHash — the multiplication path that must agree across
--- | runtimes), and an OH that fires only every 2nd loop (condX/condY). Notes are the
--- | GM-ish per-lane defaults; grid built programmatically to stay compact.
+-- | runtimes), and an OH that fires only every 2nd loop (condX/condY). Grid built
+-- | programmatically to stay compact.
 fixedTestPattern :: RFix.FixedPattern
 fixedTestPattern =
   { steps: 16
-  , notes: map (\l -> 36 + l) (range 0 15)
   , grid: map laneRow (range 0 15)
   }
   where

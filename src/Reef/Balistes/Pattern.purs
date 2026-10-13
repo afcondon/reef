@@ -38,9 +38,6 @@ module Reef.Balistes.Pattern
   , firesAt
   , usedLanes
   , setVelAt
-  , noteOf
-  , setNoteAt
-  , defaultNotes
   , emptyGrid
   , buildGrid
   , emptyPattern
@@ -70,7 +67,7 @@ laneName :: Int -> String
 laneName i = fromMaybe "?" (map _.name (canonKit !! i))
 
 laneNote :: Int -> Int
-laneNote i = fromMaybe (36 + i) (map _.note (canonKit !! i))
+laneNote = Kit.laneNote
 
 -- | The kit lane a GM note belongs to (Nothing if the note isn't in the kit —
 -- | the importer then asks the user where it goes).
@@ -135,15 +132,14 @@ cycleCond c =
   let i = fromMaybe 0 (findIndex (_ == c) condPresets)
   in fromMaybe CAlways (condPresets !! ((i + 1) `mod` length condPresets))
 
--- | A literal rhythm: a name, a step count (16 or 32), a dense `kitSize × steps`
--- | grid of cells, and a per-lane MIDI note (`notes`, length `kitSize`). The
--- | note is editable per pattern, so the same grid can drive a different kick /
--- | snare / etc. Lane index aligns with `canonKit`.
+-- | A literal rhythm: a name, a step count (16 or 32) and a dense
+-- | `kitSize × steps` grid of cells, lane index aligned with `canonKit`. It
+-- | names no notes: a lane is a drum, and the note that reaches an instrument
+-- | is set where the hit leaves, in the routing (2026-10-13).
 type FixedPattern =
   { name :: String
   , steps :: Int
   , grid :: Array (Array Cell)
-  , notes :: Array Int
   }
 
 cellAt :: FixedPattern -> Int -> Int -> Cell
@@ -161,21 +157,6 @@ velAt p lane step = (cellAt p lane step).vel
 
 firesAt :: FixedPattern -> Int -> Int -> Boolean
 firesAt p lane step = velAt p lane step > 0
-
--- | This pattern's MIDI note for a lane (falls back to the kit default).
-noteOf :: FixedPattern -> Int -> Int
-noteOf p lane = fromMaybe (laneNote lane) (p.notes !! lane)
-
--- | Set a lane's MIDI note (clamped to the 0..127 MIDI range).
-setNoteAt :: Int -> Int -> FixedPattern -> FixedPattern
-setNoteAt lane n p =
-  p { notes = fromMaybe p.notes (updateAt lane (clampNote n) p.notes) }
-  where
-  clampNote v = if v < 0 then 0 else if v > 127 then 127 else v
-
--- | The kit's default notes — every lane at its `canonKit` GM note.
-defaultNotes :: Array Int
-defaultNotes = map _.note canonKit
 
 -- | Set a cell's velocity (0 clears the whole cell — a silent cell carries no
 -- | overlay). A positive velocity keeps the cell's prob/cond/ratchet.
@@ -202,14 +183,13 @@ buildGrid steps rows = foldl place (emptyGrid steps) rows
 -- | A fresh, all-silent named pattern (the "+ NEW" template).
 emptyPattern :: String -> Int -> FixedPattern
 emptyPattern name steps =
-  { name, steps, grid: emptyGrid steps, notes: defaultNotes }
+  { name, steps, grid: emptyGrid steps }
 
 -- | The rhythm as the shared eval plays it (`Reef.Balistes.Fixed`): its trig
 -- | condition flattened to two ints, its name dropped.
 toWire :: FixedPattern -> Fixed.FixedPattern
 toWire p =
   { steps: p.steps
-  , notes: p.notes
   , grid: map (map cellOf) p.grid
   }
   where

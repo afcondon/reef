@@ -12,13 +12,14 @@ module Reef.Balistes.Kit
   ( KitLane
   , canonKit
   , kitSize
+  , laneNote
   , laneOfName
   ) where
 
 import Prelude
 
-import Data.Array (findIndex, length)
-import Data.Maybe (Maybe(..))
+import Data.Array (findIndex, length, (!!))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (toLower)
 
 -- | One row of the shared kit: a clear name plus the GM note it sends.
@@ -46,6 +47,12 @@ canonKit =
 
 kitSize :: Int
 kitSize = length canonKit
+
+-- | The note a lane's hits carry: its GM note, which is how the routing knows
+-- | the lane (`Reef.Routing.drumSends`). What reaches an instrument is the
+-- | routing's to choose.
+laneNote :: Int -> Int
+laneNote i = fromMaybe (36 + i) (map _.note (canonKit !! i))
 
 -- | The lane a name addresses, case-insensitively: the kit's own names (`bd`,
 -- | `sd`, `ch`) and the Dirt-Samples names a Tidal line is likely to use for

@@ -1,8 +1,8 @@
 -- | `Reef.Balistes.Input` — the Balistes live-control surface as a SERIALISABLE
 -- | input, for lockstep knob/gesture sync (the Balistes analogue of `Reef.Input`).
 -- |
--- | Every synced gesture (X/Y pad, density/randomness/open/push knobs, per-lane
--- | notes, ratchet drags, dice/reset) becomes a `BInput`. `applyBInput` is the pure
+-- | Every synced gesture (X/Y pad, density/randomness/open/push knobs,
+-- | ratchet drags, dice/reset) becomes a `BInput`. `applyBInput` is the pure
 -- | interpreter, row-polymorphic so it runs on BOTH the frontend's rich `Balistes`
 -- | record AND the BEAM's `BalSim` — the SAME code applies the edit on both runtimes,
 -- | so a tick-tagged gesture lands on the same model step and the two stay
@@ -33,7 +33,6 @@ data BInput
   | BSetRandomness Int       -- 0..255
   | BSetOpen Int             -- 0..255
   | BSetPush Int Int         -- lane (0..3), −50..50 ms
-  | BSetNote Int Int         -- lane (0..3), 0..127
   | BSetRatchet Int Int Int  -- inst, step, 1..8
   | BReseed                  -- re-roll the perturbation seed (DICE)
   | BReset                   -- jump to step 0 + resample (RESET)
@@ -54,7 +53,6 @@ type BStateRow r =
   , randomness :: Int
   , open :: Int
   , push :: Array Int
-  , notes :: Array Int
   , ratchet :: Array Int
   , step :: Int
   , perts :: Array Int
@@ -81,7 +79,6 @@ applyBInput i b = case i of
   BSetRandomness v -> b { randomness = clampI 0 255 v }
   BSetOpen v -> b { open = clampI 0 255 v }
   BSetPush lane v -> b { push = fromMaybe b.push (updateAt lane (clampI (-50) 50 v) b.push) }
-  BSetNote lane v -> b { notes = fromMaybe b.notes (updateAt lane (clampI 0 127 v) b.notes) }
   BSetRatchet inst step v ->
     b { ratchet = fromMaybe b.ratchet (updateAt (inst * 32 + step) (clampI 1 8 v) b.ratchet) }
   BReseed ->
@@ -106,7 +103,6 @@ toWire = case _ of
   BSetRandomness v -> w0 { tag = "SetRandomness", a = v }
   BSetOpen v -> w0 { tag = "SetOpen", a = v }
   BSetPush lane v -> w0 { tag = "SetPush", a = lane, b = v }
-  BSetNote lane v -> w0 { tag = "SetNote", a = lane, b = v }
   BSetRatchet inst step v -> w0 { tag = "SetRatchet", a = inst, b = step, c = v }
   BReseed -> w0 { tag = "Reseed" }
   BReset -> w0 { tag = "Reset" }
@@ -119,7 +115,6 @@ fromWire w = case w.tag of
   "SetRandomness" -> Just (BSetRandomness w.a)
   "SetOpen" -> Just (BSetOpen w.a)
   "SetPush" -> Just (BSetPush w.a w.b)
-  "SetNote" -> Just (BSetNote w.a w.b)
   "SetRatchet" -> Just (BSetRatchet w.a w.b w.c)
   "Reseed" -> Just BReseed
   "Reset" -> Just BReset

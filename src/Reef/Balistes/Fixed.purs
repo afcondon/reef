@@ -22,7 +22,6 @@ module Reef.Balistes.Fixed
   , cellHash
   , probPass
   , laneGateMs
-  , noteOf
   , usedLanes
   , renderFixed
   ) where
@@ -31,6 +30,7 @@ import Prelude
 
 import Data.Array (any, filter, mapMaybe, range, (!!))
 import Data.Maybe (Maybe(..), fromMaybe)
+import Reef.Balistes.Kit as Kit
 import Reef.Balistes.Sim (BEvent)
 
 -- | The shared 16-lane kit coordinate system (BD…SH); used only to bound lane
@@ -49,12 +49,12 @@ type Cell =
   , ratchet :: Int
   }
 
--- | A literal rhythm: a step count, a dense `kitSize × steps` grid of cells, and a
--- | per-lane MIDI note (length kitSize). Name/kit metadata stay frontend-side.
+-- | A literal rhythm: a step count and a dense `kitSize × steps` grid of
+-- | cells. A hit carries its lane's kit note (`Reef.Balistes.Kit`), which the
+-- | routing reads as the lane. Name/kit metadata stay frontend-side.
 type FixedPattern =
   { steps :: Int
   , grid :: Array (Array Cell)
-  , notes :: Array Int
   }
 
 emptyCell :: Cell
@@ -95,11 +95,6 @@ laneGateMs lane = case lane of
   12 -> 320.0  -- CR
   _ -> 55.0
 
--- | This pattern's MIDI note for a lane (GM-ish fallback; the projection always
--- | carries all kitSize notes, so the fallback is never hit in practice).
-noteOf :: FixedPattern -> Int -> Int
-noteOf p lane = fromMaybe (36 + lane) (p.notes !! lane)
-
 -- | Which lanes carry any hit.
 usedLanes :: FixedPattern -> Array Int
 usedLanes p = filter (\l -> any (\c -> c.vel > 0) (fromMaybe [] (p.grid !! l))) (range 0 (kitSize - 1))
@@ -120,7 +115,7 @@ renderFixed p absStep =
     in
       if c.vel > 0 && condFires c loop && probPass c.prob absStep lane fixedStep then
         Just
-          { note: noteOf p lane
+          { note: Kit.laneNote lane
           , velocity: c.vel
           , pushMs: 0
           , durMs: laneGateMs lane

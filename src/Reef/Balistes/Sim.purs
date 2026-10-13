@@ -22,7 +22,6 @@ module Reef.Balistes.Sim
   , stepBal
   , renderStep
   , opensAt
-  , noteOf
   , pushOf
   , ratchetAt
   , instNote
@@ -38,6 +37,7 @@ import Prelude
 import Data.Array (replicate, (!!)) as A
 import Data.Maybe (fromMaybe)
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations, readDrumMap)
+import Reef.Balistes.Kit as Kit
 
 -- | The pure engine state the step function needs. Kept as an open row so the
 -- | frontend's superset `Balistes` record (which adds snapshots/sequence) unifies.
@@ -58,7 +58,6 @@ type EngineRow r =
 type RenderRow r =
   ( x :: Int
   , y :: Int
-  , notes :: Array Int
   , open :: Int
   , push :: Array Int
   , ratchet :: Array Int
@@ -79,7 +78,6 @@ type BalSim =
   , step :: Int
   , perts :: Array Int
   , rng :: Int
-  , notes :: Array Int
   , open :: Int
   , push :: Array Int
   , ratchet :: Array Int
@@ -102,7 +100,7 @@ initialSeed = 0x1A2B3C4D
 
 -- | Central node, moderate density, no randomness — the firmware's neutral start,
 -- | with the frontend's overlay defaults (a touch of open so the loudest hats
--- | breathe; flat push; GM drum notes; single hits).
+-- | breathe; flat push; single hits).
 defaultBalSim :: BalSim
 defaultBalSim =
   let seeded = freshPerturbations 0 initialSeed
@@ -116,7 +114,6 @@ defaultBalSim =
     , step: 0
     , perts: seeded.perts
     , rng: seeded.rng
-    , notes: [ 36, 38, 42, 46 ]
     , open: 70
     , push: [ 0, 0, 0, 0 ]
     -- one ratchet slot per (lane, step) over the 3 Grids lanes (96 = 3×32)
@@ -170,17 +167,15 @@ closedGateMs = 30.0
 clampI :: Int -> Int -> Int -> Int
 clampI lo hi v = if v < lo then lo else if v > hi then hi else v
 
--- | Default GM-ish drum notes (BD=36, SD=38, HH=42, OH=46).
+-- | The kit lane a Grids instrument plays (0 BD, 1 SD, 2 closed hat, 3 the
+-- | open hat it rings as), as the note its hits carry (`Kit.laneNote`): which
+-- | note reaches an instrument is the routing's.
 instNote :: Int -> Int
-instNote inst = case inst of
-  0 -> 36
-  1 -> 38
-  2 -> 42
-  _ -> 46
-
--- | This state's MIDI note for a lane (0=BD,1=SD,2=HH,3=OH), GM default fallback.
-noteOf :: forall r. Int -> { notes :: Array Int | r } -> Int
-noteOf inst b = fromMaybe (instNote inst) (b.notes A.!! inst)
+instNote inst = Kit.laneNote case inst of
+  0 -> 0
+  1 -> 1
+  2 -> 4
+  _ -> 6
 
 -- | Per-lane timing offset in ms (signed: − earlier, + later).
 pushOf :: forall r. Int -> { push :: Array Int | r } -> Int
@@ -208,7 +203,7 @@ renderStep b step fired = map ev fired
   ev t =
     let
       opens = t.inst == 2 && opensAt step b
-      note = if opens then noteOf 3 b else noteOf t.inst b
+      note = if opens then instNote 3 else instNote t.inst
       durMs = if opens then openGateMs else closedGateMs
       pushLane = if opens then 3 else t.inst
     in
