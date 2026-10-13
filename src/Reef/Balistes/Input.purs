@@ -70,8 +70,10 @@ clampI lo hi v = if v < lo then lo else if v > hi then hi else v
 -- | SAME tick from the SAME lockstep state, stay bit-identical.
 applyBInput :: forall r. BInput -> Record (BStateRow r) -> Record (BStateRow r)
 applyBInput i b = case i of
-  BSetX v -> b { x = clampI 0 255 v }
-  BSetY v -> b { y = clampI 0 255 v }
+  -- A move on the map changes which steps fire, so the ratchets set on the old
+  -- ones go; the page and the rig apply this one rule.
+  BSetX v -> moved (b { x = clampI 0 255 v })
+  BSetY v -> moved (b { y = clampI 0 255 v })
   BSetDensity inst v -> case inst of
     0 -> b { densBd = clampI 0 255 v }
     1 -> b { densSd = clampI 0 255 v }
@@ -87,6 +89,8 @@ applyBInput i b = case i of
   BReset ->
     let s = freshPerturbations b.randomness b.rng
     in b { step = 0, perts = s.perts, rng = s.rng }
+  where
+  moved b' = if b'.x /= b.x || b'.y /= b.y then b' { ratchet = map (const 1) b'.ratchet } else b'
 
 -- | The flat wire form: a tag string + up to three Int slots. simple-json's record
 -- | instance encodes/decodes it directly — no bespoke sum codec. Unused slots are 0.
