@@ -19,7 +19,9 @@ module Reef.Balistes.Lepidoptera
 
 import Prelude
 
-import Data.Array (dropWhile, mapMaybe, range, reverse, span, uncons)
+import Reef.Word as Word
+
+import Data.Array (mapMaybe, range, span, uncons)
 import Data.Array as Array
 import Data.Foldable (foldl)
 import Data.Int as Int
@@ -81,16 +83,7 @@ rhythmOfKey = Str.stripPrefix (Str.Pattern "balistes/rhythm/")
 -- | run of anything else becomes one `-`, and a word starts with a letter or
 -- | digit and ends without a `-`: "lo house 110" is `lo-house-110`.
 rhythmSlug :: String -> String
-rhythmSlug name = fromCharArray (reverse (dropWhile (_ == '-') (reverse (dropWhile (not <<< alphaNum) dashed))))
-  where
-  dashed = foldl step [] (toCharArray name)
-  step acc c
-    | wordChar c = acc <> [ c ]
-    | otherwise = case Array.last acc of
-        Just '-' -> acc
-        _ -> acc <> [ '-' ]
-  wordChar c = alphaNum c || c == '.' || c == '-' || c == '_'
-  alphaNum c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+rhythmSlug = Word.slug
 
 -- ---------------------------------------------------------------------------
 -- Parse
