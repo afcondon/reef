@@ -18,6 +18,7 @@ module Reef.Balistes.Sim
   , BalSim
   , BEvent
   , defaultBalSim
+  , fromTop
   , stepBal
   , renderStep
   , opensAt
@@ -121,6 +122,14 @@ defaultBalSim =
     -- one ratchet slot per (lane, step) over the 3 Grids lanes (96 = 3×32)
     , ratchet: A.replicate 96 1
     }
+
+-- | The state at the top of its pattern with the starting seed's
+-- | perturbations: what a Grids beat saved by name plays from, so one saved
+-- | beat is one text however far the page that published it had played.
+fromTop :: forall r. Record (EngineRow r) -> Record (EngineRow r)
+fromTop b =
+  let seeded = freshPerturbations b.randomness initialSeed
+  in b { step = 0, perts = seeded.perts, rng = seeded.rng }
 
 -- | Play the current step, then advance. Returns the triggers fired *this* step
 -- | (the caller renders + schedules them at the tick's fire-time) and the advanced

@@ -34,6 +34,7 @@ module Reef.Conformance
   , balistesSimRun, balistesSimSteps
   , balistesInputRun, balistesInputSteps
   , fixedRun, fixedRunSteps
+  , rhythmTextRun
   , routingRun
   , articulationRun
   , vetulaRun, vetulaRunSteps
@@ -81,6 +82,8 @@ import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
 import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed) as BSim
 import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
 import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
+import Reef.Balistes.Lepidoptera (parsePattern, printPattern, rhythmSlug) as BL
+import Reef.Balistes.Pattern (toWire) as BP
 import Reef.Routing (DrumRouting, Send(..), VoiceRouting, decodeDrumRouting, decodeVoiceRouting, drumSends, encodeDrumRouting, encodeVoiceRouting) as RR
 import Reef.Articulation as Art
 import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, setHeadClock, stepEmit)
@@ -935,6 +938,27 @@ fixedRun :: String
 fixedRun = case BSim.decodeFixed (BSim.encodeFixed fixedTestPattern) of
   Left errs -> "FIXED-DECODE-FAIL: " <> show errs
   Right p -> intercalate "\n" (map (\i -> evDig i (RFix.renderFixed p i)) (range 0 (fixedRunSteps - 1)))
+
+-- | **A rhythm's text, read on both runtimes** (`balistes/rhythm/<name>` on the
+-- | stage, which the page prints and the rig parses): slugs of awkward names,
+-- | then a rhythm with every cell form parsed, printed, parsed again, and
+-- | rendered through `toWire` for two loops. Identical here = the rig plays
+-- | the rhythm the page saved.
+rhythmTextRun :: String
+rhythmTextRun = intercalate "\n" (slugs <> rhythm)
+  where
+  slugs = map (\n -> "slug " <> show n <> " -> " <> BL.rhythmSlug n)
+    [ "lo house 110", "  2-step 135", "boom bap 90", "Fox Drum!", "_x:y.z", "--" ]
+  source = "balistesPattern \"fox drum\" 16\n  [ lane \"BD\" 36 [ hit 0 120, hit 4 110, hit 8 120, hit 12 110 ]\n  , lane \"SD\" 38 [ cell 4 100 { prob: 50, cond: \"1:2\", ratchet: 2 }, hit 12 100 ]\n  , lane \"CH\" 42 [ hit 2 64, hit 6 64, hit 10 64, hit 14 64 ]\n  ]"
+  rhythm = case BL.parsePattern source of
+    Nothing -> [ "RHYTHM-PARSE-FAIL" ]
+    Just p ->
+      let printed = BL.printPattern p
+      in case BL.parsePattern printed of
+        Nothing -> [ "RHYTHM-REPARSE-FAIL", printed ]
+        Just q ->
+          [ printed, "reprint same: " <> show (BL.printPattern q == printed) ]
+            <> map (\i -> evDig i (RFix.renderFixed (BP.toWire q) i)) (range 0 31)
 
 -- ── 7¾. the drum routing net (the table on the rig) ─────────────────────────
 

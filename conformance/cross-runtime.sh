@@ -284,6 +284,21 @@ echo "== fixedRun (128-step fixed rhythm): node vs erl =="
 diff /tmp/reef-fixed-node.txt /tmp/reef-fixed-erl.txt && echo "  ✅ fixedRun node == erl (fixed-rhythm eval + codec identical over 128 steps)"
 diff "$FIXED_GOLDEN" /tmp/reef-fixed-node.txt && echo "  ✅ fixedRun matches frozen golden"
 
+# --- Balistes rhythm text (Reef.Conformance.rhythmTextRun) -------------------
+# A saved rhythm travels as text (`balistes/rhythm/<name>` on the stage): the
+# page prints it, the rig parses it for `balistes $ "<a b>"`. Slugs, the
+# print/parse round trip and the render of what was parsed, on both runtimes.
+RHYTHMTEXT_GOLDEN="$REEF/conformance/rhythmtext-golden.txt"
+echo "== rhythmTextRun (rhythm text + slugs): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { rhythmTextRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(rhythmTextRun);' \
+  ) > /tmp/reef-rhythmtext-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':rhythmTextRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-rhythmtext-erl.txt
+diff /tmp/reef-rhythmtext-node.txt /tmp/reef-rhythmtext-erl.txt && echo "  ✅ rhythmTextRun node == erl"
+diff "$RHYTHMTEXT_GOLDEN" /tmp/reef-rhythmtext-node.txt && echo "  ✅ rhythmTextRun matches frozen golden"
+
 # --- Odonus output scale (Reef.Conformance.outScaleRun) -----------------------
 # The second quantise point: a scale pattern sampled into SetSampled's chord on
 # its own root, across the wire, snapped by q2. Byte-identical here = the rig's
