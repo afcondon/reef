@@ -970,8 +970,9 @@ unisonAll :: Int
 unisonAll = 63
 
 -- | Copy the groups in `mask` from head I to every head. Every group is
--- | `unifyHeads` itself, mutes included; fewer leave each head's mute and,
--- | without RHYTHM, its phase, so a partial unison can land mid-play.
+-- | `unifyHeads` itself; fewer leave, without RHYTHM, each head's phase, so a
+-- | partial unison can land mid-play. No unison touches a mute (AC,
+-- | 2026-10-14: which heads play is set afterwards, on the head buttons).
 unifyHeadsOf :: Int -> Odonus -> Odonus
 unifyHeadsOf mask o
   | mask == unisonAll = unifyHeads o
@@ -994,16 +995,16 @@ unifyHeadsOf mask o
     in
       if has UClock then rh { clock = h0.clock } else rh
 
--- | Make every head a copy of head I, phase-aligned and unmuted: four voices
--- | in exact unison. The starting point for Steve Reich phasing — from here,
+-- | Make every head a copy of head I, phase-aligned, each keeping its own
+-- | mute: the heads that play are in exact unison. The starting point for Steve Reich phasing — from here,
 -- | nudge one head's LEN (metric phasing, Clapping-Music style) or OFF (static
 -- | canon) and listen to them drift against each other.
 unifyHeads :: Odonus -> Odonus
 unifyHeads o = case o.heads !! 0 of
-  Just h0 -> o { heads = map (\_ -> aligned h0) o.heads }
+  Just h0 -> o { heads = map (\h -> (aligned h0) { mute = h.mute }) o.heads }
   Nothing -> o
   where
-  aligned h = h { cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1, mute = false }
+  aligned h = h { cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1 }
 
 -- ---------------------------------------------------------------------------
 -- Reichian phasing macros — drive all four heads' OFFSET / LEN at once
