@@ -18,7 +18,7 @@ import Reef.Balistes.Kit (laneOfName)
 import Reef.Balistes.Kit as Kit
 import Reef.Balistes.Pattern as BP
 import Reef.Routing as Routing
-import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
+import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun, fillRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -51,6 +51,8 @@ main = do
   assertEqual' "mutes" { actual: map (Kit.audible mask) [ 36, 38, 42, 46, 99 ], expected: [ false, true, true, false, true ] }
   assertEqual' "toggle twice unmutes" { actual: Kit.toggleMute 0 mask, expected: Kit.toggleMute 6 0 }
   log "Reef Balistes mutes: OK"
+  assertEqual' "Balistes fill golden (text + codec + render, fill off and on)" { actual: fillRun, expected: fillGolden }
+  log "Reef Balistes fill golden: OK"
   assertEqual' "Odonus stepEmit conformance (defaultOdonus, scale source, 32 steps)"
     { actual: run, expected: golden }
   log "Reef Odonus conformance golden: OK"
@@ -2411,3 +2413,41 @@ articulationGolden = """   0 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 48 v
   18 | off AUDIO4c USB2/1 50 @62500 | held -,-,-,- | sounding -,-,-,-
   19 | cc AUDIO4c USB2/1 65=0 @0  on AUDIO4c USB2/1 52 v100 @0  note FH-2/3 52 v100 @1500 d187500  slew 8=132 lag5 @0  pulse 9=500 d187500 @2000 | held -,-,-,- | sounding 52@3563,-,-,-
 stop | off AUDIO4c USB2/1 52 @0  cv 9=0 @0"""
+
+fillGolden :: String
+fillGolden = """balistesPattern "fill test" 16
+  [ lane "BD" [ hit 0 120, hit 8 120, cell 10 110 { prob: 100, cond: "fill", ratchet: 1 } ]
+  , lane "SD" [ hit 4 100, cell 12 100 { prob: 100, cond: "!fill", ratchet: 1 }, cell 13 90 { prob: 100, cond: "fill", ratchet: 2 }, cell 14 100 { prob: 100, cond: "fill", ratchet: 1 }, cell 15 110 { prob: 100, cond: "fill", ratchet: 3 } ]
+  ]
+off    0 | 36/120/0/55x1
+off    1 | -
+off    2 | -
+off    3 | -
+off    4 | 38/100/0/55x1
+off    5 | -
+off    6 | -
+off    7 | -
+off    8 | 36/120/0/55x1
+off    9 | -
+off   10 | -
+off   11 | -
+off   12 | 38/100/0/55x1
+off   13 | -
+off   14 | -
+off   15 | -
+on     0 | 36/120/0/55x1
+on     1 | -
+on     2 | -
+on     3 | -
+on     4 | 38/100/0/55x1
+on     5 | -
+on     6 | -
+on     7 | -
+on     8 | 36/120/0/55x1
+on     9 | -
+on    10 | 36/110/0/55x1
+on    11 | -
+on    12 | -
+on    13 | 38/90/0/55x2
+on    14 | 38/100/0/55x1
+on    15 | 38/110/0/55x3"""

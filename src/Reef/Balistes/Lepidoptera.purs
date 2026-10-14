@@ -206,8 +206,10 @@ cellP ts0 = case uncons ts0 of
     pure { value: { step: s.value, cell: { vel: v.value, prob: prob.value, cond: parseCond cs.value, ratchet: rt.value } }, rest }
   _ -> Nothing
 
--- "X:Y" → CEvery X Y; anything else (incl. "—") → CAlways.
+-- "X:Y" → CEvery X Y; "fill", "!fill"; anything else (incl. "—") → CAlways.
 parseCond :: String -> P.TrigCond
+parseCond "fill" = P.CFill
+parseCond "!fill" = P.CNotFill
 parseCond s = case Str.split (Str.Pattern ":") s of
   [ a, b ] -> case Int.fromString a, Int.fromString b of
     Just x, Just y -> P.CEvery x y

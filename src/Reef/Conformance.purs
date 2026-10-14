@@ -35,6 +35,7 @@ module Reef.Conformance
   , balistesInputRun, balistesInputSteps
   , fixedRun, fixedRunSteps
   , rhythmTextRun
+  , fillRun
   , routingRun
   , articulationRun
   , vetulaRun, vetulaRunSteps
@@ -81,7 +82,7 @@ import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
 import Reef.Balistes.Protocol (decodeBalSim, encodeBalSim, decodeBTagged, encodeBTagged, decodeFixed, encodeFixed) as BSim
 import Reef.Balistes.Input (BInput(..), BTagged, applyBInput) as RBI
-import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed) as RFix
+import Reef.Balistes.Fixed (FixedPattern, emptyCell, renderFixed, renderFixedFill) as RFix
 import Reef.Balistes.Lepidoptera (parsePattern, printPattern, rhythmSlug) as BL
 import Reef.Balistes.Pattern (toWire) as BP
 import Reef.Routing (DrumRouting, Send(..), VoiceRouting, decodeDrumRouting, decodeVoiceRouting, drumSends, encodeDrumRouting, encodeVoiceRouting) as RR
@@ -957,6 +958,22 @@ rhythmTextRun = intercalate "\n" (slugs <> rhythm)
         Just q ->
           [ printed, "reprint same: " <> show (BL.printPattern q == printed) ]
             <> map (\i -> evDig i (RFix.renderFixed (BP.toWire q) i)) (range 0 31)
+
+-- | **The fill** (AC, 2026-10-14): a rhythm with FILL and NOT FILL hits, read
+-- | from its text, printed, sent through the fixed-rhythm codec, and rendered
+-- | for a bar with the fill off and a bar with it on. Identical here = the rig
+-- | plays the fill the page shows.
+fillRun :: String
+fillRun = case BL.parsePattern source of
+  Nothing -> "FILL-PARSE-FAIL"
+  Just p -> case BSim.decodeFixed (BSim.encodeFixed (BP.toWire p)) of
+    Left errs -> "FILL-DECODE-FAIL: " <> show errs
+    Right w -> intercalate "\n"
+      ( [ BL.printPattern p ]
+          <> map (\i -> "off " <> evDig i (RFix.renderFixedFill false w i)) (range 0 15)
+          <> map (\i -> "on  " <> evDig i (RFix.renderFixedFill true w i)) (range 0 15) )
+  where
+  source = "balistesPattern \"fill test\" 16\n  [ lane \"BD\" [ hit 0 120, hit 8 120, cell 10 110 { prob: 100, cond: \"fill\", ratchet: 1 } ]\n  , lane \"SD\" [ hit 4 100, cell 12 100 { prob: 100, cond: \"!fill\", ratchet: 1 }, cell 13 90 { prob: 100, cond: \"fill\", ratchet: 2 }, cell 14 100 { prob: 100, cond: \"fill\", ratchet: 1 }, cell 15 110 { prob: 100, cond: \"fill\", ratchet: 3 } ]\n  ]"
 
 -- ── 7¾. the drum routing net (the table on the rig) ─────────────────────────
 

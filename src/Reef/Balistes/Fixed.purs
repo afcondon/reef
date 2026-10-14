@@ -18,6 +18,7 @@ module Reef.Balistes.Fixed
   , kitSize
   , emptyCell
   , cellAt
+  , renderFixedFill
   , condFires
   , cellHash
   , probPass
@@ -63,11 +64,14 @@ emptyCell = { vel: 0, prob: 100, condX: 0, condY: 0, ratchet: 1 }
 cellAt :: FixedPattern -> Int -> Int -> Cell
 cellAt p lane step = fromMaybe emptyCell ((p.grid !! lane) >>= (_ !! step))
 
--- | Does this cell's condition fire on loop pass `loop` (0-based)? condX = 0 is the
--- | serialised `CAlways`; else the `CEvery condX condY` rule.
-condFires :: Cell -> Int -> Boolean
-condFires c loop =
+-- | Does this cell's condition fire on loop pass `loop` (0-based), with the fill
+-- | on or off? condX = 0 is the serialised `CAlways`, −1 `CFill`, −2 `CNotFill`;
+-- | else the `CEvery condX condY` rule.
+condFires :: Boolean -> Cell -> Int -> Boolean
+condFires fill c loop =
   if c.condX == 0 then true
+  else if c.condX == -1 then fill
+  else if c.condX == -2 then not fill
   else if c.condY <= 0 then true
   else (loop `mod` c.condY) == ((c.condX - 1) `mod` c.condY)
 
@@ -103,7 +107,12 @@ usedLanes p = filter (\l -> any (\c -> c.vel > 0) (fromMaybe [] (p.grid !! l))) 
 -- | decision both the frontend and the rig use. Fixed rhythms carry no Dilla push
 -- | (pushMs = 0); gate + ratchet + note + velocity come straight from the cell.
 renderFixed :: FixedPattern -> Int -> Array BEvent
-renderFixed p absStep =
+renderFixed p absStep = renderFixedFill false p absStep
+
+-- | As `renderFixed`, with the fill on or off (the page's FILL, the rig's
+-- | `balistes-fill`): a FILL hit plays only with it on, a NOT FILL hit only off.
+renderFixedFill :: Boolean -> FixedPattern -> Int -> Array BEvent
+renderFixedFill fill p absStep =
   let
     fixedStep = if p.steps <= 0 then 0 else absStep `mod` p.steps
     loop = if p.steps <= 0 then 0 else absStep / p.steps
@@ -113,7 +122,7 @@ renderFixed p absStep =
   evalLane fixedStep loop lane =
     let c = cellAt p lane fixedStep
     in
-      if c.vel > 0 && condFires c loop && probPass c.prob absStep lane fixedStep then
+      if c.vel > 0 && condFires fill c loop && probPass c.prob absStep lane fixedStep then
         Just
           { note: Kit.laneNote lane
           , velocity: c.vel

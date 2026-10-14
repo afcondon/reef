@@ -30,6 +30,9 @@ module Reef.Balistes.Pattern
   , cellAt
   , cellTweaked
   , condFires
+  , soundsIn
+  , addIn
+  , removeIn
   , condLabel
   , condPresets
   , cycleCond
@@ -83,7 +86,11 @@ laneIndexOf nm = findIndex (\k -> k.name == nm) canonKit
 
 -- | A trig condition — when (on which loop pass) a hit fires. `CAlways` always;
 -- | `CEvery x y` fires only on pass `x` of every `y` (Elektron-style 1:4 etc).
-data TrigCond = CAlways | CEvery Int Int
+-- |
+-- | `CFill` fires only while the fill is on, `CNotFill` only while it is off
+-- | (AC, 2026-10-14, as Elektron's FILL and NOT FILL): the fill is a delta
+-- | held in the rhythm's own cells, so changing the rhythm changes its fill.
+data TrigCond = CAlways | CEvery Int Int | CFill | CNotFill
 
 derive instance eqTrigCond :: Eq TrigCond
 
@@ -111,14 +118,44 @@ hitCell v = emptyCell { vel = v }
 cellTweaked :: Cell -> Boolean
 cellTweaked c = c.prob /= 100 || c.cond /= CAlways || c.ratchet /= 1
 
--- | Does this condition fire on loop pass `loop` (0-based)?
-condFires :: TrigCond -> Int -> Boolean
-condFires CAlways _ = true
-condFires (CEvery x y) loop = if y <= 0 then true else (loop `mod` y) == ((x - 1) `mod` y)
+-- | Does this condition fire on loop pass `loop` (0-based), with the fill on
+-- | or off?
+condFires :: Boolean -> TrigCond -> Int -> Boolean
+condFires fill = case _, _ of
+  CAlways, _ -> true
+  CEvery x y, loop -> if y <= 0 then true else (loop `mod` y) == ((x - 1) `mod` y)
+  CFill, _ -> fill
+  CNotFill, _ -> not fill
 
 condLabel :: TrigCond -> String
 condLabel CAlways = "—"
 condLabel (CEvery x y) = show x <> ":" <> show y
+condLabel CFill = "fill"
+condLabel CNotFill = "!fill"
+
+-- | Is this cell a hit that sounds with the fill on (or off)? A fill-only hit
+-- | is silent in the plain rhythm, a NOT FILL hit silent in the fill.
+soundsIn :: Boolean -> Cell -> Boolean
+soundsIn fill c = c.vel > 0 && case c.cond of
+  CFill -> fill
+  CNotFill -> not fill
+  _ -> true
+
+-- | Make the cell sound in the view (fill or plain), as a delta: in the fill, a
+-- | hit the fill had silenced comes back, and a new hit is fill-only; in the
+-- | plain rhythm, a new hit sounds in both.
+addIn :: Boolean -> Int -> Cell -> Cell
+addIn fill vel c
+  | fill && c.vel > 0 && c.cond == CNotFill = c { cond = CAlways }
+  | fill = (hitCell vel) { cond = CFill }
+  | otherwise = hitCell vel
+
+-- | Silence the cell in the view: in the fill, a fill-only hit goes and a
+-- | rhythm's hit is marked NOT FILL; in the plain rhythm, the hit goes.
+removeIn :: Boolean -> Cell -> Cell
+removeIn fill c
+  | fill && c.vel > 0 && c.cond /= CFill = c { cond = CNotFill }
+  | otherwise = emptyCell
 
 -- | The trig-condition presets the inspector cycles through.
 condPresets :: Array TrigCond
@@ -127,6 +164,7 @@ condPresets =
   , CEvery 1 2, CEvery 2 2
   , CEvery 1 3
   , CEvery 1 4, CEvery 2 4, CEvery 3 4, CEvery 4 4
+  , CFill, CNotFill
   ]
 
 -- | Step to the next preset condition (wraps).
@@ -220,4 +258,6 @@ toWire p =
     let cond = case c.cond of
                  CAlways -> { x: 0, y: 0 }
                  CEvery x y -> { x, y }
+                 CFill -> { x: -1, y: 0 }
+                 CNotFill -> { x: -2, y: 0 }
     in { vel: c.vel, prob: c.prob, ratchet: c.ratchet, condX: cond.x, condY: cond.y }

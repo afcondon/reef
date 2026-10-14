@@ -299,6 +299,20 @@ echo "== rhythmTextRun (rhythm text + slugs): node vs erl =="
 diff /tmp/reef-rhythmtext-node.txt /tmp/reef-rhythmtext-erl.txt && echo "  ✅ rhythmTextRun node == erl"
 diff "$RHYTHMTEXT_GOLDEN" /tmp/reef-rhythmtext-node.txt && echo "  ✅ rhythmTextRun matches frozen golden"
 
+# --- Balistes fill (Reef.Conformance.fillRun) --------------------------------
+# FILL and NOT FILL hits through the text, the codec and the render, a bar
+# with the fill off and a bar with it on.
+FILL_GOLDEN="$REEF/conformance/fill-golden.txt"
+echo "== fillRun (FILL / NOT FILL): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { fillRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(fillRun);' \
+  ) > /tmp/reef-fill-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':fillRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-fill-erl.txt
+diff /tmp/reef-fill-node.txt /tmp/reef-fill-erl.txt && echo "  ✅ fillRun node == erl"
+diff "$FILL_GOLDEN" /tmp/reef-fill-node.txt && echo "  ✅ fillRun matches frozen golden"
+
 # --- Odonus output scale (Reef.Conformance.outScaleRun) -----------------------
 # The second quantise point: a scale pattern sampled into SetSampled's chord on
 # its own root, across the wire, snapped by q2. Byte-identical here = the rig's
