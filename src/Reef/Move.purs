@@ -131,7 +131,7 @@ restore is s = concatMap undo is
 -- | Every verb, with its arguments, for help text and errors.
 verbs :: Array String
 verbs =
-  [ "unison [pattern|speed|int|rhythm|clock …]"
+  [ "unison [pattern|direction|speed|int|rhythm|clock …]"
   , "phase N"
   , "stagger N"
   , "notes low|mid|melody|roll"
@@ -166,11 +166,12 @@ kinds =
 unisonWord :: String -> Either String Int
 unisonWord = case _ of
   "pattern" -> Right (unisonBit UPattern)
+  "direction" -> Right (unisonBit UDirection)
   "speed" -> Right (unisonBit USpeed)
   "int" -> Right (unisonBit UInt)
   "rhythm" -> Right (unisonBit URhythm)
   "clock" -> Right (unisonBit UClock)
-  w -> Left ("unison copies pattern, speed, int, rhythm or clock, not '" <> w <> "'")
+  w -> Left ("unison copies pattern, direction, speed, int, rhythm or clock, not '" <> w <> "'")
 
 kindNamed :: String -> Either String GenKind
 kindNamed w = case find (\(Tuple n _) -> n == w) kinds of

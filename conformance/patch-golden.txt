@@ -55,7 +55,7 @@ now round-trip true
 legacy span 3
 move patch | RecallPatch
 move unison | UnifyHeadsOf
-move unison bad | refused: unison copies pattern, speed, int, rhythm or clock, not 'tempo'
+move unison bad | refused: unison copies pattern, direction, speed, int, rhythm or clock, not 'tempo'
 move now | RecallNow
 move one line | RecallPatch
 move broken | refused: this odonusPatch does not read (the fields in their printed order?)

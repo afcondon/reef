@@ -566,7 +566,9 @@ inputScript =
   , { tick: 205, input: SetHeadEuclidSteps 0 8 }
   , { tick: 205, input: SetHeadRestart 0 true }   -- a five-note figure, again each ring
   , { tick: 230, input: NudgeOffsets 1 }
-  , { tick: 240, input: UnifyHeadsOf 5 }   -- pattern + int
+  , { tick: 235, input: SetHeadDir 0 1 }   -- head I runs another way
+  , { tick: 240, input: UnifyHeadsOf 5 }   -- pattern + int, directions kept
+  , { tick: 245, input: UnifyHeadsOf 32 }  -- direction alone
   , { tick: 250, input: UnifyHeadsOf 8 }   -- rhythm, realigning the phase
   , { tick: 260, input: SetHeadMask 5 }
   , { tick: 300, input: UnifyHeads }
@@ -697,7 +699,7 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
     Right m -> intercalate "," (map (\i -> (toWire i).tag) (Move.inputsOf m))
   moves =
     [ "move patch | " <> moveLine ("odonus $ " <> t1)
-    , "move unison | " <> moveLine "odonus $ unison pattern int"
+    , "move unison | " <> moveLine "odonus $ unison pattern direction int"
     , "move unison bad | " <> moveLine "odonus $ unison tempo"
     , "move now | " <> moveLine ("odonus $ " <> tn)
     , "move one line | " <> moveLine ("odonus $ " <> String.replaceAll (String.Pattern "\n") (String.Replacement " ") t1)

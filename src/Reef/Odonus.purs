@@ -946,15 +946,15 @@ setOdoClock :: Int -> Odonus -> Odonus
 setOdoClock ix o = o { clockIx = clampI 0 (length rateTable - 1) ix }
 
 -- | What a partial unison copies from head I (AC, 2026-10-14: often you want
--- | most of head I, not all of it). PATTERN is the access pattern and its
--- | direction; RHYTHM is the Euclidean pair, the loop length and the offset,
+-- | most of head I, not all of it). PATTERN is the access pattern, DIRECTION
+-- | its direction (split from PATTERN the same day); RHYTHM is the Euclidean pair, the loop length and the offset,
 -- | and realigns the phase, since a rhythm copied out of phase is not unison.
-data UnisonGroup = UPattern | USpeed | UInt | URhythm | UClock
+data UnisonGroup = UPattern | USpeed | UInt | URhythm | UClock | UDirection
 
 derive instance eqUnisonGroup :: Eq UnisonGroup
 
 unisonGroups :: Array UnisonGroup
-unisonGroups = [ UPattern, USpeed, UInt, URhythm, UClock ]
+unisonGroups = [ UPattern, USpeed, UInt, URhythm, UClock, UDirection ]
 
 -- | A group's bit in a unison mask, in `unisonGroups` order.
 unisonBit :: UnisonGroup -> Int
@@ -964,9 +964,10 @@ unisonBit = case _ of
   UInt -> 4
   URhythm -> 8
   UClock -> 16
+  UDirection -> 32
 
 unisonAll :: Int
-unisonAll = 31
+unisonAll = 63
 
 -- | Copy the groups in `mask` from head I to every head. Every group is
 -- | `unifyHeads` itself, mutes included; fewer leave each head's mute and,
@@ -981,8 +982,9 @@ unifyHeadsOf mask o
   has g = (mask `div` unisonBit g) `mod` 2 == 1
   copy h0 h =
     let
-      p = if has UPattern then h { patternIx = h0.patternIx, direction = h0.direction } else h
-      sp = if has USpeed then p { speedIx = h0.speedIx } else p
+      p = if has UPattern then h { patternIx = h0.patternIx } else h
+      d = if has UDirection then p { direction = h0.direction } else p
+      sp = if has USpeed then d { speedIx = h0.speedIx } else d
       it = if has UInt then sp { transp = h0.transp } else sp
       rh =
         if has URhythm then
