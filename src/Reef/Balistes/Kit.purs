@@ -14,11 +14,15 @@ module Reef.Balistes.Kit
   , kitSize
   , laneNote
   , laneOfName
+  , muted
+  , toggleMute
+  , audible
   ) where
 
 import Prelude
 
 import Data.Array (findIndex, length, (!!))
+import Data.Int.Bits (and, shl)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String (toLower)
 
@@ -78,3 +82,23 @@ laneOfName raw = case findIndex (\k -> toLower k.name == name) canonKit of
     "tamb" -> Just 14
     "shaker" -> Just 15
     _ -> Nothing
+
+-- | **Mutes** (AC, 2026-10-14): which lanes are silenced, one bit a lane,
+-- | lane 0 the lowest. Performance state, not a rhythm's: one mask covers
+-- | Grids and RYTM, so muting BD silences the kick whichever is playing. The
+-- | page and the rig both drop a muted lane's hits through `audible`.
+muted :: Int -> Int -> Boolean
+muted mask lane = and mask (shl 1 lane) /= 0
+
+-- | Toggled arithmetically, not by `Data.Int.Bits.xor`, which purerl inlines to
+-- | Erlang's boolean `xor` (see `Reef.Gen.flipHeads`): a bit wholly present is
+-- | cleared by subtracting it, an absent one set by adding it.
+toggleMute :: Int -> Int -> Int
+toggleMute lane mask = let bit = shl 1 lane in if and mask bit /= 0 then mask - bit else mask + bit
+
+-- | Does a hit carrying this note sound under the mask? A note no lane sends
+-- | is never muted.
+audible :: Int -> Int -> Boolean
+audible mask note = case findIndex (\l -> l.note == note) canonKit of
+  Just lane -> not (muted mask lane)
+  Nothing -> true

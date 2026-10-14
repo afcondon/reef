@@ -15,6 +15,7 @@ import Effect.Console (log)
 import Data.Maybe (Maybe(..))
 import Reef.Vetula.Perf (wrapAt)
 import Reef.Balistes.Kit (laneOfName)
+import Reef.Balistes.Kit as Kit
 import Reef.Balistes.Pattern as BP
 import Reef.Routing as Routing
 import Reef.Conformance (voicingRun, seleneRun, durRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun)
@@ -45,6 +46,11 @@ main = do
   assertEqual' "extendTo 3 truncates" { actual: hits (BP.extendTo 3 bar), expected: [ 0 ] }
   assertEqual' "length clamps" { actual: [ (BP.extendTo 200 bar).steps, (BP.resizeTo 0 bar).steps ], expected: [ BP.maxSteps, 1 ] }
   log "Reef Balistes rhythm length: OK"
+  -- Mutes: BD and OH muted; their notes are dropped, the rest sound.
+  let mask = Kit.toggleMute 6 (Kit.toggleMute 0 0)
+  assertEqual' "mutes" { actual: map (Kit.audible mask) [ 36, 38, 42, 46, 99 ], expected: [ false, true, true, false, true ] }
+  assertEqual' "toggle twice unmutes" { actual: Kit.toggleMute 0 mask, expected: Kit.toggleMute 6 0 }
+  log "Reef Balistes mutes: OK"
   assertEqual' "Odonus stepEmit conformance (defaultOdonus, scale source, 32 steps)"
     { actual: run, expected: golden }
   log "Reef Odonus conformance golden: OK"
