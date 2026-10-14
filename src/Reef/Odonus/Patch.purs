@@ -113,6 +113,8 @@ printHead hd =
     -- clocked by its notes' lengths; left out on the step clock, so older
     -- patches read and print as they did
     <> (if hd.clock == 1 then " clock dur" else "")
+    -- left out when off, as the clock is
+    <> (if hd.restart then " restart" else "")
     <> (if hd.mute then " mute" else "")
 
 printGen :: GenSource -> String
@@ -511,6 +513,9 @@ headP = do
         "step" -> pure 0
         w -> failP ("a head's clock is dur or step, not " <> w)
     _ -> pure 0
+  restart <- peek >>= case _ of
+    Just (Word "restart") -> word *> pure true
+    _ -> pure false
   mute <- peek >>= case _ of
     Just (Word "mute") -> word *> pure true
     _ -> pure false
@@ -518,7 +523,7 @@ headP = do
     { head:
         { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
         , speedIx: 0, direction: dir, transp: tr, mute, patternIx: pat
-        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0 }
+        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0, restart }
     , speed: spd }
 
 genP :: P GenSource

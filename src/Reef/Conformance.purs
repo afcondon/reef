@@ -562,6 +562,9 @@ inputScript =
   , { tick: 175, input: FanOffsets 2 }
   , { tick: 200, input: SetRate GHeads 120 }
   , { tick: 200, input: SetAmt GTransp 60 }
+  , { tick: 205, input: SetHeadPulses 0 5 }
+  , { tick: 205, input: SetHeadEuclidSteps 0 8 }
+  , { tick: 205, input: SetHeadRestart 0 true }   -- a five-note figure, again each ring
   , { tick: 230, input: NudgeOffsets 1 }
   , { tick: 240, input: UnifyHeadsOf 5 }   -- pattern + int
   , { tick: 250, input: UnifyHeadsOf 8 }   -- rhythm, realigning the phase
@@ -672,7 +675,7 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
   where
   odo0 = defaultOdonus
     { harmony = Just "<c'maj7 a'min7>/2", span = 2, octaveShift = -1
-    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3 }) defaultOdonus.heads }
+    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2 }) defaultOdonus.heads }
   p0 =
     { name: "live", odo: setPat odo0 { clockIx = 5 }, gen: Patch.reconcileGen [], genSpread: 0.3, genBias: 0.7
     , swing: 0.12, velHumanize: 9 }
@@ -694,6 +697,8 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
     Right m -> intercalate "," (map (\i -> (toWire i).tag) (Move.inputsOf m))
   moves =
     [ "move patch | " <> moveLine ("odonus $ " <> t1)
+    , "move unison | " <> moveLine "odonus $ unison pattern int"
+    , "move unison bad | " <> moveLine "odonus $ unison tempo"
     , "move now | " <> moveLine ("odonus $ " <> tn)
     , "move one line | " <> moveLine ("odonus $ " <> String.replaceAll (String.Pattern "\n") (String.Replacement " ") t1)
     , "move broken | " <> moveLine "odonus $ odonusPatch \"x\" { scale: C"

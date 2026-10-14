@@ -45,6 +45,7 @@ module Reef.Odonus
   , setHeadOffset
   , setHeadLen
   , setHeadClock
+  , setHeadRestart
   , setHeadPulses
   , setHeadEuclidSteps
   , nudgeHeadPulses
@@ -183,15 +184,18 @@ type Head = HeadOf
                     -- `dur` steps, so the cells' durations are its rhythm (AC,
                     -- 2026-10-03), and a gate-off cell is a rest of its own length
   , hold :: Int     -- clock 1: base ticks left on the current cell (0 = move on now)
+  , restart :: Boolean  -- step clock: the pattern starts again at each turn of the
+                        -- Euclidean ring, so E(5,8) is a five-note figure that
+                        -- repeats with its rhythm (AC, 2026-10-14)
   )
 
-type HeadWire = HeadOf (clock :: Maybe Int, hold :: Maybe Int)
+type HeadWire = HeadOf (clock :: Maybe Int, hold :: Maybe Int, restart :: Maybe Boolean)
 
 headFromWire :: HeadWire -> Head
-headFromWire h = h { clock = fromMaybe 0 h.clock, hold = fromMaybe 0 h.hold }
+headFromWire h = h { clock = fromMaybe 0 h.clock, hold = fromMaybe 0 h.hold, restart = fromMaybe false h.restart }
 
 headToWire :: Head -> HeadWire
-headToWire h = h { clock = Just h.clock, hold = Just h.hold }
+headToWire h = h { clock = Just h.clock, hold = Just h.hold, restart = Just h.restart }
 
 -- | Odonus as read from JSON (heads as `HeadWire`), and back.
 odonusFromWire :: OdonusOf HeadWire -> Odonus
@@ -535,7 +539,7 @@ mkHead :: Int -> Int -> Int -> Boolean -> Int -> Head
 mkHead speedIx direction transp mute patternIx =
   { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
   , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16
-  , clock: 0, hold: 0 }
+  , clock: 0, hold: 0, restart: false }
 
 -- | Head I runs (Rows); II–IV start muted with distinct patterns + fugue
 -- | offsets — unmute to build the canon.
@@ -662,8 +666,15 @@ tickHead cells h =
     else
       let
         hit = euclidHit h.pulses es h.etick
-        st = if hit then stepSeq order cells len dir { pos: h.seqPos, pend: h.pendStep }
-             else { pos: h.seqPos, pend: h.pendStep }
+        -- the ring's first tick, restarting: stand just before the pattern's
+        -- first cell, so the cycle's first pulse lands on it
+        from =
+          if h.restart && h.etick == 0 then case dir of
+            Fwd -> { pos: len - 1, pend: 1 }
+            Back -> { pos: 0, pend: 1 }
+            Pend -> { pos: 1, pend: -1 }
+          else { pos: h.seqPos, pend: h.pendStep }
+        st = if hit then stepSeq order cells len dir from else from
       in
         { head: h { seqPos = st.pos, cursor = cursorAt st.pos, pendStep = st.pend, etick = (h.etick + 1) `mod` es }
         , pulsed: hit }
@@ -775,6 +786,10 @@ setHeadLen h v = editHead h \hd -> hd { len = clampI 1 16 v }
 -- | starts the new clock fresh (hold 0: move on at the next tick).
 setHeadClock :: Int -> Int -> Odonus -> Odonus
 setHeadClock h v = editHead h \hd -> if hd.clock == clampI 0 1 v then hd else hd { clock = clampI 0 1 v, hold = 0 }
+
+-- | Whether head `h`'s pattern starts again at each turn of its ring.
+setHeadRestart :: Int -> Boolean -> Odonus -> Odonus
+setHeadRestart h v = editHead h _ { restart = v }
 
 -- | The Euclidean step-count ceiling — the largest n in E(k, n) a head may hold.
 -- |
@@ -971,7 +986,7 @@ unifyHeadsOf mask o
       it = if has UInt then sp { transp = h0.transp } else sp
       rh =
         if has URhythm then
-          it { pulses = h0.pulses, esteps = h0.esteps, len = h0.len, offset = h0.offset
+          it { pulses = h0.pulses, esteps = h0.esteps, len = h0.len, offset = h0.offset, restart = h0.restart
              , cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1, etick = h0.etick, hold = h0.hold }
         else it
     in
