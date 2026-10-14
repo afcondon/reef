@@ -31,6 +31,8 @@ module Reef.Balistes.Pattern
   , cellTweaked
   , condFires
   , soundsIn
+  , soundsAt
+  , toggleFillMute
   , addIn
   , removeIn
   , condLabel
@@ -141,6 +143,15 @@ soundsIn fill c = c.vel > 0 && case c.cond of
   CNotFill -> not fill
   _ -> true
 
+-- | Does the hit at (lane, step) sound with the fill on (or off)? As
+-- | `soundsIn`, and with the fill on, not in a lane the fill mutes.
+soundsAt :: Boolean -> FixedPattern -> Int -> Int -> Boolean
+soundsAt fill p lane step = soundsIn fill (cellAt p lane step) && not (fill && Kit.muted p.fillMutes lane)
+
+-- | Mute the lane in the fill, or unmute it.
+toggleFillMute :: Int -> FixedPattern -> FixedPattern
+toggleFillMute lane p = p { fillMutes = Kit.toggleMute lane p.fillMutes }
+
 -- | Make the cell sound in the view (fill or plain), as a delta: in the fill, a
 -- | hit the fill had silenced comes back, and a new hit is fill-only; in the
 -- | plain rhythm, a new hit sounds in both.
@@ -181,6 +192,9 @@ type FixedPattern =
   { name :: String
   , steps :: Int
   , grid :: Array (Array Cell)
+  -- the lanes the fill silences, one bit a lane (Kit.muted): pressing a
+  -- lane's M with the fill on (AC, 2026-10-14)
+  , fillMutes :: Int
   }
 
 cellAt :: FixedPattern -> Int -> Int -> Cell
@@ -224,7 +238,7 @@ buildGrid steps rows = foldl place (emptyGrid steps) rows
 -- | A fresh, all-silent named pattern (the "+ NEW" template).
 emptyPattern :: String -> Int -> FixedPattern
 emptyPattern name steps =
-  { name, steps, grid: emptyGrid steps }
+  { name, steps, grid: emptyGrid steps, fillMutes: 0 }
 
 -- | The longest rhythm the page offers: four bars of sixteenths.
 maxSteps :: Int
@@ -251,6 +265,7 @@ withLength n cellOf p =
 toWire :: FixedPattern -> Fixed.FixedPattern
 toWire p =
   { steps: p.steps
+  , fillMutes: p.fillMutes
   , grid: map (map cellOf) p.grid
   }
   where

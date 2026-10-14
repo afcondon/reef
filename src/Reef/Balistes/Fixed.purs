@@ -56,6 +56,7 @@ type Cell =
 type FixedPattern =
   { steps :: Int
   , grid :: Array (Array Cell)
+  , fillMutes :: Int    -- the lanes the fill silences (Kit.muted)
   }
 
 emptyCell :: Cell
@@ -122,7 +123,7 @@ renderFixedFill fill p absStep =
   evalLane fixedStep loop lane =
     let c = cellAt p lane fixedStep
     in
-      if c.vel > 0 && condFires fill c loop && probPass c.prob absStep lane fixedStep then
+      if c.vel > 0 && condFires fill c loop && not (fill && Kit.muted p.fillMutes lane) && probPass c.prob absStep lane fixedStep then
         Just
           { note: Kit.laneNote lane
           , velocity: c.vel

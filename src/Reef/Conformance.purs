@@ -913,6 +913,7 @@ fixedTestPattern :: RFix.FixedPattern
 fixedTestPattern =
   { steps: 16
   , grid: map laneRow (range 0 15)
+  , fillMutes: 0
   }
   where
   laneRow lane = map (cellFor lane) (range 0 15)
@@ -959,7 +960,8 @@ rhythmTextRun = intercalate "\n" (slugs <> rhythm)
           [ printed, "reprint same: " <> show (BL.printPattern q == printed) ]
             <> map (\i -> evDig i (RFix.renderFixed (BP.toWire q) i)) (range 0 31)
 
--- | **The fill** (AC, 2026-10-14): a rhythm with FILL and NOT FILL hits, read
+-- | **The fill** (AC, 2026-10-14): a rhythm with FILL and NOT FILL hits and a
+-- | lane the fill mutes (the hats), read
 -- | from its text, printed, sent through the fixed-rhythm codec, and rendered
 -- | for a bar with the fill off and a bar with it on. Identical here = the rig
 -- | plays the fill the page shows.
@@ -973,7 +975,7 @@ fillRun = case BL.parsePattern source of
           <> map (\i -> "off " <> evDig i (RFix.renderFixedFill false w i)) (range 0 15)
           <> map (\i -> "on  " <> evDig i (RFix.renderFixedFill true w i)) (range 0 15) )
   where
-  source = "balistesPattern \"fill test\" 16\n  [ lane \"BD\" [ hit 0 120, hit 8 120, cell 10 110 { prob: 100, cond: \"fill\", ratchet: 1 } ]\n  , lane \"SD\" [ hit 4 100, cell 12 100 { prob: 100, cond: \"!fill\", ratchet: 1 }, cell 13 90 { prob: 100, cond: \"fill\", ratchet: 2 }, cell 14 100 { prob: 100, cond: \"fill\", ratchet: 1 }, cell 15 110 { prob: 100, cond: \"fill\", ratchet: 3 } ]\n  ]"
+  source = "balistesPattern \"fill test\" 16\n  [ lane \"BD\" [ hit 0 120, hit 8 120, cell 10 110 { prob: 100, cond: \"fill\", ratchet: 1 } ]\n  , lane \"SD\" [ hit 4 100, cell 12 100 { prob: 100, cond: \"!fill\", ratchet: 1 }, cell 13 90 { prob: 100, cond: \"fill\", ratchet: 2 }, cell 14 100 { prob: 100, cond: \"fill\", ratchet: 1 }, cell 15 110 { prob: 100, cond: \"fill\", ratchet: 3 } ]\n  , lane \"CH\" [ hit 2 64, hit 6 64, hit 10 64, hit 14 64 ]\n  ]\n  fillMutes [ \"CH\" ]"
 
 -- ── 7¾. the drum routing net (the table on the rig) ─────────────────────────
 

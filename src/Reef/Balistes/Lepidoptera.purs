@@ -21,7 +21,7 @@ import Prelude
 
 import Reef.Word as Word
 
-import Data.Array (mapMaybe, range, span, uncons)
+import Data.Array (filter, mapMaybe, range, span, uncons)
 import Data.Array as Array
 import Data.Foldable (foldl)
 import Data.Int as Int
@@ -30,6 +30,7 @@ import Data.String (Pattern(..), split, stripPrefix) as Str
 import Data.String.CodeUnits (fromCharArray, toCharArray)
 import Data.String.Common (joinWith)
 import Reef.Balistes.Pattern as P
+import Reef.Balistes.Kit as Kit
 
 -- ---------------------------------------------------------------------------
 -- Print
@@ -40,6 +41,12 @@ printPattern :: P.FixedPattern -> String
 printPattern p =
   "balistesPattern " <> show p.name <> " " <> show p.steps <> "\n"
     <> "  [ " <> joinWith "\n  , " (map (printLane p) (P.usedLanes p)) <> "\n  ]"
+    <> fillMutes
+  where
+  -- the lanes the fill mutes, by name, after the lanes; none, no line
+  fillMutes = case filter (Kit.muted p.fillMutes) (range 0 (P.kitSize - 1)) of
+    [] -> ""
+    lanes -> "\n  fillMutes [ " <> joinWith ", " (map (show <<< P.laneName) lanes) <> " ]"
 
 -- | One lane: `lane "<name>" [ <cells> ]`, listing only its hits. The lane
 -- | is the drum; which note reaches an instrument is the routing's
@@ -175,7 +182,12 @@ patternP ts0 = do
   name <- str ts1
   steps <- int name.rest
   lanes <- bracketed laneP steps.rest
-  pure { value: build name.value steps.value lanes.value, rest: lanes.rest }
+  let fills = tok (TWord "fillMutes") lanes.rest >>= bracketed str
+      muted = maybe [] _.value fills
+      built = build name.value steps.value lanes.value
+  pure
+    { value: built { fillMutes = foldl (\m nm -> maybe m (\l -> Kit.toggleMute l m) (P.laneIndexOf nm)) 0 muted }
+    , rest: maybe lanes.rest _.rest fills }
 
 laneP :: Array Token -> Maybe (Step PLane)
 laneP ts0 = do
