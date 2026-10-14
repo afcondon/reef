@@ -58,7 +58,7 @@ import Reef.Odonus
   , setHeadClock, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
-  , toggleScaleNote, toggleSkip, unifyHeads, recallScene
+  , toggleScaleNote, toggleSkip, unifyHeads, unifyHeadsOf, recallScene
   )
 import Reef.PitchSet (PitchSet)
 import Reef.Odonus.Patch as Patch
@@ -156,6 +156,7 @@ data Input
   | RecallNow String
   -- Reichian phase macros
   | UnifyHeads
+  | UnifyHeadsOf Int          -- a unison mask (`Reef.Odonus.unisonBit`)
   | FanOffsets Int
   | StaggerLengths Int
   | SpreadOctaves Int
@@ -242,6 +243,7 @@ applyInput = case _ of
     Just n -> s { odo = Patch.withPhases n.phases s.odo, seed = n.seed, frozen = n.frozen }
     Nothing -> s
   UnifyHeads -> onOdo unifyHeads
+  UnifyHeadsOf m -> onOdo (unifyHeadsOf m)
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
   SpreadOctaves n -> onOdo (spreadOctaves n)
@@ -343,6 +345,7 @@ toWire = case _ of
   RecallPatch t -> w0 { tag = "RecallPatch", txt = Just t }
   RecallNow t -> w0 { tag = "RecallNow", txt = Just t }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
+  UnifyHeadsOf m -> w0 { tag = "UnifyHeadsOf", a = m }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
   SpreadOctaves n -> w0 { tag = "SpreadOctaves", a = n }
@@ -408,6 +411,7 @@ fromWire w = case w.tag of
   "RecallPatch" -> RecallPatch <$> w.txt
   "RecallNow" -> RecallNow <$> w.txt
   "UnifyHeads" -> Just UnifyHeads
+  "UnifyHeadsOf" -> Just (UnifyHeadsOf w.a)
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)
   "SpreadOctaves" -> Just (SpreadOctaves w.a)

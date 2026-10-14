@@ -563,6 +563,8 @@ inputScript =
   , { tick: 200, input: SetRate GHeads 120 }
   , { tick: 200, input: SetAmt GTransp 60 }
   , { tick: 230, input: NudgeOffsets 1 }
+  , { tick: 240, input: UnifyHeadsOf 5 }   -- pattern + int
+  , { tick: 250, input: UnifyHeadsOf 8 }   -- rhythm, realigning the phase
   , { tick: 260, input: SetHeadMask 5 }
   , { tick: 300, input: UnifyHeads }
   , { tick: 340, input: SetSpread 5 }

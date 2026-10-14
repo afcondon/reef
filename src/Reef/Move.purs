@@ -51,8 +51,8 @@ import Prelude
 
 import Data.Traversable (traverse)
 
-import Data.Foldable (foldl)
-import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, null, reverse, snoc, takeWhile, uncons, (!!))
+import Data.Foldable (foldl, sum)
+import Data.Array (catMaybes, concatMap, cons, drop, filter, find, head, length, mapWithIndex, nub, null, reverse, snoc, takeWhile, uncons, (!!))
 import Data.Either (Either(..))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
@@ -61,7 +61,7 @@ import Data.String.CodeUnits as CU
 import Data.Tuple (Tuple(..))
 import Reef.Gen (GenKind(..))
 import Reef.Input (Input(..), SimState)
-import Reef.Odonus (knobMax)
+import Reef.Odonus (UnisonGroup(..), knobMax, unisonBit)
 import Reef.Odonus.Patch as Patch
 
 -- | A parsed line: gestures, a sequence of moves, or a move for n bars.
@@ -131,7 +131,7 @@ restore is s = concatMap undo is
 -- | Every verb, with its arguments, for help text and errors.
 verbs :: Array String
 verbs =
-  [ "unison"
+  [ "unison [pattern|speed|int|rhythm|clock …]"
   , "phase N"
   , "stagger N"
   , "notes low|mid|melody|roll"
@@ -162,6 +162,16 @@ kinds =
   , Tuple "pattern" GPattern, Tuple "speed" GSpeed, Tuple "key" GKey, Tuple "vel" GVel
   ]
 
+-- | A word of a partial unison: the group of head I's settings it copies.
+unisonWord :: String -> Either String Int
+unisonWord = case _ of
+  "pattern" -> Right (unisonBit UPattern)
+  "speed" -> Right (unisonBit USpeed)
+  "int" -> Right (unisonBit UInt)
+  "rhythm" -> Right (unisonBit URhythm)
+  "clock" -> Right (unisonBit UClock)
+  w -> Left ("unison copies pattern, speed, int, rhythm or clock, not '" <> w <> "'")
+
 kindNamed :: String -> Either String GenKind
 kindNamed w = case find (\(Tuple n _) -> n == w) kinds of
   Just (Tuple _ k) -> Right k
@@ -171,6 +181,7 @@ kindNamed w = case find (\(Tuple n _) -> n == w) kinds of
 verb :: String -> Array String -> Either String (Array Input)
 verb name args = case name, args of
   "unison", [] -> Right [ UnifyHeads ]
+  "unison", ws -> (\bits -> [ UnifyHeadsOf (sum bits) ]) <$> traverse unisonWord (nub ws)
   "phase", [ n ] -> one FanOffsets <$> int n
   "stagger", [ n ] -> one StaggerLengths <$> int n
   "notes", [ "low" ] -> Right [ SetAllNotes 0 ]

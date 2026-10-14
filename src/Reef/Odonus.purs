@@ -60,6 +60,11 @@ module Reef.Odonus
   , cyclePattern
   , setHeadPattern
   , unifyHeads
+  , unifyHeadsOf
+  , UnisonGroup(..)
+  , unisonGroups
+  , unisonBit
+  , unisonAll
   , fanOffsets
   , staggerLengths
   , spreadOctaves
@@ -924,6 +929,53 @@ setGatePct n o = o { gatePct = clampI 10 200 n }
 -- | Odonus's clock: its multiplier of the beat, an index into `rateTable`.
 setOdoClock :: Int -> Odonus -> Odonus
 setOdoClock ix o = o { clockIx = clampI 0 (length rateTable - 1) ix }
+
+-- | What a partial unison copies from head I (AC, 2026-10-14: often you want
+-- | most of head I, not all of it). PATTERN is the access pattern and its
+-- | direction; RHYTHM is the Euclidean pair, the loop length and the offset,
+-- | and realigns the phase, since a rhythm copied out of phase is not unison.
+data UnisonGroup = UPattern | USpeed | UInt | URhythm | UClock
+
+derive instance eqUnisonGroup :: Eq UnisonGroup
+
+unisonGroups :: Array UnisonGroup
+unisonGroups = [ UPattern, USpeed, UInt, URhythm, UClock ]
+
+-- | A group's bit in a unison mask, in `unisonGroups` order.
+unisonBit :: UnisonGroup -> Int
+unisonBit = case _ of
+  UPattern -> 1
+  USpeed -> 2
+  UInt -> 4
+  URhythm -> 8
+  UClock -> 16
+
+unisonAll :: Int
+unisonAll = 31
+
+-- | Copy the groups in `mask` from head I to every head. Every group is
+-- | `unifyHeads` itself, mutes included; fewer leave each head's mute and,
+-- | without RHYTHM, its phase, so a partial unison can land mid-play.
+unifyHeadsOf :: Int -> Odonus -> Odonus
+unifyHeadsOf mask o
+  | mask == unisonAll = unifyHeads o
+  | otherwise = case o.heads !! 0 of
+      Just h0 -> o { heads = map (copy h0) o.heads }
+      Nothing -> o
+  where
+  has g = (mask `div` unisonBit g) `mod` 2 == 1
+  copy h0 h =
+    let
+      p = if has UPattern then h { patternIx = h0.patternIx, direction = h0.direction } else h
+      sp = if has USpeed then p { speedIx = h0.speedIx } else p
+      it = if has UInt then sp { transp = h0.transp } else sp
+      rh =
+        if has URhythm then
+          it { pulses = h0.pulses, esteps = h0.esteps, len = h0.len, offset = h0.offset
+             , cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1, etick = h0.etick, hold = h0.hold }
+        else it
+    in
+      if has UClock then rh { clock = h0.clock } else rh
 
 -- | Make every head a copy of head I, phase-aligned and unmuted: four voices
 -- | in exact unison. The starting point for Steve Reich phasing — from here,
