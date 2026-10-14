@@ -41,6 +41,9 @@ module Reef.Balistes.Pattern
   , emptyGrid
   , buildGrid
   , emptyPattern
+  , maxSteps
+  , extendTo
+  , resizeTo
   , toWire
   ) where
 
@@ -184,6 +187,26 @@ buildGrid steps rows = foldl place (emptyGrid steps) rows
 emptyPattern :: String -> Int -> FixedPattern
 emptyPattern name steps =
   { name, steps, grid: emptyGrid steps }
+
+-- | The longest rhythm the page offers: four bars of sixteenths.
+maxSteps :: Int
+maxSteps = 64
+
+-- | Lengthen by repeating: step `i` of the new rhythm is step `i mod steps` of
+-- | the old, so the beat carries on into the new bars and the fill is written
+-- | over a copy. Shortening truncates.
+extendTo :: Int -> FixedPattern -> FixedPattern
+extendTo n p = withLength n (\row i -> fromMaybe emptyCell (row !! (i `mod` max 1 p.steps))) p
+
+-- | Lengthen with silent steps, or truncate: for a step or two either way,
+-- | where repeating the start would put hits where nobody asked.
+resizeTo :: Int -> FixedPattern -> FixedPattern
+resizeTo n = withLength n \row i -> fromMaybe emptyCell (row !! i)
+
+withLength :: Int -> (Array Cell -> Int -> Cell) -> FixedPattern -> FixedPattern
+withLength n cellOf p =
+  let n' = if n < 1 then 1 else if n > maxSteps then maxSteps else n
+  in p { steps = n', grid = map (\row -> map (cellOf row) (range 0 (n' - 1))) p.grid }
 
 -- | The rhythm as the shared eval plays it (`Reef.Balistes.Fixed`): its trig
 -- | condition flattened to two ints, its name dropped.
