@@ -74,6 +74,8 @@ module Reef.Odonus
   , nudgeOffsets
   , scaleOf
   , renderCell
+  , renderHead
+  , setVoices
   , knobMax
   , effectivePitchSet
   , setHarmony
@@ -116,9 +118,14 @@ import Data.Foldable (foldl)
 import Data.Int (toNumber)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
+import Data.Either (either)
+import Data.String (trim)
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
-import Reef.PitchSet (nearestIn, periodsIn, quantiseToVoicing, realizeEqualShift, voicing) as PS
+import Reef.PitchSet (nearestIn, periodsIn, quantiseToVoicing, realize, realizeEqualShift, voicing) as PS
+import Reef.Odonus.Voices (Rule(..), Voices, parseVoices, rulesOf, strategy, voicingOf, wantsSeventh)
+import Harmonia.Chord (Chord(..))
+import Harmonia.Voicing (closeVoicing, voicingMidi)
 
 type Cell =
   { note :: Int
@@ -259,6 +266,10 @@ type OdonusOf h =
       -- pitch set, so the cells play arpeggios of the chord, octaves kept
       -- (docs/kb/plans/harmony-routes-coherent.md). Nothing: the scale. A
       -- Maybe, so a handed-over state from before it decodes as none
+  , voices :: Maybe Voices
+      -- VOICES: a voicing and a rule per head (`Reef.Odonus.Voices`,
+      -- docs/kb/plans/odonus-voices.md). Nothing: every head plays its own
+      -- melody, SPREAD as ever. A Maybe, so older states decode as none
   }
 
 -- | The active scale built from the root + interval mask.
@@ -335,6 +346,86 @@ setPitchSet ps o = o { pitchSet = Just ps }
 -- | Drop back to the scale-derived set (standalone authoring).
 clearPitchSet :: Odonus -> Odonus
 clearPitchSet o = o { pitchSet = Nothing }
+
+-- | The pitch head `i` plays for cell `c`, by its VOICES rule: its own
+-- | melody (`renderCell`, the rule with no strategy), a note of the voicing of
+-- | the sounding chord, or head I's note moved through the sounding set.
+-- | Voice and lead notes are in their set already: INT is added, unsnapped, and
+-- | the global octave last, as for a melody.
+renderHead :: Odonus -> Int -> Head -> Cell -> Int
+renderHead o i hd c = case o.voices of
+  Nothing -> renderCell o hd c
+  Just v -> case fromMaybe Melody (rulesOf v !! i) of
+    Melody -> renderCell o hd c
+    Voice k ->
+      let
+        notes = voicedChord o v
+        n = length notes
+        ix = max 0 (k - 1)
+      in
+        if n == 0 then renderCell o hd c
+        else fromMaybe 0 (notes !! (ix `mod` n)) + 12 * (ix / n) + hd.transp + o.octaveShift * 12
+    Lead d ->
+      let set = soundingSet o
+      in PS.realize set (indexNear set (leadNote o) + d) + hd.transp + o.octaveShift * 12
+
+-- | Set VOICES from its text (`drop2 melody voice 1 voice 3 lead -2`); `off`
+-- | or nothing clears it. Text that does not parse leaves it as it was.
+setVoices :: String -> Odonus -> Odonus
+setVoices txt o = case trim txt of
+  "" -> o { voices = Nothing }
+  "off" -> o { voices = Nothing }
+  t -> either (const o) (\v -> o { voices = Just v }) (parseVoices t)
+
+-- | Head I's note, before the global octave: what VOICES harmonises.
+leadNote :: Odonus -> Int
+leadNote o = case o.heads !! 0 of
+  Just h0 | Just c0 <- o.cells !! h0.cursor -> renderCell o h0 c0 - o.octaveShift * 12
+  _ -> 60
+
+-- | The set a lead moves through: the chord's tones when one sounds, else the
+-- | scale.
+soundingSet :: Odonus -> PitchSet
+soundingSet o = case o.chord of
+  Just pcs | not (null pcs) -> PitchSet { offsets: sort (nub (map (\p -> ((p `mod` 12) + 12) `mod` 12) pcs)), root: 0, period: Just 12 }
+  _ -> effectivePitchSet o
+
+-- | The chord VOICES voices: the sounding chord, else the triad (or, for the
+-- | four-note voicings, the seventh) the scale stacks on head I's note;
+-- | Harmonia's close voicing in head I's octave, then the strategy's.
+voicedChord :: Odonus -> Voices -> Array Int
+voicedChord o v =
+  let
+    kind = voicingOf v.voicing
+    lead = leadNote o
+    pcs = case o.chord of
+      Just ps | not (null ps) -> ps
+      _ ->
+        let
+          scale = effectivePitchSet o
+          at = indexNear scale lead
+          degrees = if wantsSeventh kind then [ 0, 2, 4, 6 ] else [ 0, 2, 4 ]
+        in map (\d -> PS.realize scale (at + d)) degrees
+    classes = sort (nub (map (\p -> ((p `mod` 12) + 12) `mod` 12) pcs))
+  in
+    sort (voicingMidi (strategy kind (closeVoicing { centre: floorDivI lead 12 - 1 } (Chord classes))))
+
+-- | The index in `set` of the note of it nearest `note`.
+indexNear :: PitchSet -> Int -> Int
+indexNear set@(PitchSet s) note =
+  let
+    target = PS.nearestIn set note
+    n = max 1 (cardinality set)
+    guess = case s.period of
+      Just p -> floorDivI (target - s.root) (max 1 p) * n
+      Nothing -> 0
+    span = range' (guess - n) (guess + 2 * n)
+  in fromMaybe guess (head (filter (\j -> PS.realize set j == target) span))
+  where
+  range' a b = if a > b then [] else a : range' (a + 1) b
+
+floorDivI :: Int -> Int -> Int
+floorDivI a b = let q = a / b in if (a `mod` b /= 0) && ((a < 0) /= (b < 0)) then q - 1 else q
 
 -- | The top cell INDEX for this voice: `span` periods of the effective set, minus
 -- | one. The UI uses it as the NOTE knob's range — cells are indices now, not
@@ -583,7 +674,7 @@ defaultOdonus =
   , pitchSet: Nothing
   , span: 3
   , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, chord: Nothing, harmony: Nothing
-  , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing }
+  , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing, voices: Nothing }
 
 -- ---------------------------------------------------------------------------
 -- traversal — walk the head's pattern ordering, skip-aware
@@ -724,7 +815,7 @@ stepEmit o =
     firedFor idx r = mapMaybe (fire idx r.head) r.ticks
     fire idx hd t = case o2.cells !! t.cursor of
       Just c | t.pulsed && not hd.mute && c.gate && not c.skip ->
-        Just { headIdx: idx, pitch: renderCell o2 hd c, glide: c.glide
+        Just { headIdx: idx, pitch: renderHead o2 idx hd c, glide: c.glide
              , dur: c.dur, ratchet: c.ratchet, vel: c.vel
              , offNum: t.num, offDen: t.den }
       _ -> Nothing

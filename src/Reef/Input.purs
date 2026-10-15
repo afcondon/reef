@@ -58,7 +58,7 @@ import Reef.Odonus
   , setHeadClock, setHeadRestart, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
-  , toggleScaleNote, toggleSkip, unifyHeads, unifyHeadsOf, recallScene
+  , toggleScaleNote, toggleSkip, unifyHeads, unifyHeadsOf, recallScene, setVoices
   )
 import Reef.PitchSet (PitchSet)
 import Reef.Odonus.Patch as Patch
@@ -129,6 +129,7 @@ data Input
   -- `harmony`, and Vetula's harmonic context). Replaced the chord overlay's feed,
   -- period clock and FollowChord on 2026-10-01; their wire tags now decode to nothing.
   | SetHarmony (Maybe String)
+  | SetVoices String          -- VOICES as text (`Reef.Odonus.Voices`); "off" clears
   -- a pattern of Tidal scale names the scale follows (Reef.Move's `scale`);
   -- Nothing returns to the authored scale. Shares the `txt` wire field.
   | SetScalePattern (Maybe String)
@@ -234,6 +235,7 @@ applyInput = case _ of
   SetPitchSet ps -> onOdo (setPitchSet ps <<< releaseScale)
   ClearPitchSet -> onOdo clearPitchSet
   SetHarmony h -> onOdo (setHarmony h)
+  SetVoices t -> onOdo (setVoices t)
   SetScalePattern p -> onOdo (setScalePattern p)
   SetOutScale p root -> onOdo (setOutScale p root)
   SetGridHarmony h -> onOdo (setGridHarmony h)
@@ -342,6 +344,7 @@ toWire = case _ of
   SetPitchSet ps -> w0 { tag = "SetPitchSet", ps = Just ps }
   ClearPitchSet -> w0 { tag = "ClearPitchSet" }
   SetHarmony h -> w0 { tag = "SetHarmony", txt = h }
+  SetVoices t -> w0 { tag = "SetVoices", txt = Just t }
   SetScalePattern p -> w0 { tag = "SetScalePattern", txt = p }
   SetOutScale p root -> w0 { tag = "SetOutScale", txt = p, a = root }
   SetGridHarmony h -> w0 { tag = "SetGridHarmony", txt = h }
@@ -410,6 +413,7 @@ fromWire w = case w.tag of
   "SetPitchSet" -> map SetPitchSet w.ps
   "ClearPitchSet" -> Just ClearPitchSet
   "SetHarmony" -> Just (SetHarmony w.txt)
+  "SetVoices" -> Just (SetVoices (fromMaybe "" w.txt))
   "SetScalePattern" -> Just (SetScalePattern w.txt)
   "SetOutScale" -> Just (SetOutScale w.txt w.a)
   "SetGridHarmony" -> Just (SetGridHarmony w.txt)

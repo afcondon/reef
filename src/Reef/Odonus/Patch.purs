@@ -47,6 +47,7 @@ import Reef.Gen (GenKind(..), GenSource, genDefaultAmt, genDefaultRate, genKinds
 import Reef.Odonus (Head, Odonus, defaultOdonus, patternLibrary, setHarmony, setScalePattern, speedOf, speedTable, unitRateIx, clockOf)
 import Reef.Scale (Distribution(..), normaliseIvls, rootName, rootNames, scaleTypes)
 import Reef.Vetula.Harmony (clockHarmony)
+import Reef.Odonus.Voices (parseVoices, printVoices)
 
 -- | The whole authored setup: the model, plus the generators and feel that
 -- | live beside it on the page.
@@ -86,7 +87,8 @@ printPatch p =
       , "  , gate: " <> show o.gatePct
       , "  , quantize: " <> maybe "scale" (\h -> "harmony " <> quote h) o.harmony
       ] <> maybe [] (\h -> [ "  , heads: " <> quote h ]) o.headsPattern
-        <> maybe [] (\h -> [ "  , octaves: " <> quote h ]) o.octavePattern <>
+        <> maybe [] (\h -> [ "  , octaves: " <> quote h ]) o.octavePattern
+        <> maybe [] (\v -> [ "  , voices: " <> quote (printVoices v) ]) o.voices <>
       [ "  , swing: " <> pct p.swing
       , "  , velHumanize: " <> show p.velHumanize
       , "  , clock: " <> decimal (clockOf o)
@@ -403,6 +405,7 @@ patchP = do
   quant <- field "quantize" sourceP
   headsPat <- optionalP (field "heads" strP)
   octavePat <- optionalP (field "octaves" strP)
+  voicesTxt <- optionalP (field "voices" strP)
   swing <- field "swing" intP
   velH <- field "velHumanize" intP
   -- a step length, from before the Odonus clock (2026-10-09), is read past
@@ -431,7 +434,8 @@ patchP = do
       { rootPc = sc.root, scaleIvls = sc.ivls, dist = dist
       , octaveShift = octave, degShift = scalarT, gatePct = gatePct
       , span = fromMaybe defaultOdonus.span span
-      , cells = cells, heads = heads, headsPattern = headsPat, octavePattern = octavePat }
+      , cells = cells, heads = heads, headsPattern = headsPat, octavePattern = octavePat
+      , voices = voicesTxt >>= \t -> hush (parseVoices t) }
     heads = map (\h -> h.head { speedIx = rateIxOf h.speed }) heads0
     clockIx = maybe defaultOdonus.clockIx rateIxOf clockV
     odo = setScalePattern sc.pattern (setHarmony (quant (fromMaybe 1 stepDiv)) base { clockIx = clockIx })

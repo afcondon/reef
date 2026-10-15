@@ -87,7 +87,7 @@ import Reef.Balistes.Lepidoptera (parsePattern, printPattern, rhythmSlug) as BL
 import Reef.Balistes.Pattern (toWire) as BP
 import Reef.Routing (DrumRouting, Send(..), VoiceRouting, decodeDrumRouting, decodeVoiceRouting, drumSends, encodeDrumRouting, encodeVoiceRouting) as RR
 import Reef.Articulation as Art
-import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, renderCell, setHeadClock, stepEmit)
+import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, renderHead, setHeadClock, setVoices, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
@@ -524,12 +524,12 @@ cellDig c =
 -- | A head's state, and the pitch its current cell renders to (so the run
 -- | holds the whole pitch pipeline, SPREAD included, to both runtimes).
 headDig :: Odonus -> Int -> Head -> String
-headDig o _ h =
+headDig o i h =
   show h.cursor <> ":" <> show h.seqPos <> ":" <> show h.transp
     <> ":" <> show h.speedIx <> ":" <> show h.patternIx <> ":" <> show h.len
     <> (if h.mute then "m" else "")
     <> (if h.spreadOct /= 0 || h.spreadDeg /= 0 then "s" <> show h.spreadOct <> "/" <> show h.spreadDeg else "")
-    <> maybe "" (\c -> "@" <> show (renderCell o h c)) (o.cells !! h.cursor)
+    <> maybe "" (\c -> "@" <> show (renderHead o i h c)) (o.cells !! h.cursor)
 
 -- ── 2b. the input-protocol determinism net (the P3 proof) ─────────────────────
 
@@ -577,10 +577,13 @@ inputScript =
   , { tick: 240, input: UnifyHeadsOf 5 }   -- pattern + int, directions kept
   , { tick: 245, input: UnifyHeadsOf 32 }  -- direction alone
   , { tick: 250, input: UnifyHeadsOf 8 }   -- rhythm, realigning the phase
+  , { tick: 255, input: SetVoices "drop2 melody voice 1 voice 2 lead -2" }   -- VOICES on
+  , { tick: 258, input: SetVoices "bogus melody" }   -- refused, VOICES kept
   , { tick: 260, input: SetHeadMask 5 }
   , { tick: 300, input: UnifyHeads }
   , { tick: 340, input: SetSpread 5 }
   , { tick: 380, input: ToggleDistribution }
+  , { tick: 390, input: SetVoices "off" }   -- back to every head on its melody
   ]
 
 -- | Apply one tick-tagged input THROUGH THE CODEC: encode to JSON then decode back
@@ -682,7 +685,7 @@ simRun = case decodeSim handoffJson of
 patchRun :: String
 patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recalled)
   where
-  odo0 = defaultOdonus
+  odo0 = setVoices "quartal melody lead 1 voice 2 voice 4" defaultOdonus
     { harmony = Just "<c'maj7 a'min7>/2", span = 2, octaveShift = -1
     , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2, pulses = 5, esteps = 8, rotation = i, spreadOct = i - 2, spreadDeg = i }) defaultOdonus.heads }
   p0 =
