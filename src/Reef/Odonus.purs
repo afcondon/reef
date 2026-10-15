@@ -26,6 +26,7 @@ module Reef.Odonus
   , Fired
   , stepEmit
   , cursorsOf
+  , headOrderPos
   , toggleSkip
   , toggleGate
   , toggleGlide
@@ -713,42 +714,39 @@ gridAt order pos = fromMaybe 0 (order !! pos)
 
 data Dir = Fwd | Back | Pend
 
+derive instance eqDir :: Eq Dir
+
 decodeDir :: Int -> Dir
 decodeDir n
   | n <= 0 = Fwd
   | n == 1 = Back
   | otherwise = Pend
 
--- | Next seq position in `dir`, within a loop of `len` steps, hopping
--- | positions whose grid cell is skipped.
-nextSeq :: Array Int -> Array Cell -> Int -> Int -> Int -> Int
-nextSeq order cells len start dir = go (modPos (start + dir) len) 0
-  where
-  go pos n
-    | n >= len = start
-    | not (skipAt cells (gridAt order pos)) = pos
-    | otherwise = go (modPos (pos + dir) len) (n + 1)
+-- | How many positions a head's walk has: its loop, or for a pendulum the loop
+-- | unfolded there and back, [0…15, 15…0], so a pendulum is a forward walk over
+-- | twice the length and every rule for walking forward (skips, wrapping, a
+-- | ring's restart) holds for it unchanged (AC, 2026-10-15). The ends sound
+-- | twice, and position `p` and its mirror `2·len−1−p` are the same cell.
+walkLength :: Dir -> Int -> Int
+walkLength dir len = case dir of
+  Pend -> 2 * len
+  _ -> len
 
-stepSeq :: Array Int -> Array Cell -> Int -> Dir -> { pos :: Int, pend :: Int } -> { pos :: Int, pend :: Int }
-stepSeq order cells len dir st = case dir of
-  Fwd -> { pos: nextSeq order cells len st.pos 1, pend: st.pend }
-  Back -> { pos: nextSeq order cells len st.pos (-1), pend: st.pend }
-  -- A pendulum never wraps: it turns at the last cell it can play, so a skipped
-  -- cell at either end of the loop moves the turn inward instead of sending the
-  -- head round to the other end (which played it one way only).
-  Pend ->
-    let
-      from = modPos st.pos len
-      walk d pos
-        | pos < 0 || pos >= len = Nothing
-        | not (skipAt cells (gridAt order pos)) = Just pos
-        | otherwise = walk d (pos + d)
-    in
-      case walk st.pend (from + st.pend) of
-        Just p -> { pos: p, pend: st.pend }
-        Nothing -> case walk (negate st.pend) (from - st.pend) of
-          Just p -> { pos: p, pend: negate st.pend }
-          Nothing -> { pos: from, pend: st.pend }
+-- | A walk position folded back into the loop: 0 … len−1.
+foldPos :: Dir -> Int -> Int -> Int
+foldPos dir len pos =
+  let p = modPos pos (walkLength dir len)
+  in if p >= len then 2 * len - 1 - p else p
+
+-- | Next walk position, one step in `dir` (back only for Back), hopping
+-- | positions whose cell is skipped; where every cell is skipped, it stays.
+nextSeq :: (Int -> Int) -> Array Cell -> Int -> Int -> Int -> Int
+nextSeq cellAt cells n start d = go (modPos (start + d) n) 0
+  where
+  go pos k
+    | k >= n = start
+    | not (skipAt cells (cellAt pos)) = pos
+    | otherwise = go (modPos (pos + d) n) (k + 1)
 
 -- | One whole tick of a head's own clock, inside a model step: where in the
 -- | step it falls (`num / den` of it, so exact on both runtimes), whether it
@@ -788,31 +786,46 @@ tickHead cells h =
     len = clampI 1 16 h.len
     es = clampI 1 maxEsteps h.esteps
     dir = decodeDir h.direction
-    cursorAt pos = gridAt order (modPos (pos + h.offset) len)
+    n = walkLength dir len
+    cursorAt pos = gridAt order (modPos (foldPos dir len pos + h.offset) len)
+    stepFrom pos = nextSeq cursorAt cells n pos (if dir == Back then -1 else 1)
+    -- a pendulum heads forward on the way out and back on the way home
+    heading pos = if dir == Pend && modPos pos n >= len then -1 else 1
+    moved pos = h { seqPos = pos, cursor = cursorAt pos, pendStep = heading pos }
   in
     if h.clock == 1 then
       if h.hold > 1 then { head: h { hold = h.hold - 1 }, pulsed: false }
       else
         let
-          st = stepSeq order cells len dir { pos: h.seqPos, pend: h.pendStep }
-          cur = cursorAt st.pos
-          d = maybe 1 (\c -> clampI 1 8 c.dur) (cells !! cur)
-        in { head: h { seqPos = st.pos, cursor = cur, pendStep = st.pend, hold = d }, pulsed: true }
+          pos = stepFrom h.seqPos
+          d = maybe 1 (\c -> clampI 1 8 c.dur) (cells !! cursorAt pos)
+        in { head: (moved pos) { hold = d }, pulsed: true }
     else
       let
         hit = euclidHit h.pulses es (modPos (h.etick - h.rotation) es)
+        here = modPos h.seqPos n
         -- the ring's first tick, restarting: stand just before the pattern's
-        -- first cell, so the cycle's first pulse lands on it
+        -- first cell, so the cycle's first pulse lands on it. A pendulum plays
+        -- ping-pong with the ring (AC, 2026-10-15): on its way out it jumps to
+        -- its mirror and replays the cell it stands on, homeward; on its way
+        -- home (or not yet started) it starts out again. So E(5,8) is a figure
+        -- and its mirror, 0 1 2 3 4 | 4 3 2 1 0, and 16 of 16 is 0…15 | 15…0.
         from =
           if h.restart && h.etick == 0 then case dir of
-            Fwd -> { pos: len - 1, pend: 1 }
-            Back -> { pos: 0, pend: 1 }
-            Pend -> { pos: 1, pend: -1 }
-          else { pos: h.seqPos, pend: h.pendStep }
-        st = if hit then stepSeq order cells len dir from else from
+            Back -> 0
+            Pend | here > 0 && here < len -> n - 2 - here
+            _ -> n - 1
+          else h.seqPos
+        pos = if hit then stepFrom from else from
       in
-        { head: h { seqPos = st.pos, cursor = cursorAt st.pos, pendStep = st.pend, etick = (h.etick + 1) `mod` es }
-        , pulsed: hit }
+        { head: (moved pos) { etick = (h.etick + 1) `mod` es }, pulsed: hit }
+
+-- | Where a head stands in its pattern's order, 0 … 15: its walk folded into
+-- | its loop, plus the loop's offset (`cursor` is the grid cell at this index).
+headOrderPos :: Head -> Int
+headOrderPos h =
+  let len = clampI 1 16 h.len
+  in modPos (foldPos (decodeDir h.direction) len h.seqPos + h.offset) len
 
 advanceHead :: Odonus -> Head -> Head
 advanceHead o h = (headTicks o h).head

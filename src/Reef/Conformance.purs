@@ -48,6 +48,7 @@ module Reef.Conformance
   , outScaleRun
   , voicingRun
   , durRun
+  , pendulumRun
   , routeRun
   , patchRun
   , conspicillumRun, conspicillumGrains
@@ -413,6 +414,36 @@ durRun =
       { st: r.sim
       , out: snoc acc.out (renderStep i r.fired
           <> " | " <> intercalate " " (map (\h -> show h.cursor <> "/" <> show h.hold) (take 2 hs)))
+      }
+
+-- | The pendulum (AC, 2026-10-15): head I alone, on a pendulum, through four
+-- | settings sent as wire inputs. Plain 16 of 16 bounces 0…15…0; a skipped last
+-- | cell turns it at 14 instead of sending it round; with the ring restarting it
+-- | plays ping-pong, 0…15 | 15…0, and E(5,8) is a figure and its mirror.
+pendulumRun :: String
+pendulumRun =
+  let
+    s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 1 160)
+  in
+    intercalate "\n" final.out
+  where
+  script i = case i of
+    1 -> [ ToggleHeadMute 1, ToggleHeadMute 2, ToggleHeadMute 3, SetHeadDir 0 2 ]
+    40 -> [ ToggleSkip 15 ]
+    70 -> [ ToggleSkip 15, SetHeadRestart 0 true ]
+    120 -> [ SetHeadPulses 0 5, SetHeadEuclidSteps 0 8 ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick st1
+      h = r.sim.odo.heads
+    in
+      { st: r.sim
+      , out: snoc acc.out (renderStep i r.fired
+          <> " | " <> intercalate " " (map (\hd -> show hd.seqPos <> "/" <> show hd.pendStep <> "/" <> show hd.etick) (take 1 h)))
       }
 
 -- | Harmony routes (`Reef.Route`): each table parsed, printed back, and the

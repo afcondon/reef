@@ -30,21 +30,21 @@
  30 | -
  31 | h1 p48 d1 r1 v100
  32 | -
- 33 | h2 p68 d1 r1 v100  h2 p70 d1 r1 v100  h3 p58 d1 r1 v100
- 34 | h2 p62 d1 r1 v100  h2 p58 d1 r1 v100  h3 p50 d1 r1 v100
- 35 | h2 p56 d1 r1 v100  h2 p67 d1 r1 v100  h3 p75 d1 r1 v100
+ 33 | h2 p68 d1 r1 v100  h2 p70 d1 r1 v100  h3 p68 d1 r1 v100
+ 34 | h2 p62 d1 r1 v100  h2 p58 d1 r1 v100  h3 p58 d1 r1 v100
+ 35 | h2 p56 d1 r1 v100  h2 p67 d1 r1 v100  h3 p50 d1 r1 v100
  36 | h2 p75 d1 r1 v100  h2 p79 d1 r1 v100
- 37 | h2 p80 d1 r1 v100  h2 p82 d1 r1 v100  h3 p67 d1 r1 v100
- 38 | h2 p74 d1 r1 v100  h2 p63 d1 r1 v100  h3 p56 d1 r1 v100
- 39 | h2 p55 d1 r1 v100  h2 p51 d1 r1 v100  h3 p48 d1 r1 v100
+ 37 | h2 p80 d1 r1 v100  h2 p82 d1 r1 v100  h3 p75 d1 r1 v100
+ 38 | h2 p74 d1 r1 v100  h2 p63 d1 r1 v100  h3 p67 d1 r1 v100
+ 39 | h2 p55 d1 r1 v100  h2 p51 d1 r1 v100  h3 p56 d1 r1 v100
  40 | h2 p50 d1 r1 v100  h2 p48 d1 r1 v100
- 41 | h2 p68 d1 r1 v100  h2 p70 d1 r1 v100  h3 p56 d1 r1 v100
- 42 | h2 p62 d1 r1 v100  h2 p58 d1 r1 v100  h3 p67 d1 r1 v100
- 43 | h2 p56 d1 r1 v100  h2 p67 d1 r1 v100  h3 p75 d1 r1 v100
+ 41 | h2 p68 d1 r1 v100  h2 p70 d1 r1 v100  h3 p48 d1 r1 v100
+ 42 | h2 p62 d1 r1 v100  h2 p58 d1 r1 v100  h3 p48 d1 r1 v100
+ 43 | h2 p56 d1 r1 v100  h2 p67 d1 r1 v100  h3 p56 d1 r1 v100
  44 | h2 p75 d1 r1 v100  h2 p79 d1 r1 v100
- 45 | h2 p80 d1 r1 v100  h2 p82 d1 r1 v100  h3 p50 d1 r1 v100
- 46 | h2 p74 d1 r1 v100  h2 p63 d1 r1 v100  h3 p58 d1 r1 v100
- 47 | h2 p55 d1 r1 v100  h2 p51 d1 r1 v100  h3 p68 d1 r1 v100
+ 45 | h2 p80 d1 r1 v100  h2 p82 d1 r1 v100  h3 p67 d1 r1 v100
+ 46 | h2 p74 d1 r1 v100  h2 p63 d1 r1 v100  h3 p75 d1 r1 v100
+ 47 | h2 p55 d1 r1 v100  h2 p51 d1 r1 v100  h3 p50 d1 r1 v100
  48 | h2 p50 d1 r1 v100  h2 p48 d1 r1 v100
  49 | -
  50 | -

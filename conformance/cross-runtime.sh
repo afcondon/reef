@@ -356,6 +356,20 @@ echo "== durRun (56-step duration clock): node vs erl =="
 diff /tmp/reef-dur-node.txt /tmp/reef-dur-erl.txt && echo "  ✅ durRun node == erl"
 diff "$DUR_GOLDEN" /tmp/reef-dur-node.txt && echo "  ✅ durRun matches frozen golden"
 
+# --- Odonus's pendulum (Reef.Conformance.pendulumRun) ---------------------------
+# A pendulum as a forward walk over its loop unfolded there and back: plain,
+# with a skipped end cell, and playing ping-pong with a restarting ring.
+PEND_GOLDEN="$REEF/conformance/pendulum-golden.txt"
+echo "== pendulumRun (160-step pendulum): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { pendulumRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(pendulumRun);' \
+  ) > /tmp/reef-pend-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':pendulumRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-pend-erl.txt
+diff /tmp/reef-pend-node.txt /tmp/reef-pend-erl.txt && echo "  ✅ pendulumRun node == erl"
+diff "$PEND_GOLDEN" /tmp/reef-pend-node.txt && echo "  ✅ pendulumRun matches frozen golden"
+
 # --- Odonus as text (Reef.Conformance.patchRun) --------------------------------
 # The patch and odonusNow printed and read back, the recall moves Limulus sends
 # (multi-line, which purerl's trim once broke), and what they do to a state.
