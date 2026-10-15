@@ -86,10 +86,10 @@ printPatch p =
       , "  , scalarTransp: " <> show o.degShift
       , "  , gate: " <> show o.gatePct
       , "  , quantize: " <> maybe "scale" (\h -> "harmony " <> quote h) o.harmony
-      ] <> maybe [] (\h -> [ "  , heads: " <> quote h ]) o.headsPattern
-        <> maybe [] (\h -> [ "  , octaves: " <> quote h ]) o.octavePattern
-        <> maybe [] (\h -> [ "  , degrees: " <> quote h ]) o.degreePattern
-        <> maybe [] (\v -> [ "  , voices: " <> quote (printVoices v) ]) o.voices <>
+      -- the heads, octave and degree patterns are the Tidal line's, not the
+      -- patch's (Reef.Odonus.recallScene), so they are not written; older
+      -- patches that have them read past them
+      ] <> maybe [] (\v -> [ "  , voices: " <> quote (printVoices v) ]) o.voices <>
       [ "  , swing: " <> pct p.swing
       , "  , velHumanize: " <> show p.velHumanize
       , "  , clock: " <> decimal (clockOf o)
@@ -404,9 +404,9 @@ patchP = do
   scalarT <- field "scalarTransp" intP
   gatePct <- field "gate" intP
   quant <- field "quantize" sourceP
-  headsPat <- optionalP (field "heads" strP)
-  octavePat <- optionalP (field "octaves" strP)
-  degreePat <- optionalP (field "degrees" strP)
+  _ <- optionalP (field "heads" strP)
+  _ <- optionalP (field "octaves" strP)
+  _ <- optionalP (field "degrees" strP)
   voicesTxt <- optionalP (field "voices" strP)
   swing <- field "swing" intP
   velH <- field "velHumanize" intP
@@ -436,7 +436,7 @@ patchP = do
       { rootPc = sc.root, scaleIvls = sc.ivls, dist = dist
       , octaveShift = octave, degShift = scalarT, gatePct = gatePct
       , span = fromMaybe defaultOdonus.span span
-      , cells = cells, heads = heads, headsPattern = headsPat, octavePattern = octavePat, degreePattern = degreePat
+      , cells = cells, heads = heads
       , voices = voicesTxt >>= \t -> hush (parseVoices t) }
     heads = map (\h -> h.head { speedIx = rateIxOf h.speed }) heads0
     clockIx = maybe defaultOdonus.clockIx rateIxOf clockV

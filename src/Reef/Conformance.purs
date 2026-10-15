@@ -71,6 +71,7 @@ import Prelude
 import Data.Array (filter, find, length, null, range, snoc, mapWithIndex, take, (!!))
 import Data.Either (Either(..), either)
 import Data.String as String
+import Data.String (Pattern(..), Replacement(..), replaceAll)
 import Reef.Route as Route
 import Reef.Odonus.Patch as Patch
 import Reef.Move as Move
@@ -729,9 +730,18 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
         moved = (stepTick (stepTick sim0).sim).sim
         r1 = applyInput (RecallPatch t1) moved
         r2 = applyInput (RecallNow tn) r1
+        -- a preset saved while `heads "1"` ran: recalled, it neither starts
+        -- that pattern nor ends one a line is running (Reef.Odonus.recallScene)
+        withHeads = replaceAll (Pattern "\n  , swing:") (Replacement "\n  , heads: \"1\"\n  , swing:") t1
+        running = moved { odo = moved.odo { headsPattern = Just "1 2" } }
+        r3 = applyInput (RecallPatch withHeads) moved
+        r4 = applyInput (RecallPatch withHeads) running
       in
         [ "recall patch " <> digest 0 r1.odo r1.seed
         , "recall now   " <> digest 0 r2.odo r2.seed <> " frozen " <> show r2.frozen
+        , "recall a patch saved with heads \"1\": over none " <> show r3.odo.headsPattern
+            <> ", over \"1 2\" " <> show r4.odo.headsPattern
+            <> ", mutes " <> show (map _.mute r3.odo.heads)
         ]
 
 -- ── 3. the transcendental (pow / Beta) diagnostic ────────────────────────────

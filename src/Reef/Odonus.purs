@@ -1194,9 +1194,17 @@ nudgeOffsets d o = o { heads = map (\hd -> hd { offset = clampI 0 15 (hd.offset 
 -- | than hard-resetting every cursor to 0. This is what makes sequencing whole
 -- | settings sound like a continuing fugue with key changes and voices coming
 -- | and going, not a stack of restarts.
+-- |
+-- | The patterns that drive a control (heads, octave, degree) are not the
+-- | scene's: they belong to the Tidal line running them, so a recall neither
+-- | starts nor ends one. A preset sets its mutes, OCT and DEGREE once, and
+-- | they are the player's from then on (AC, 2026-10-15: a preset saved while
+-- | `heads "1"` ran kept re-muting heads unmuted by hand).
 recallScene :: Odonus -> Odonus -> Odonus
 recallScene live scene =
-  scene { heads = zipWith carry live.heads scene.heads }
+  scene
+    { heads = zipWith carry live.heads scene.heads
+    , headsPattern = live.headsPattern, octavePattern = live.octavePattern, degreePattern = live.degreePattern }
   where
   carry lh sh = sh
     { cursor = lh.cursor, seqPos = lh.seqPos
