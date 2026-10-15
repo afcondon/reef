@@ -47,6 +47,7 @@ module Reef.Odonus
   , setHeadLen
   , setHeadClock
   , setHeadRestart
+  , setHeadInvert
   , setHeadPulses
   , setHeadEuclidSteps
   , nudgeHeadPulses
@@ -125,7 +126,7 @@ import Data.Either (either)
 import Data.String (trim)
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
-import Reef.PitchSet (nearestIn, periodsIn, quantiseToVoicing, realize, realizeEqualShift, voicing) as PS
+import Reef.PitchSet (equalIndex, nearestIn, periodsIn, quantiseToVoicing, realize, realizeEqualShift, voicing) as PS
 import Reef.Odonus.Voices (Rule(..), Voices, parseVoices, rulesOf, strategy, voicingOf, wantsSeventh)
 import Harmonia.Chord (Chord(..))
 import Harmonia.Voicing (closeVoicing, voicingMidi)
@@ -206,19 +207,24 @@ type Head = HeadOf
   , spreadDeg :: Int    -- and steps of the scale, apart so an octave is one in
                         -- any scale; shifts the melodic index, ahead of INT and
                         -- the snap (docs/kb/plans/odonus-voices.md)
+  , invert :: Boolean   -- the melody upside down, in scale degrees, mirrored on
+                        -- the first cell of the head's loop: the fugue's
+                        -- inversion, as SPEED is its augmentation and backward
+                        -- its retrograde (AC, 2026-10-15)
   )
 
 type HeadWire = HeadOf
   ( clock :: Maybe Int, hold :: Maybe Int, restart :: Maybe Boolean, rotation :: Maybe Int
-  , spreadOct :: Maybe Int, spreadDeg :: Maybe Int )
+  , spreadOct :: Maybe Int, spreadDeg :: Maybe Int, invert :: Maybe Boolean )
 
 headFromWire :: HeadWire -> Head
 headFromWire h = h { clock = fromMaybe 0 h.clock, hold = fromMaybe 0 h.hold, restart = fromMaybe false h.restart
-                   , rotation = fromMaybe 0 h.rotation, spreadOct = fromMaybe 0 h.spreadOct, spreadDeg = fromMaybe 0 h.spreadDeg }
+                   , rotation = fromMaybe 0 h.rotation, spreadOct = fromMaybe 0 h.spreadOct, spreadDeg = fromMaybe 0 h.spreadDeg
+                   , invert = fromMaybe false h.invert }
 
 headToWire :: Head -> HeadWire
 headToWire h = h { clock = Just h.clock, hold = Just h.hold, restart = Just h.restart, rotation = Just h.rotation
-                 , spreadOct = Just h.spreadOct, spreadDeg = Just h.spreadDeg }
+                 , spreadOct = Just h.spreadOct, spreadDeg = Just h.spreadDeg, invert = Just h.invert }
 
 -- | Odonus as read from JSON (heads as `HeadWire`), and back.
 odonusFromWire :: OdonusOf HeadWire -> Odonus
@@ -317,7 +323,14 @@ renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
     let scaleSet = effectivePitchSet o
         shift = o.degShift + hd.spreadOct * cardinality scaleSet + hd.spreadDeg
-        home = PS.realizeEqualShift scaleSet (PS.periodsIn scaleSet o.span) knobMax shift c.note
+        slots = PS.periodsIn scaleSet o.span * cardinality scaleSet
+        index v = PS.equalIndex slots knobMax v
+        -- inverted, the cell's degree is mirrored on the degree of the first
+        -- cell of the head's loop, so the inversion starts where the melody does
+        degree
+          | hd.invert = 2 * index (axisNote o hd) - index c.note
+          | otherwise = index c.note
+        home = PS.realize scaleSet (degree + shift)
         target = home + hd.transp
         snapped =
           case o.chord of
@@ -328,6 +341,13 @@ renderCell o hd c =
               Just ps -> PS.nearestIn ps target
               Nothing -> quantiseToScale (scaleOf o) target
     in snapped + o.octaveShift * 12
+
+-- | The note an inverted head mirrors its melody on: the first cell of its loop
+-- | (its pattern's order from its offset).
+axisNote :: Odonus -> Head -> Int
+axisNote o hd =
+  let len = clampI 1 16 hd.len
+  in maybe 0 _.note (o.cells !! gridAt (orderOf hd.patternIx) (modPos hd.offset len))
 
 -- | The raw NOTE-knob ceiling. Cells hold a value in `0..knobMax`, shown on the
 -- | knob face; the label shows what it currently quantises to. Fixed (independent
@@ -665,7 +685,7 @@ mkHead :: Int -> Int -> Int -> Boolean -> Int -> Head
 mkHead speedIx direction transp mute patternIx =
   { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
   , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16
-  , clock: 0, hold: 0, restart: false, rotation: 0, spreadOct: 0, spreadDeg: 0 }
+  , clock: 0, hold: 0, restart: false, rotation: 0, spreadOct: 0, spreadDeg: 0, invert: false }
 
 -- | Head I runs (Rows); II–IV start muted with distinct patterns + fugue
 -- | offsets — unmute to build the canon.
@@ -939,6 +959,10 @@ setHeadClock h v = editHead h \hd -> if hd.clock == clampI 0 1 v then hd else hd
 setHeadRestart :: Int -> Boolean -> Odonus -> Odonus
 setHeadRestart h v = editHead h _ { restart = v }
 
+-- | Whether head `h` plays its melody inverted.
+setHeadInvert :: Int -> Boolean -> Odonus -> Odonus
+setHeadInvert h v = editHead h _ { invert = v }
+
 -- | The Euclidean step-count ceiling — the largest n in E(k, n) a head may hold.
 -- |
 -- | Deliberately larger than the 16-cell grid: `esteps` is INDEPENDENT of `len`,
@@ -1137,7 +1161,7 @@ unifyHeadsOf mask o
   copy h0 h =
     let
       p = if has UPattern then h { patternIx = h0.patternIx } else h
-      d = if has UDirection then p { direction = h0.direction } else p
+      d = if has UDirection then p { direction = h0.direction, invert = h0.invert } else p
       sp = if has USpeed then d { speedIx = h0.speedIx } else d
       it = if has UInt then sp { transp = h0.transp, spreadOct = h0.spreadOct, spreadDeg = h0.spreadDeg } else sp
       rh =

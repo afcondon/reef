@@ -49,6 +49,7 @@ module Reef.Conformance
   , voicingRun
   , durRun
   , pendulumRun
+  , invertRun
   , routeRun
   , patchRun
   , conspicillumRun, conspicillumGrains
@@ -446,6 +447,37 @@ pendulumRun =
           <> " | " <> intercalate " " (map (\hd -> show hd.seqPos <> "/" <> show hd.pendStep <> "/" <> show hd.etick) (take 1 h)))
       }
 
+-- | Inversion (AC, 2026-10-15): head I plays a rising line; head II the same
+-- | line inverted, mirrored on the first cell of its loop, then with its loop
+-- | offset (a new mirror), then backward (retrograde inversion); then unison
+-- | DIRECTION hands head I's direction and invert to all.
+invertRun :: String
+invertRun =
+  let
+    s0 = { odo: defaultOdonus, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+    final = foldl advance { st: s0, out: [] } (range 1 96)
+  in
+    intercalate "\n" final.out
+  where
+  stair = map (\i -> 16 * i + 8) (range 0 15)
+  script i = case i of
+    1 -> [ SetNotes stair, ToggleHeadMute 1, SetHeadPattern 0 0, SetHeadPattern 1 0, SetHeadDir 0 0, SetHeadDir 1 0
+         , SetHeadSpeedIx 0 6, SetHeadSpeedIx 1 6, SetHeadInvert 1 true ]
+    32 -> [ SetHeadOffset 1 4 ]
+    56 -> [ SetHeadDir 1 1 ]
+    72 -> [ SetHeadInvert 0 true, UnifyHeadsOf 32 ]
+    _ -> []
+  wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
+  advance acc i =
+    let
+      st1 = foldl (\st inp -> applyInput (wire inp) st) acc.st (script i)
+      r = stepTick st1
+    in
+      { st: r.sim
+      , out: snoc acc.out (renderStep i r.fired
+          <> " | " <> intercalate " " (map (\hd -> (if hd.invert then "inv" else "up") <> "/" <> show hd.direction) (take 2 r.sim.odo.heads)))
+      }
+
 -- | Harmony routes (`Reef.Route`): each table parsed, printed back, and the
 -- | Odonus inputs that take the previous table to it, as wire tags. The rig
 -- | parses what the router page writes, so both must read a table alike.
@@ -726,7 +758,7 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
   where
   odo0 = setVoices "quartal melody lead 1 voice 2 voice 4" defaultOdonus
     { harmony = Just "<c'maj7 a'min7>/2", span = 2, octaveShift = -1
-    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2, pulses = 5, esteps = 8, rotation = i, spreadOct = i - 2, spreadDeg = i }) defaultOdonus.heads }
+    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2, pulses = 5, esteps = 8, rotation = i, spreadOct = i - 2, spreadDeg = i, invert = i == 1 }) defaultOdonus.heads }
   p0 =
     { name: "live", odo: setPat odo0 { clockIx = 5 }, gen: Patch.reconcileGen [], genSpread: 0.3, genBias: 0.7
     , swing: 0.12, velHumanize: 9 }

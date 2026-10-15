@@ -370,6 +370,20 @@ echo "== pendulumRun (160-step pendulum): node vs erl =="
 diff /tmp/reef-pend-node.txt /tmp/reef-pend-erl.txt && echo "  ✅ pendulumRun node == erl"
 diff "$PEND_GOLDEN" /tmp/reef-pend-node.txt && echo "  ✅ pendulumRun matches frozen golden"
 
+# --- Odonus's inversion (Reef.Conformance.invertRun) ----------------------------
+# A head's melody upside down in scale degrees, mirrored on its loop's first cell;
+# with an offset, backward (retrograde inversion), and handed on by unison.
+INV_GOLDEN="$REEF/conformance/invert-golden.txt"
+echo "== invertRun (96-step inversion): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { invertRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(invertRun);' \
+  ) > /tmp/reef-inv-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':invertRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-inv-erl.txt
+diff /tmp/reef-inv-node.txt /tmp/reef-inv-erl.txt && echo "  ✅ invertRun node == erl"
+diff "$INV_GOLDEN" /tmp/reef-inv-node.txt && echo "  ✅ invertRun matches frozen golden"
+
 # --- Odonus as text (Reef.Conformance.patchRun) --------------------------------
 # The patch and odonusNow printed and read back, the recall moves Limulus sends
 # (multi-line, which purerl's trim once broke), and what they do to a state.

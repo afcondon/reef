@@ -55,7 +55,7 @@ import Reef.Odonus
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps, nudgeHeadEuclidRotation
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
   , setDegShift, setHarmony, setScalePattern, setGridHarmony, followGridHarmony, releaseScale, followChord, setGatePct, setOdoClock, setHeadsPattern, followHeads, setOctavePattern, followOctave, setDegreePattern, followDegree, setHeadDir, setHeadEuclidSteps
-  , setHeadClock, setHeadRestart, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
+  , setHeadClock, setHeadInvert, setHeadRestart, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
   , toggleScaleNote, toggleSkip, unifyHeads, unifyHeadsOf, recallScene, setVoices
@@ -102,6 +102,7 @@ data Input
   | SetHeadLen Int Int
   | SetHeadClock Int Int          -- head, 0 its steps | 1 its notes' lengths
   | SetHeadRestart Int Boolean    -- head, its pattern restarting with its ring
+  | SetHeadInvert Int Boolean     -- head, its melody upside down
   | SetHeadPulses Int Int
   | SetHeadEuclidSteps Int Int
   | NudgeHeadPulses Int Int        -- head, signed delta (relative — accumulates under buffering)
@@ -212,6 +213,7 @@ applyInput = case _ of
   SetHeadLen h v -> onOdo (setHeadLen h v)
   SetHeadClock h v -> onOdo (setHeadClock h v)
   SetHeadRestart h v -> onOdo (setHeadRestart h v)
+  SetHeadInvert h v -> onOdo (setHeadInvert h v)
   SetHeadPulses h v -> onOdo (setHeadPulses h v)
   SetHeadEuclidSteps h v -> onOdo (setHeadEuclidSteps h v)
   NudgeHeadPulses h d -> onOdo (nudgeHeadPulses h d)
@@ -324,6 +326,7 @@ toWire = case _ of
   SetHeadLen h v -> w0 { tag = "SetHeadLen", a = h, b = v }
   SetHeadClock h v -> w0 { tag = "SetHeadClock", a = h, b = v }
   SetHeadRestart h v -> w0 { tag = "SetHeadRestart", a = h, b = if v then 1 else 0 }
+  SetHeadInvert h v -> w0 { tag = "SetHeadInvert", a = h, b = if v then 1 else 0 }
   SetHeadPulses h v -> w0 { tag = "SetHeadPulses", a = h, b = v }
   SetHeadEuclidSteps h v -> w0 { tag = "SetHeadEuclidSteps", a = h, b = v }
   NudgeHeadPulses h d -> w0 { tag = "NudgeHeadPulses", a = h, b = d }
@@ -394,6 +397,7 @@ fromWire w = case w.tag of
   "SetHeadLen" -> Just (SetHeadLen w.a w.b)
   "SetHeadClock" -> Just (SetHeadClock w.a w.b)
   "SetHeadRestart" -> Just (SetHeadRestart w.a (w.b /= 0))
+  "SetHeadInvert" -> Just (SetHeadInvert w.a (w.b /= 0))
   "SetHeadPulses" -> Just (SetHeadPulses w.a w.b)
   "SetHeadEuclidSteps" -> Just (SetHeadEuclidSteps w.a w.b)
   "NudgeHeadPulses" -> Just (NudgeHeadPulses w.a w.b)

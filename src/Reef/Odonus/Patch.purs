@@ -111,6 +111,8 @@ printPatch p =
 printHead :: Head -> String
 printHead hd =
   "head " <> patternSlug hd.patternIx <> " " <> decimal (speedOf hd) <> " " <> dirSlug hd.direction
+    -- upside down, left out when not, so older patches print as they did
+    <> (if hd.invert then " inv" else "")
     <> " transp " <> show hd.transp
     -- SPREAD's octaves and scale steps, left out at none
     <> (if hd.spreadOct /= 0 || hd.spreadDeg /= 0 then " spread " <> show hd.spreadOct <> " " <> show hd.spreadDeg else "")
@@ -507,6 +509,9 @@ headP = do
   pat <- patternIxOf <$> word
   spd <- numP
   dir <- dirOf <$> word
+  invert <- peek >>= case _ of
+    Just (Word "inv") -> word *> pure true
+    _ -> pure false
   kw "transp"
   tr <- intP
   spr <- peek >>= case _ of
@@ -544,7 +549,7 @@ headP = do
     { head:
         { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
         , speedIx: 0, direction: dir, transp: tr, mute, patternIx: pat
-        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0, restart, rotation: rot, spreadOct: spr.oct, spreadDeg: spr.deg }
+        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0, restart, rotation: rot, spreadOct: spr.oct, spreadDeg: spr.deg, invert }
     , speed: spd }
 
 genP :: P GenSource
