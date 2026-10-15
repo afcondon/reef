@@ -18,10 +18,10 @@ odonusPatch "live"
   , ratchets: [ 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 ]
   , vels: [ 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100 ]
   , heads:
-      [ head rows 2.0 fwd transp 0 off 0 len 16 euclid 16 16
-      , head serpentine 1.0 fwd transp 7 off 1 len 16 euclid 16 16 clock dur
-      , head spiral 4.0 back transp 14 off 2 len 16 euclid 16 16 restart
-      , head columns 1.5 pend transp 21 off 3 len 16 euclid 16 16 mute ]
+      [ head rows 2.0 fwd transp 0 off 0 len 16 euclid 5 8
+      , head serpentine 1.0 fwd transp 7 off 1 len 16 euclid 5 8 rot 1 clock dur
+      , head spiral 4.0 back transp 14 off 2 len 16 euclid 5 8 rot 2 restart
+      , head columns 1.5 pend transp 21 off 3 len 16 euclid 5 8 rot 3 mute ]
   , gen:
       [ source notes rate 96 amt 20 off
       , source gate rate 96 amt 30 off

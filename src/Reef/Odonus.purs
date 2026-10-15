@@ -50,6 +50,7 @@ module Reef.Odonus
   , setHeadEuclidSteps
   , nudgeHeadPulses
   , nudgeHeadEuclidSteps
+  , nudgeHeadEuclidRotation
   , setCellRatchet
   , setCellVel
   , euclidHit
@@ -187,15 +188,20 @@ type Head = HeadOf
   , restart :: Boolean  -- step clock: the pattern starts again at each turn of the
                         -- Euclidean ring, so E(5,8) is a five-note figure that
                         -- repeats with its rhythm (AC, 2026-10-14)
+  , rotation :: Int     -- the Euclidean ring turned this many steps later: which
+                        -- of its steps are pulses, not where it starts (AC,
+                        -- 2026-10-15, after vpme.de's Euclidean Circles and the
+                        -- FH-2's R); 0..esteps-1
   )
 
-type HeadWire = HeadOf (clock :: Maybe Int, hold :: Maybe Int, restart :: Maybe Boolean)
+type HeadWire = HeadOf (clock :: Maybe Int, hold :: Maybe Int, restart :: Maybe Boolean, rotation :: Maybe Int)
 
 headFromWire :: HeadWire -> Head
-headFromWire h = h { clock = fromMaybe 0 h.clock, hold = fromMaybe 0 h.hold, restart = fromMaybe false h.restart }
+headFromWire h = h { clock = fromMaybe 0 h.clock, hold = fromMaybe 0 h.hold, restart = fromMaybe false h.restart
+                   , rotation = fromMaybe 0 h.rotation }
 
 headToWire :: Head -> HeadWire
-headToWire h = h { clock = Just h.clock, hold = Just h.hold, restart = Just h.restart }
+headToWire h = h { clock = Just h.clock, hold = Just h.hold, restart = Just h.restart, rotation = Just h.rotation }
 
 -- | Odonus as read from JSON (heads as `HeadWire`), and back.
 odonusFromWire :: OdonusOf HeadWire -> Odonus
@@ -539,7 +545,7 @@ mkHead :: Int -> Int -> Int -> Boolean -> Int -> Head
 mkHead speedIx direction transp mute patternIx =
   { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
   , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16
-  , clock: 0, hold: 0, restart: false }
+  , clock: 0, hold: 0, restart: false, rotation: 0 }
 
 -- | Head I runs (Rows); II–IV start muted with distinct patterns + fugue
 -- | offsets — unmute to build the canon.
@@ -665,7 +671,7 @@ tickHead cells h =
         in { head: h { seqPos = st.pos, cursor = cur, pendStep = st.pend, hold = d }, pulsed: true }
     else
       let
-        hit = euclidHit h.pulses es h.etick
+        hit = euclidHit h.pulses es (modPos (h.etick - h.rotation) es)
         -- the ring's first tick, restarting: stand just before the pattern's
         -- first cell, so the cycle's first pulse lands on it
         from =
@@ -833,7 +839,12 @@ setHeadEuclidSteps h v = editHead h \hd ->
 -- | Same k ≤ n clamp as `setHeadEuclidSteps` — n− carries k down with it.
 nudgeHeadEuclidSteps :: Int -> Int -> Odonus -> Odonus
 nudgeHeadEuclidSteps h d = editHead h \hd ->
-  let n = clampI 1 maxEsteps (hd.esteps + d) in hd { esteps = n, pulses = min hd.pulses n }
+  let n = clampI 1 maxEsteps (hd.esteps + d) in hd { esteps = n, pulses = min hd.pulses n, rotation = modPos hd.rotation n }
+
+-- | Turn head `h`'s Euclidean ring `d` steps (positive: later), round the ring.
+nudgeHeadEuclidRotation :: Int -> Int -> Odonus -> Odonus
+nudgeHeadEuclidRotation h d = editHead h \hd ->
+  hd { rotation = modPos (hd.rotation + d) (clampI 1 maxEsteps hd.esteps) }
 
 -- | Is step `i` a pulse of the even Euclidean rhythm E(pulses, steps)? 0 pulses
 -- | is silent; pulses ≥ steps is every step; otherwise pulses spread evenly.
@@ -989,7 +1000,7 @@ unifyHeadsOf mask o
       it = if has UInt then sp { transp = h0.transp } else sp
       rh =
         if has URhythm then
-          it { pulses = h0.pulses, esteps = h0.esteps, len = h0.len, offset = h0.offset, restart = h0.restart
+          it { pulses = h0.pulses, esteps = h0.esteps, len = h0.len, offset = h0.offset, restart = h0.restart, rotation = h0.rotation
              , cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1, etick = h0.etick, hold = h0.hold }
         else it
     in

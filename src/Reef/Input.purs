@@ -52,7 +52,7 @@ import Reef.Marbles (Seed)
 import Reef.Odonus
   ( Odonus, OdonusOf, HeadWire, odonusFromWire, odonusToWire
   , clearPitchSet, setOutScale, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
-  , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps
+  , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps, nudgeHeadEuclidRotation
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
   , setDegShift, setHarmony, setScalePattern, setGridHarmony, followGridHarmony, releaseScale, followChord, setGatePct, setOdoClock, setHeadsPattern, followHeads, setOctavePattern, followOctave, setHeadDir, setHeadEuclidSteps
   , setHeadClock, setHeadRestart, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
@@ -106,6 +106,7 @@ data Input
   | SetHeadEuclidSteps Int Int
   | NudgeHeadPulses Int Int        -- head, signed delta (relative — accumulates under buffering)
   | NudgeHeadEuclidSteps Int Int   -- head, signed delta
+  | NudgeHeadEuclidRotation Int Int  -- head, signed turn of its ring
   | ToggleHeadMute Int
   | SetHeadMask Int
   | CyclePattern Int
@@ -213,6 +214,7 @@ applyInput = case _ of
   SetHeadEuclidSteps h v -> onOdo (setHeadEuclidSteps h v)
   NudgeHeadPulses h d -> onOdo (nudgeHeadPulses h d)
   NudgeHeadEuclidSteps h d -> onOdo (nudgeHeadEuclidSteps h d)
+  NudgeHeadEuclidRotation h d -> onOdo (nudgeHeadEuclidRotation h d)
   ToggleHeadMute h -> onOdo (toggleHeadMute h)
   SetHeadMask m -> onOdo (setHeadMask m)
   CyclePattern h -> onOdo (cyclePattern h)
@@ -321,6 +323,7 @@ toWire = case _ of
   SetHeadEuclidSteps h v -> w0 { tag = "SetHeadEuclidSteps", a = h, b = v }
   NudgeHeadPulses h d -> w0 { tag = "NudgeHeadPulses", a = h, b = d }
   NudgeHeadEuclidSteps h d -> w0 { tag = "NudgeHeadEuclidSteps", a = h, b = d }
+  NudgeHeadEuclidRotation h d -> w0 { tag = "NudgeHeadEuclidRotation", a = h, b = d }
   ToggleHeadMute h -> w0 { tag = "ToggleHeadMute", a = h }
   SetHeadMask m -> w0 { tag = "SetHeadMask", a = m }
   CyclePattern h -> w0 { tag = "CyclePattern", a = h }
@@ -388,6 +391,7 @@ fromWire w = case w.tag of
   "SetHeadEuclidSteps" -> Just (SetHeadEuclidSteps w.a w.b)
   "NudgeHeadPulses" -> Just (NudgeHeadPulses w.a w.b)
   "NudgeHeadEuclidSteps" -> Just (NudgeHeadEuclidSteps w.a w.b)
+  "NudgeHeadEuclidRotation" -> Just (NudgeHeadEuclidRotation w.a w.b)
   "ToggleHeadMute" -> Just (ToggleHeadMute w.a)
   "SetHeadMask" -> Just (SetHeadMask w.a)
   "CyclePattern" -> Just (CyclePattern w.a)

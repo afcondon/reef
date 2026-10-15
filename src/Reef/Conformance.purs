@@ -565,6 +565,8 @@ inputScript =
   , { tick: 205, input: SetHeadPulses 0 5 }
   , { tick: 205, input: SetHeadEuclidSteps 0 8 }
   , { tick: 205, input: SetHeadRestart 0 true }   -- a five-note figure, again each ring
+  , { tick: 215, input: NudgeHeadEuclidRotation 0 3 }   -- the ring turned three later
+  , { tick: 225, input: NudgeHeadEuclidRotation 0 (-5) }   -- and back past its start
   , { tick: 230, input: NudgeOffsets 1 }
   , { tick: 235, input: SetHeadDir 0 1 }   -- head I runs another way
   , { tick: 240, input: UnifyHeadsOf 5 }   -- pattern + int, directions kept
@@ -677,7 +679,7 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
   where
   odo0 = defaultOdonus
     { harmony = Just "<c'maj7 a'min7>/2", span = 2, octaveShift = -1
-    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2 }) defaultOdonus.heads }
+    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2, pulses = 5, esteps = 8, rotation = i }) defaultOdonus.heads }
   p0 =
     { name: "live", odo: setPat odo0 { clockIx = 5 }, gen: Patch.reconcileGen [], genSpread: 0.3, genBias: 0.7
     , swing: 0.12, velHumanize: 9 }

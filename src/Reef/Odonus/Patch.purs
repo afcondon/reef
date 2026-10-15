@@ -110,6 +110,8 @@ printHead hd =
   "head " <> patternSlug hd.patternIx <> " " <> decimal (speedOf hd) <> " " <> dirSlug hd.direction
     <> " transp " <> show hd.transp <> " off " <> show hd.offset <> " len " <> show hd.len
     <> " euclid " <> show hd.pulses <> " " <> show hd.esteps
+    -- the ring's turn, left out at 0 so older patches print as they did
+    <> (if hd.rotation /= 0 then " rot " <> show hd.rotation else "")
     -- clocked by its notes' lengths; left out on the step clock, so older
     -- patches read and print as they did
     <> (if hd.clock == 1 then " clock dur" else "")
@@ -505,6 +507,9 @@ headP = do
   kw "euclid"
   pul <- intP
   est <- intP
+  rot <- peek >>= case _ of
+    Just (Word "rot") -> word *> intP
+    _ -> pure 0
   clk <- peek >>= case _ of
     Just (Word "clock") -> do
       _ <- word
@@ -523,7 +528,7 @@ headP = do
     { head:
         { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
         , speedIx: 0, direction: dir, transp: tr, mute, patternIx: pat
-        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0, restart }
+        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0, restart, rotation: rot }
     , speed: spd }
 
 genP :: P GenSource
