@@ -733,14 +733,22 @@ stepSeq :: Array Int -> Array Cell -> Int -> Dir -> { pos :: Int, pend :: Int } 
 stepSeq order cells len dir st = case dir of
   Fwd -> { pos: nextSeq order cells len st.pos 1, pend: st.pend }
   Back -> { pos: nextSeq order cells len st.pos (-1), pend: st.pend }
+  -- A pendulum never wraps: it turns at the last cell it can play, so a skipped
+  -- cell at either end of the loop moves the turn inward instead of sending the
+  -- head round to the other end (which played it one way only).
   Pend ->
     let
-      ns
-        | st.pos <= 0 && st.pend == (-1) = 1
-        | st.pos >= len - 1 && st.pend == 1 = -1
-        | otherwise = st.pend
+      from = modPos st.pos len
+      walk d pos
+        | pos < 0 || pos >= len = Nothing
+        | not (skipAt cells (gridAt order pos)) = Just pos
+        | otherwise = walk d (pos + d)
     in
-      { pos: nextSeq order cells len st.pos ns, pend: ns }
+      case walk st.pend (from + st.pend) of
+        Just p -> { pos: p, pend: st.pend }
+        Nothing -> case walk (negate st.pend) (from - st.pend) of
+          Just p -> { pos: p, pend: negate st.pend }
+          Nothing -> { pos: from, pend: st.pend }
 
 -- | One whole tick of a head's own clock, inside a model step: where in the
 -- | step it falls (`num / den` of it, so exact on both runtimes), whether it
