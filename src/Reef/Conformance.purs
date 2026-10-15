@@ -87,7 +87,7 @@ import Reef.Balistes.Lepidoptera (parsePattern, printPattern, rhythmSlug) as BL
 import Reef.Balistes.Pattern (toWire) as BP
 import Reef.Routing (DrumRouting, Send(..), VoiceRouting, decodeDrumRouting, decodeVoiceRouting, drumSends, encodeDrumRouting, encodeVoiceRouting) as RR
 import Reef.Articulation as Art
-import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, setHeadClock, stepEmit)
+import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, renderCell, setHeadClock, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
@@ -514,18 +514,22 @@ digest i o seed =
   pad4 i <> " | k" <> show o.rootPc <> " [" <> intercalate "," (map show o.scaleIvls) <> "]"
     <> " s" <> show (round seed)
     <> " | " <> intercalate "," (map cellDig o.cells)
-    <> " | " <> intercalate "  " (mapWithIndex headDig o.heads)
+    <> " | " <> intercalate "  " (mapWithIndex (headDig o) o.heads)
 
 cellDig :: Cell -> String
 cellDig c =
   show c.note <> "/" <> show c.dur <> "/" <> show c.ratchet <> "/"
     <> show ((if c.gate then 1 else 0) + (if c.skip then 2 else 0) + (if c.glide then 4 else 0))
 
-headDig :: Int -> Head -> String
-headDig _ h =
+-- | A head's state, and the pitch its current cell renders to (so the run
+-- | holds the whole pitch pipeline, SPREAD included, to both runtimes).
+headDig :: Odonus -> Int -> Head -> String
+headDig o _ h =
   show h.cursor <> ":" <> show h.seqPos <> ":" <> show h.transp
     <> ":" <> show h.speedIx <> ":" <> show h.patternIx <> ":" <> show h.len
     <> (if h.mute then "m" else "")
+    <> (if h.spreadOct /= 0 || h.spreadDeg /= 0 then "s" <> show h.spreadOct <> "/" <> show h.spreadDeg else "")
+    <> maybe "" (\c -> "@" <> show (renderCell o h c)) (o.cells !! h.cursor)
 
 -- ── 2b. the input-protocol determinism net (the P3 proof) ─────────────────────
 
@@ -566,6 +570,7 @@ inputScript =
   , { tick: 205, input: SetHeadEuclidSteps 0 8 }
   , { tick: 205, input: SetHeadRestart 0 true }   -- a five-note figure, again each ring
   , { tick: 215, input: NudgeHeadEuclidRotation 0 3 }   -- the ring turned three later
+  , { tick: 220, input: SpreadOctaves 3 }   -- thirds below: steps of the scale, octaves apart
   , { tick: 225, input: NudgeHeadEuclidRotation 0 (-5) }   -- and back past its start
   , { tick: 230, input: NudgeOffsets 1 }
   , { tick: 235, input: SetHeadDir 0 1 }   -- head I runs another way
@@ -634,7 +639,7 @@ inputDigest i s =
     -- the harmony and the chord it gives this step (followHarmony, before the step)
     <> " h" <> maybe "-" identity s.odo.harmony <> " ch" <> maybe "-" (intercalate "," <<< map show) s.odo.chord
     <> " | " <> intercalate "," (map cellDig s.odo.cells)
-    <> " | " <> intercalate "  " (mapWithIndex headDig s.odo.heads)
+    <> " | " <> intercalate "  " (mapWithIndex (headDig s.odo) s.odo.heads)
     <> " | " <> intercalate "," (map genDig s.gen)
   where
   genDig :: GenSource -> String
@@ -679,7 +684,7 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
   where
   odo0 = defaultOdonus
     { harmony = Just "<c'maj7 a'min7>/2", span = 2, octaveShift = -1
-    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2, pulses = 5, esteps = 8, rotation = i }) defaultOdonus.heads }
+    , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2, pulses = 5, esteps = 8, rotation = i, spreadOct = i - 2, spreadDeg = i }) defaultOdonus.heads }
   p0 =
     { name: "live", odo: setPat odo0 { clockIx = 5 }, gen: Patch.reconcileGen [], genSpread: 0.3, genBias: 0.7
     , swing: 0.12, velHumanize: 9 }

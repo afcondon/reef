@@ -108,7 +108,10 @@ printPatch p =
 printHead :: Head -> String
 printHead hd =
   "head " <> patternSlug hd.patternIx <> " " <> decimal (speedOf hd) <> " " <> dirSlug hd.direction
-    <> " transp " <> show hd.transp <> " off " <> show hd.offset <> " len " <> show hd.len
+    <> " transp " <> show hd.transp
+    -- SPREAD's octaves and scale steps, left out at none
+    <> (if hd.spreadOct /= 0 || hd.spreadDeg /= 0 then " spread " <> show hd.spreadOct <> " " <> show hd.spreadDeg else "")
+    <> " off " <> show hd.offset <> " len " <> show hd.len
     <> " euclid " <> show hd.pulses <> " " <> show hd.esteps
     -- the ring's turn, left out at 0 so older patches print as they did
     <> (if hd.rotation /= 0 then " rot " <> show hd.rotation else "")
@@ -500,6 +503,13 @@ headP = do
   dir <- dirOf <$> word
   kw "transp"
   tr <- intP
+  spr <- peek >>= case _ of
+    Just (Word "spread") -> do
+      _ <- word
+      so <- intP
+      sd <- intP
+      pure { oct: so, deg: sd }
+    _ -> pure { oct: 0, deg: 0 }
   kw "off"
   off <- intP
   kw "len"
@@ -528,7 +538,7 @@ headP = do
     { head:
         { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
         , speedIx: 0, direction: dir, transp: tr, mute, patternIx: pat
-        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0, restart, rotation: rot }
+        , offset: off, len: ln, pulses: pul, esteps: est, clock: clk, hold: 0, restart, rotation: rot, spreadOct: spr.oct, spreadDeg: spr.deg }
     , speed: spd }
 
 genP :: P GenSource

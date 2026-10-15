@@ -192,16 +192,23 @@ type Head = HeadOf
                         -- of its steps are pulses, not where it starts (AC,
                         -- 2026-10-15, after vpme.de's Euclidean Circles and the
                         -- FH-2's R); 0..esteps-1
+  , spreadOct :: Int    -- SPREAD: this head's place in the voicing, whole octaves
+  , spreadDeg :: Int    -- and steps of the scale, apart so an octave is one in
+                        -- any scale; shifts the melodic index, ahead of INT and
+                        -- the snap (docs/kb/plans/odonus-voices.md)
   )
 
-type HeadWire = HeadOf (clock :: Maybe Int, hold :: Maybe Int, restart :: Maybe Boolean, rotation :: Maybe Int)
+type HeadWire = HeadOf
+  ( clock :: Maybe Int, hold :: Maybe Int, restart :: Maybe Boolean, rotation :: Maybe Int
+  , spreadOct :: Maybe Int, spreadDeg :: Maybe Int )
 
 headFromWire :: HeadWire -> Head
 headFromWire h = h { clock = fromMaybe 0 h.clock, hold = fromMaybe 0 h.hold, restart = fromMaybe false h.restart
-                   , rotation = fromMaybe 0 h.rotation }
+                   , rotation = fromMaybe 0 h.rotation, spreadOct = fromMaybe 0 h.spreadOct, spreadDeg = fromMaybe 0 h.spreadDeg }
 
 headToWire :: Head -> HeadWire
-headToWire h = h { clock = Just h.clock, hold = Just h.hold, restart = Just h.restart, rotation = Just h.rotation }
+headToWire h = h { clock = Just h.clock, hold = Just h.hold, restart = Just h.restart, rotation = Just h.rotation
+                 , spreadOct = Just h.spreadOct, spreadDeg = Just h.spreadDeg }
 
 -- | Odonus as read from JSON (heads as `HeadWire`), and back.
 odonusFromWire :: OdonusOf HeadWire -> Odonus
@@ -292,7 +299,8 @@ scaleTypeName o = recogniseScale o.scaleIvls
 renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
     let scaleSet = effectivePitchSet o
-        home = PS.realizeEqualShift scaleSet (PS.periodsIn scaleSet o.span) knobMax o.degShift c.note
+        shift = o.degShift + hd.spreadOct * cardinality scaleSet + hd.spreadDeg
+        home = PS.realizeEqualShift scaleSet (PS.periodsIn scaleSet o.span) knobMax shift c.note
         target = home + hd.transp
         snapped =
           case o.chord of
@@ -545,7 +553,7 @@ mkHead :: Int -> Int -> Int -> Boolean -> Int -> Head
 mkHead speedIx direction transp mute patternIx =
   { cursor: 0, seqPos: 0, accumulator: 0, pendStep: 1, etick: 0
   , speedIx, direction, transp, mute, patternIx, offset: 0, len: 16, pulses: 16, esteps: 16
-  , clock: 0, hold: 0, restart: false, rotation: 0 }
+  , clock: 0, hold: 0, restart: false, rotation: 0, spreadOct: 0, spreadDeg: 0 }
 
 -- | Head I runs (Rows); II–IV start muted with distinct patterns + fugue
 -- | offsets — unmute to build the canon.
@@ -997,7 +1005,7 @@ unifyHeadsOf mask o
       p = if has UPattern then h { patternIx = h0.patternIx } else h
       d = if has UDirection then p { direction = h0.direction } else p
       sp = if has USpeed then d { speedIx = h0.speedIx } else d
-      it = if has UInt then sp { transp = h0.transp } else sp
+      it = if has UInt then sp { transp = h0.transp, spreadOct = h0.spreadOct, spreadDeg = h0.spreadDeg } else sp
       rh =
         if has URhythm then
           it { pulses = h0.pulses, esteps = h0.esteps, len = h0.len, offset = h0.offset, restart = h0.restart, rotation = h0.rotation
@@ -1031,29 +1039,33 @@ fanOffsets n o = o { heads = mapWithIndex (\i hd -> hd { offset = clampI 0 15 (i
 staggerLengths :: Int -> Odonus -> Odonus
 staggerLengths n o = o { heads = mapWithIndex (\i hd -> hd { len = clampI 1 16 (16 - i * n) }) o.heads }
 
--- | SPREAD (Marbles-style voicing morph): the knob walks a CURATED progression of
--- | four-voice register spreads rather than a linear fan. Early steps are strictly
--- | consonant — unison, then octaves, then fifths added, out to a symmetric ±octave
--- | (the "noon" of the knob); later steps add less-consonant but still diatonic
--- | colour (thirds, fourths, sixths). Values are per-head transposes in scale-degree
--- | index units (octave ≈ the scale's cardinality; ±7 reads as an octave diatonically).
--- | Hand-shaped and bounded, so the spread can't run away the way the linear fan did.
-spreadVoicings :: Array (Array Int)
-spreadVoicings =
-  [ [  0,  0,  0,  0 ]   -- unison
-  , [  0,  0,  0,  7 ]   -- one octave up
-  , [ -7,  0,  0,  7 ]   -- octaves out (±octave)
-  , [ -7,  0,  4,  7 ]   -- + a fifth
-  , [ -7, -4,  4,  7 ]   -- fifths + octaves, fully consonant (knob "noon")
-  , [ -7, -4,  4, 11 ]   -- stretch an upper voice to a twelfth
-  , [ -7, -3,  2,  9 ]   -- diatonic colour: fourth below, third, sixth
-  , [ -8, -3,  5, 10 ]   -- wider diatonic spread
+-- | SPREAD: the knob walks eight spreads of the four heads, counted in steps
+-- | of the scale (AC, 2026-10-15), ordered by span. Head I is always 0 so it
+-- | keeps the tune. Each entry is whole octaves and scale steps, so an octave
+-- | is an octave in any scale; INT, in semitones, is left alone. The table
+-- | before it was written in scale steps and applied as semitones, and never
+-- | played an octave (docs/kb/plans/odonus-voices.md).
+type SpreadStep = { oct :: Int, deg :: Int }
+
+spreadVoicings :: Array (Array SpreadStep)
+spreadVoicings = map (map step)
+  [ [ 0, 0, 0, 0 ]      -- unison
+  , [ 0, 2, 4, 6 ]      -- sevenths
+  , [ 0, 2, 4, 7 ]      -- close triad, the octave on top
+  , [ 0, -5, 2, -7 ]    -- thirds below
+  , [ 0, 3, 6, 9 ]      -- quartal
+  , [ 0, 4, -7, 7 ]     -- fifths and octaves
+  , [ 0, 4, 9, -7 ]     -- open triad
+  , [ 0, 7, -7, 14 ]    -- octaves
   ]
+  where
+  -- written in steps of a seven-note scale; an octave is 7
+  step n = let o = if n < 0 then -((6 - n) / 7) else n / 7 in { oct: o, deg: n - 7 * o }
 
 spreadOctaves :: Int -> Odonus -> Odonus
 spreadOctaves n o =
-  let v = fromMaybe [ 0, 0, 0, 0 ] (spreadVoicings !! clampI 0 (length spreadVoicings - 1) n)
-  in o { heads = mapWithIndex (\i hd -> hd { transp = clampI (-24) 24 (fromMaybe 0 (v !! i)) }) o.heads }
+  let v = fromMaybe [] (spreadVoicings !! clampI 0 (length spreadVoicings - 1) n)
+  in o { heads = mapWithIndex (\i hd -> let s = fromMaybe { oct: 0, deg: 0 } (v !! i) in hd { spreadOct = s.oct, spreadDeg = s.deg }) o.heads }
 
 -- | PHASE ±: rotate the whole canon — shift every head's offset by `d` steps.
 nudgeOffsets :: Int -> Odonus -> Odonus
