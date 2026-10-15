@@ -651,11 +651,13 @@ mkHead speedIx direction transp mute patternIx =
 defaultHeads :: Array Head
 defaultHeads =
   -- over Odonus's default ×2 (8ths), the rates the heads have always had:
-  -- 16ths, 8ths, 32nds, and three to the beat
+  -- 16ths, 8ths, 32nds, and three to the beat. INT starts at 0 on every
+  -- head (AC, 2026-10-15): SPREAD and VOICES set the intervals now, and INT
+  -- adds to them, so a default offset made both sound wrong on a fresh patch
   [ mkHead 6 0 0 false 0       -- I:   Rows, ×2 fwd
-  , mkHead 4 0 7 true 1        -- II:  Serpentine, ×1 +7
-  , mkHead 8 1 (-12) true 3    -- III: Spiral, ×4 rev −12
-  , mkHead 5 2 3 true 2        -- IV:  Columns, ×1.5 pend +3
+  , mkHead 4 0 0 true 1        -- II:  Serpentine, ×1
+  , mkHead 8 1 0 true 3        -- III: Spiral, ×4 rev
+  , mkHead 5 2 0 true 2        -- IV:  Columns, ×1.5 pend
   ]
 
 -- | Cells hold raw knob values now (0..`knobMax`), so the default spreads the 16
