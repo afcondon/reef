@@ -117,8 +117,8 @@ module Reef.Odonus
 
 import Prelude
 
-import Data.Array (concat, elem, head, mapMaybe, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
-import Data.Foldable (foldl)
+import Data.Array (concat, elem, head, mapMaybe, range, snoc, filter, findIndex, mapWithIndex, nub, null, replicate, modifyAt, length, sort, zipWith, (!!), (:))
+import Data.Foldable (foldl, maximum, minimum)
 import Data.Int (toNumber)
 import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
@@ -326,9 +326,23 @@ renderCell o hd c =
         slots = PS.periodsIn scaleSet o.span * cardinality scaleSet
         index v = PS.equalIndex slots knobMax v
         -- inverted, the cell's degree is mirrored on the degree of the first
-        -- cell of the head's loop, so the inversion starts where the melody does
+        -- cell of the head's loop, then the whole line moved by whole octaves
+        -- (periods) so its range sits where the melody's does: the shape
+        -- exact, the register kept, starting on the melody's first note an
+        -- octave or two away if the melody is wide (AC, 2026-10-15)
         degree
-          | hd.invert = 2 * index (axisNote o hd) - index c.note
+          | hd.invert =
+              let
+                loop = map index (loopNotes o hd)
+                lo = fromMaybe 0 (minimum loop)
+                hi = fromMaybe 0 (maximum loop)
+                axis = index (axisNote o hd)
+                card = max 1 (cardinality scaleSet)
+                -- the gap between the two ranges' middles is lo + hi − 2·axis
+                -- degrees; rounded to the nearest whole number of periods
+                periods = floorDivI (2 * (lo + hi - 2 * axis) + card) (2 * card)
+              in
+                2 * axis - index c.note + periods * card
           | otherwise = index c.note
         home = PS.realize scaleSet (degree + shift)
         target = home + hd.transp
@@ -348,6 +362,16 @@ axisNote :: Odonus -> Head -> Int
 axisNote o hd =
   let len = clampI 1 16 hd.len
   in maybe 0 _.note (o.cells !! gridAt (orderOf hd.patternIx) (modPos hd.offset len))
+
+-- | The notes of the cells in a head's loop: its pattern's order, from its
+-- | offset, for its length. The range an inversion is fitted back into.
+loopNotes :: Odonus -> Head -> Array Int
+loopNotes o hd =
+  let
+    len = clampI 1 16 hd.len
+    order = orderOf hd.patternIx
+  in
+    mapMaybe (\k -> map _.note (o.cells !! gridAt order (modPos (k + hd.offset) len))) (range 0 (len - 1))
 
 -- | The raw NOTE-knob ceiling. Cells hold a value in `0..knobMax`, shown on the
 -- | knob face; the label shows what it currently quantises to. Fixed (independent
