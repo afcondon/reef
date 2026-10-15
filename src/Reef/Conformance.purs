@@ -420,7 +420,8 @@ durRun =
 -- | The pendulum (AC, 2026-10-15): head I alone, on a pendulum, through four
 -- | settings sent as wire inputs. Plain 16 of 16 bounces 0…15…0; a skipped last
 -- | cell turns it at 14 instead of sending it round; with the ring restarting it
--- | plays ping-pong, 0…15 | 15…0, and E(5,8) is a figure and its mirror.
+-- | plays ping-pong, 0…15 | 15…0, back in step a turn after a pattern change
+-- | mid-ring, and E(5,8) is a figure and its mirror.
 pendulumRun :: String
 pendulumRun =
   let
@@ -433,6 +434,9 @@ pendulumRun =
     1 -> [ ToggleHeadMute 1, ToggleHeadMute 2, ToggleHeadMute 3, SetHeadDir 0 2 ]
     40 -> [ ToggleSkip 15 ]
     70 -> [ ToggleSkip 15, SetHeadRestart 0 true ]
+    -- a pattern change mid-ring puts the walk out of step with the ring:
+    -- the ping-pong is back in step after one turn, not locked into a part
+    90 -> [ SetHeadPattern 0 1 ]
     120 -> [ SetHeadPulses 0 5, SetHeadEuclidSteps 0 8 ]
     _ -> []
   wire i = fromMaybe ClearPitchSet (fromWire (toWire i))

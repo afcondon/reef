@@ -826,14 +826,19 @@ tickHead cells h =
         here = modPos h.seqPos n
         -- the ring's first tick, restarting: stand just before the pattern's
         -- first cell, so the cycle's first pulse lands on it. A pendulum plays
-        -- ping-pong with the ring (AC, 2026-10-15): on its way out it jumps to
-        -- its mirror and replays the cell it stands on, homeward; on its way
-        -- home (or not yet started) it starts out again. So E(5,8) is a figure
-        -- and its mirror, 0 1 2 3 4 | 4 3 2 1 0, and 16 of 16 is 0…15 | 15…0.
+        -- ping-pong with the ring (AC, 2026-10-15): a turn on its way out
+        -- starts the way home from the end of a whole outbound figure (as far
+        -- as the ring's pulses reach from the top), replaying that cell; a turn
+        -- on its way home (or not yet started) starts out again. So E(5,8) is
+        -- a figure and its mirror, 0 1 2 3 4 | 4 3 2 1 0, 16 of 16 is
+        -- 0…15 | 15…0, and a ring out of step with the walk (a pattern changed
+        -- mid-ring, say) is back in step after one turn rather than locking
+        -- into a part of the figure.
+        outbound = foldl (\pos _ -> stepFrom pos) (n - 1) (replicate (clampI 0 es h.pulses) unit)
         from =
           if h.restart && h.etick == 0 then case dir of
             Back -> 0
-            Pend | here > 0 && here < len -> n - 2 - here
+            Pend | here > 0 && here < len && outbound < len -> n - 2 - outbound
             _ -> n - 1
           else h.seqPos
         pos = if hit then stepFrom from else from
