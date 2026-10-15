@@ -104,6 +104,8 @@ module Reef.Odonus
   , followHeads
   , setOctavePattern
   , followOctave
+  , setDegreePattern
+  , followDegree
   , setOdoClock
   , toggleScaleNote
   , setSpread
@@ -245,6 +247,9 @@ type OdonusOf h =
   , headsPattern :: Maybe String -- a Tidal pattern of head numbers (`"<1 2 [3,4]>"`):
                                  -- the heads it names at a step play, the rest are
                                  -- muted; sampled by the host, see followHeads
+  , degreePattern :: Maybe String -- a Tidal pattern of degrees (`"<1 4 5 1>"`)
+                                  -- that sets `degShift`, the panel's DEGREE;
+                                  -- sampled by the host, see followDegree
   , octavePattern :: Maybe String -- a Tidal pattern of octaves (`"<0 0 0 -1>"`)
                                   -- that sets `octaveShift`, the panel's OCT;
                                   -- sampled by the host, see followOctave
@@ -489,6 +494,21 @@ followOctave given o = case head given of
   Just n -> setOctaveShift n o
   Nothing -> o
 
+-- | **Degrees by pattern** (AC, 2026-10-15: I IV V I and friends, the whole
+-- | grid moved up the scale, in key, a step of a progression at a time). Set,
+-- | or with `Nothing` clear, a Tidal pattern of degrees, counted as the
+-- | DEGREE buttons are (1 = the tonic, 4 = on the fourth). It drives DEGREE
+-- | itself, as `octave` drives OCT, and ending it leaves DEGREE where it is.
+setDegreePattern :: Maybe String -> Odonus -> Odonus
+setDegreePattern p o = o { degreePattern = p }
+
+-- | The degree the pattern gives at this step, its first value, as DEGREE
+-- | (within DEGREE's range). A rest keeps the degree it had.
+followDegree :: Array Int -> Odonus -> Odonus
+followDegree given o = case head given of
+  Just n -> setDegShift (n - 1) o
+  Nothing -> o
+
 -- | The heads the pattern names at this step (1 to 4, as the panel counts)
 -- | play; every other head is muted. A rest names none, so all are silent.
 followHeads :: Array Int -> Odonus -> Odonus
@@ -675,7 +695,7 @@ defaultOdonus =
   -- middle C); a Vetula feed or pushed record installs an explicit set.
   , pitchSet: Nothing
   , span: 3
-  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, chord: Nothing, harmony: Nothing
+  , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, degreePattern: Nothing, chord: Nothing, harmony: Nothing
   , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing, voices: Nothing }
 
 -- ---------------------------------------------------------------------------

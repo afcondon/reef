@@ -249,9 +249,11 @@ octaveRun =
     intercalate "\n" final.out
   where
   pat = "<0 -1 1 ~>"
+  -- degrees as I IV V, then a rest that keeps V (AC, 2026-10-15)
+  dpat = "<1 4 5 ~>"
   script i = case i of
-    0 -> [ SetOctavePattern (Just pat) ]
-    64 -> [ SetOctavePattern Nothing ]
+    0 -> [ SetOctavePattern (Just pat), SetDegreePattern (Just dpat) ]
+    64 -> [ SetOctavePattern Nothing, SetDegreePattern Nothing ]
     _ -> []
   wire i = fromMaybe ClearPitchSet (fromWire (toWire i))
   sample i txt
@@ -259,6 +261,11 @@ octaveRun =
         0 -> [ 0 ]
         1 -> [ -1 ]
         2 -> [ 1 ]
+        _ -> []
+    | txt == dpat = case (i / 16) `mod` 4 of
+        0 -> [ 1 ]
+        1 -> [ 4 ]
+        2 -> [ 5 ]
         _ -> []
     | otherwise = []
   advance acc i =

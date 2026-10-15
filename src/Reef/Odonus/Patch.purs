@@ -88,6 +88,7 @@ printPatch p =
       , "  , quantize: " <> maybe "scale" (\h -> "harmony " <> quote h) o.harmony
       ] <> maybe [] (\h -> [ "  , heads: " <> quote h ]) o.headsPattern
         <> maybe [] (\h -> [ "  , octaves: " <> quote h ]) o.octavePattern
+        <> maybe [] (\h -> [ "  , degrees: " <> quote h ]) o.degreePattern
         <> maybe [] (\v -> [ "  , voices: " <> quote (printVoices v) ]) o.voices <>
       [ "  , swing: " <> pct p.swing
       , "  , velHumanize: " <> show p.velHumanize
@@ -405,6 +406,7 @@ patchP = do
   quant <- field "quantize" sourceP
   headsPat <- optionalP (field "heads" strP)
   octavePat <- optionalP (field "octaves" strP)
+  degreePat <- optionalP (field "degrees" strP)
   voicesTxt <- optionalP (field "voices" strP)
   swing <- field "swing" intP
   velH <- field "velHumanize" intP
@@ -434,7 +436,7 @@ patchP = do
       { rootPc = sc.root, scaleIvls = sc.ivls, dist = dist
       , octaveShift = octave, degShift = scalarT, gatePct = gatePct
       , span = fromMaybe defaultOdonus.span span
-      , cells = cells, heads = heads, headsPattern = headsPat, octavePattern = octavePat
+      , cells = cells, heads = heads, headsPattern = headsPat, octavePattern = octavePat, degreePattern = degreePat
       , voices = voicesTxt >>= \t -> hush (parseVoices t) }
     heads = map (\h -> h.head { speedIx = rateIxOf h.speed }) heads0
     clockIx = maybe defaultOdonus.clockIx rateIxOf clockV

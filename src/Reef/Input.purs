@@ -54,7 +54,7 @@ import Reef.Odonus
   , clearPitchSet, setOutScale, cyclePattern, setHeadPattern, cycleRoot, cycleScaleType, fanOffsets
   , nudgeOffsets, nudgeHeadPulses, nudgeHeadEuclidSteps, nudgeHeadEuclidRotation
   , setAllNotes, setCellDur, setCellRatchet, setCellVel
-  , setDegShift, setHarmony, setScalePattern, setGridHarmony, followGridHarmony, releaseScale, followChord, setGatePct, setOdoClock, setHeadsPattern, followHeads, setOctavePattern, followOctave, setHeadDir, setHeadEuclidSteps
+  , setDegShift, setHarmony, setScalePattern, setGridHarmony, followGridHarmony, releaseScale, followChord, setGatePct, setOdoClock, setHeadsPattern, followHeads, setOctavePattern, followOctave, setDegreePattern, followDegree, setHeadDir, setHeadEuclidSteps
   , setHeadClock, setHeadRestart, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
@@ -147,9 +147,10 @@ data Input
   -- chord pattern that chord as voiced (Nothing = leave the grid). The rig
   -- samples (it has Tidal) and broadcasts this tick-tagged, so the browser
   -- never reads a pattern (Engine.sampleInput).
-  | SetSampled (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int))
+  | SetSampled (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int)) (Maybe (Array Int))
   | SetHeadsPattern (Maybe String)
   | SetOctavePattern (Maybe String)
+  | SetDegreePattern (Maybe String)
   -- A recall (docs/kb/plans/the-deck.md): a patch's settings (`Reef.Odonus.
   -- Patch`, as text) with the playheads carried on where they are, as a scene
   -- recall does; and an instant's phases, seed and freeze (`odonusNow`).
@@ -239,9 +240,10 @@ applyInput = case _ of
   SetScalePattern p -> onOdo (setScalePattern p)
   SetOutScale p root -> onOdo (setOutScale p root)
   SetGridHarmony h -> onOdo (setGridHarmony h)
-  SetSampled c sc g hs os -> onOdo \o -> maybe identity followOctave os $ maybe identity followHeads hs (followGridHarmony (const (fromMaybe [] g)) ((followChord c o) { scaleIvls = maybe o.scaleIvls normaliseIvls sc }))
+  SetSampled c sc g hs os ds -> onOdo \o -> maybe identity followDegree ds $ maybe identity followOctave os $ maybe identity followHeads hs (followGridHarmony (const (fromMaybe [] g)) ((followChord c o) { scaleIvls = maybe o.scaleIvls normaliseIvls sc }))
   SetHeadsPattern p -> onOdo (setHeadsPattern p)
   SetOctavePattern p -> onOdo (setOctavePattern p)
+  SetDegreePattern p -> onOdo (setDegreePattern p)
   RecallPatch txt -> \s -> case Patch.parsePatch txt of
     Just p -> s { odo = recallScene s.odo p.odo, gen = Patch.reconcileGen p.gen, spread = p.genSpread, bias = p.genBias }
     Nothing -> s
@@ -291,10 +293,11 @@ type WireInput =
   , grid :: Maybe (Array Int)  -- SetSampled's grid chord, as voiced; absent on older frames
   , heads :: Maybe (Array Int) -- SetSampled's heads to play; absent on older frames
   , octave :: Maybe (Array Int) -- SetSampled's octave; absent on older frames
+  , degree :: Maybe (Array Int) -- SetSampled's degree; absent on older frames
   }
 
 w0 :: WireInput
-w0 = { tag: "", a: 0, b: 0, ns: [], ps: Nothing, txt: Nothing, chord: Nothing, ivls: Nothing, grid: Nothing, heads: Nothing, octave: Nothing }
+w0 = { tag: "", a: 0, b: 0, ns: [], ps: Nothing, txt: Nothing, chord: Nothing, ivls: Nothing, grid: Nothing, heads: Nothing, octave: Nothing, degree: Nothing }
 
 -- GenKind ↔ Int via its position in `genKinds` (stable, the UI's own order).
 kindCode :: GenKind -> Int
@@ -348,9 +351,10 @@ toWire = case _ of
   SetScalePattern p -> w0 { tag = "SetScalePattern", txt = p }
   SetOutScale p root -> w0 { tag = "SetOutScale", txt = p, a = root }
   SetGridHarmony h -> w0 { tag = "SetGridHarmony", txt = h }
-  SetSampled c sc g hs os -> w0 { tag = "SetSampled", chord = c, ivls = sc, grid = g, heads = hs, octave = os }
+  SetSampled c sc g hs os ds -> w0 { tag = "SetSampled", chord = c, ivls = sc, grid = g, heads = hs, octave = os, degree = ds }
   SetHeadsPattern p -> w0 { tag = "SetHeadsPattern", txt = p }
   SetOctavePattern p -> w0 { tag = "SetOctavePattern", txt = p }
+  SetDegreePattern p -> w0 { tag = "SetDegreePattern", txt = p }
   RecallPatch t -> w0 { tag = "RecallPatch", txt = Just t }
   RecallNow t -> w0 { tag = "RecallNow", txt = Just t }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
@@ -417,9 +421,10 @@ fromWire w = case w.tag of
   "SetScalePattern" -> Just (SetScalePattern w.txt)
   "SetOutScale" -> Just (SetOutScale w.txt w.a)
   "SetGridHarmony" -> Just (SetGridHarmony w.txt)
-  "SetSampled" -> Just (SetSampled w.chord w.ivls w.grid w.heads w.octave)
+  "SetSampled" -> Just (SetSampled w.chord w.ivls w.grid w.heads w.octave w.degree)
   "SetHeadsPattern" -> Just (SetHeadsPattern w.txt)
   "SetOctavePattern" -> Just (SetOctavePattern w.txt)
+  "SetDegreePattern" -> Just (SetDegreePattern w.txt)
   "RecallPatch" -> RecallPatch <$> w.txt
   "RecallNow" -> RecallNow <$> w.txt
   "UnifyHeads" -> Just UnifyHeads
