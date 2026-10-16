@@ -2083,7 +2083,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2138,6 +2138,19 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
   off acc src = case SL.rigLine src acc.rack of
     Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
     Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }
+  -- `reset <bank> ["slots"]`: an FH-2 LFO bank restarted in phase; the rack unchanged
+  resets = [ "== reset" ] <> map reset
+    [ "reset fh2cv0"
+    , "reset fh2cv0 \"3 6\""
+    , "reset fh2cv0 \"9\""
+    , "reset fh2cv0 3 6"
+    , "reset es9main"
+    , "reset fh2_1"
+    , "reset fh2cv1"
+    ]
+  reset src = src <> " | " <> case SL.rigLine src (SR.printRack final) of
+    Left e -> "refused: " <> e
+    Right r -> r.line <> " -> " <> r.command <> " | rack unchanged: " <> show (r.rack == SR.printRack final)
   refuse src = src <> " | " <> case SL.parseLine src >>= \l -> SL.applyLine l SM.defaultSelene of
     Left e -> "refused: " <> e
     Right _ -> "accepted"

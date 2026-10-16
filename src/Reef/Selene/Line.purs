@@ -45,6 +45,7 @@ import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Number as Number
 import Data.String as Str
 import Data.String.Common (joinWith, trim)
+import Data.Traversable (traverse)
 import Reef.Selene.Model as M
 import Reef.Selene.Rack as Rack
 import Reef.Selene.Block as Block
@@ -246,10 +247,19 @@ words = filter (_ /= "") <<< Str.split (Str.Pattern " ") <<< trim
 -- | rack it keeps on the stage (`selene/rack`) with the line applied, and the
 -- | one bank the line touched, ready for its daemon. `socket` is "" when that
 -- | bank is not on the modular (a MIDI or virtual target): kept, not sent.
-type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String }
+-- | What a line does on the rig: the rack after it, the line as written back,
+-- | the daemon (socket) and bank it reaches, the apply envelope (`json`, empty
+-- | when nothing is applied) and the whole `command` for the daemon (empty
+-- | when nothing is sent).
+type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String, command :: String }
 
 rigLine :: String -> String -> Either String RigLine
-rigLine src rack = case words src of
+rigLine src rack = case Str.stripPrefix (Str.Pattern "reset ") (trim src) of
+  Just rest -> resetOn rest rack
+  Nothing -> rigCommand src rack
+
+rigCommand :: String -> String -> Either String RigLine
+rigCommand src rack = case words src of
   -- `off <bank>`: the bank leaves the rack, and its daemon is sent the same
   -- kind with every slot silent, so the outputs stop (a dropped "free")
   [ "off", t ] -> do
@@ -264,6 +274,7 @@ rigLine src rack = case words src of
       , socket: maybe "" _.socket sent
       , bank: maybe "" _.bank sent
       , json: maybe "" _.json sent
+      , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
       }
   _ -> rigLine' src rack
 
@@ -279,7 +290,47 @@ rigLine' src rack = do
     , socket: maybe "" _.socket sent
     , bank: maybe "" _.bank sent
     , json: maybe "" _.json sent
+    , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
     }
+
+-- | `reset <bank>` or `reset <bank> "3 6"`: restart the bank's LFOs, or some
+-- | of its slots, together, so each sits at exactly its phase offset. Only an
+-- | FH-2 LFO bank has resets (FH-2 firmware per-output LFO reset, by CC; the
+-- | daemon's `reset-lfos`). The rack is unchanged: a reset is an act, not a
+-- | setting, so a page or a resumed daemon has nothing to replay.
+resetOn :: String -> String -> Either String RigLine
+resetOn rest rack = do
+  let
+    t = fromMaybe "" (head (words rest))
+    after = trim (Str.drop (Str.length t) (trim rest))
+  target <- Rack.bankOf t
+  dest <- note (t <> " has nothing on it to reset") (Array.find (\d -> d.target == target) (Rack.parseRack rack).destinations)
+  case dest.bank of
+    M.GLfo _ -> pure unit
+    other -> Left ("reset restarts a bank's LFOs, and " <> t <> " holds " <> Rack.kindKeyword other)
+  wired <- note (t <> " is not a modular bank") (Wire.targetSocketBank target)
+  when (wired.socket /= "fh2") (Left ("only the FH-2's LFOs can be reset, and " <> t <> " is an ES-9 bank"))
+  slots <- slotsOf after
+  let
+    listed = if Array.null slots then "" else " \"" <> joinWith " " (map show slots) <> "\""
+    commaed = if Array.null slots then "" else " " <> joinWith "," (map show slots)
+  pure
+    { rack
+    , line: "reset " <> t <> listed
+    , socket: wired.socket
+    , bank: wired.bank
+    , json: ""
+    , command: "reset-lfos " <> wired.bank <> commaed
+    }
+  where
+  slotsOf s
+    | s == "" = Right []
+    | otherwise = case Str.stripPrefix (Str.Pattern "\"") s >>= Str.stripSuffix (Str.Pattern "\"") of
+        Just inner -> traverse slot (words inner)
+        Nothing -> Left ("slots are a quoted list, as in reset fh2cv0 \"1 3\": " <> s)
+  slot w = case Int.fromString w of
+    Just n | n >= 1 && n <= 8 -> Right n
+    _ -> Left ("a slot is 1 to 8, not " <> w)
 
 -- ---------------------------------------------------------------------------
 -- Modules: a bank's worth, free of any bank (docs/kb/plans/selene-in-tidal.md)
