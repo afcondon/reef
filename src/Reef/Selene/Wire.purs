@@ -19,6 +19,7 @@ import Prelude
 import Data.Maybe (Maybe(..))
 import Simple.JSON (writeJSON)
 import Reef.Selene.Model as M
+import Reef.Selene.Rack as Rack
 
 -- | One destination, ready to push: the daemon `socket` id (es9 | fh2), the target
 -- | `bank` token (main / cv0 / gt0 / …), and the `apply-polysignal` envelope JSON.
@@ -60,8 +61,12 @@ familyOf = case _ of
 -- | Encode one destination into a `SeleneApply`, or Nothing when its target isn't
 -- | a modular bank. The alias is stable per (socket, bank) so a re-push replaces
 -- | the same claim cleanly.
+-- |
+-- | A muted destination sends its silent version (`Rack.silenced`): the jacks
+-- | go to 0 V and the bank itself is untouched, so unmuting sends it again.
 destinationEnvelope :: M.Destination -> Maybe SeleneApply
-destinationEnvelope d = do
+destinationEnvelope d0 = do
+  let d = if d0.muted then Rack.silenced d0 else d0
   sb <- targetSocketBank d.target
   let
     bank = sb.bank

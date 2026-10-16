@@ -434,11 +434,17 @@ clockBaseBeats = case _ of
 -- | kept as text: the rig plays it as LFO resets on the beat (an FH-2 LFO bank
 -- | only, whose outputs reset on a note; `FH2.LfoReset`). reef never parses it,
 -- | which keeps Littorina out of reef.
+-- |
+-- | `muted` silences the destination without touching its bank: the daemon is
+-- | sent the bank's silent version (`Reef.Selene.Wire.destinationEnvelope`), its
+-- | reset pattern stops, and edits made while muted change the bank, so unmuting
+-- | brings back the bank as it then is.
 type Destination =
   { target :: Target
   , range :: Maybe OutputRange
   , bank :: GenBank
   , retrig :: Maybe String
+  , muted :: Boolean
   }
 
 -- | The whole rack — an ordered list of destinations.
@@ -449,10 +455,10 @@ type Selene = { destinations :: Array Destination }
 defaultSelene :: Selene
 defaultSelene =
   { destinations:
-      [ { target: ES9Main, range: Nothing, bank: freshBank KLfo, retrig: Nothing }
-      , { target: ES9Gt 0, range: Nothing, bank: freshBank KEuclid, retrig: Nothing }
-      , { target: ES9Gt 1, range: Nothing, bank: freshBank KClock, retrig: Nothing }
-      , { target: Midi 1, range: Nothing, bank: freshBank KNote, retrig: Nothing }
+      [ { target: ES9Main, range: Nothing, bank: freshBank KLfo, retrig: Nothing, muted: false }
+      , { target: ES9Gt 0, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, muted: false }
+      , { target: ES9Gt 1, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false }
+      , { target: Midi 1, range: Nothing, bank: freshBank KNote, retrig: Nothing, muted: false }
       ]
   }
 
@@ -503,7 +509,7 @@ freshBank = case _ of
 
 addDestination :: GenKind -> Selene -> Selene
 addDestination kind s =
-  s { destinations = snoc s.destinations { target: defaultTargetFor kind, range: Nothing, bank: freshBank kind, retrig: Nothing } }
+  s { destinations = snoc s.destinations { target: defaultTargetFor kind, range: Nothing, bank: freshBank kind, retrig: Nothing, muted: false } }
 
 removeDestination :: Int -> Selene -> Selene
 removeDestination i s = s { destinations = fromMaybe s.destinations (deleteAt i s.destinations) }

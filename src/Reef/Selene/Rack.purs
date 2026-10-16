@@ -36,10 +36,12 @@ module Reef.Selene.Rack
   , noteToken
   , fmt
   , silence
+  , silenced
   ) where
 
 import Prelude
 
+import Data.Array as Array
 import Data.Array (drop, filter, foldl, mapWithIndex, range, snoc, take, (!!))
 import Data.Either (Either(..))
 import Data.Int as Int
@@ -73,6 +75,7 @@ printDest d =
   -- Printed only when the user pinned one, so an unpinned block round-trips
   -- byte-identically and a plain header stays a plain header.
   rangeTok = maybe "" (\r -> " " <> M.rangeToWire r) d.range
+    <> (if d.muted then " muted" else "")
     <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
   slotLine i row = "  " <> row <> "   -- " <> show (i + 1)
   bankSlots = case _ of
@@ -160,6 +163,7 @@ type PState =
       , kind :: M.GenKind
       , range :: Maybe M.OutputRange
       , retrig :: Maybe String
+      , muted :: Boolean
       , rows :: Array (Maybe String)
       }
   }
@@ -177,7 +181,7 @@ parseRack doc =
     in
       if t == "" then closeBlock st
       else case headerOf t of
-        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, rows: [] } }
+        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, rows: [] } }
         Nothing -> case st.open of
           Just blk -> st { open = Just (addLine blk t) }
           Nothing -> st   -- a stray line outside any block: ignore
@@ -204,7 +208,7 @@ closeBlock st = case st.open of
   Nothing -> st
   Just blk ->
     let bank = buildBank blk.kind (fitTo M.slotCount blk.rows)
-    in { dests: snoc st.dests { target: blk.target, range: blk.range, bank, retrig: blk.retrig }, open: Nothing }
+    in { dests: snoc st.dests { target: blk.target, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are muted → silent).
 fitTo :: Int -> Array (Maybe String) -> Array (Maybe String)
@@ -228,15 +232,21 @@ buildBank kind rows = case kind of
 -- | a typo shows up as a missing block rather than as a range that quietly isn't
 -- | the one you typed.
 -- | A `retrig "<pattern>"` may close the header (the pattern is quoted and may
--- | hold spaces, so it is taken off before the words are counted).
-headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, range :: Maybe M.OutputRange, retrig :: Maybe String }
+-- | hold spaces, so it is taken off before the words are counted). Before it,
+-- | the word `muted` marks a muted destination.
+headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean }
 headerOf t0 = case words t of
   [] -> Nothing
-  toks -> case toks !! 0 >>= kindOf of
-    Just k -> case toks of
-      [ _, tgt ] -> Just { kind: k, target: parseTarget tgt, range: Nothing, retrig }
-      [ _, tgt, rng ] -> map (\r -> { kind: k, target: parseTarget tgt, range: Just r, retrig }) (M.rangeOfWire rng)
-      _ -> Nothing
+  toks0 -> case toks0 !! 0 >>= kindOf of
+    Just k ->
+      let
+        muted = Array.last toks0 == Just "muted"
+        toks = if muted then fromMaybe toks0 (Array.init toks0) else toks0
+      in
+        case toks of
+          [ _, tgt ] -> Just { kind: k, target: parseTarget tgt, range: Nothing, retrig, muted }
+          [ _, tgt, rng ] -> map (\r -> { kind: k, target: parseTarget tgt, range: Just r, retrig, muted }) (M.rangeOfWire rng)
+          _ -> Nothing
     Nothing -> Nothing
   where
   split = case Str.indexOf (Str.Pattern " retrig \"") t0 of
@@ -292,6 +302,23 @@ silence = case _ of
   M.GNote s -> M.GNote (map (const silentNote) s)
   M.GEnv s -> M.GEnv (map (const silentEnv) s)
 
+-- | A destination as it plays while muted: every slot silent, on a range that
+-- | puts silence at 0 V. A slot's level is a position in its range (both
+-- | daemons: out = level × scale + offset), so level 0 is 0 V only on a
+-- | bipolar range; on 0–10 V it is 5 V, which is what `selene $ off` left on
+-- | a unipolar bank before this pinned the range. Gates rest at the bottom of
+-- | their range, so a gate bank keeps a unipolar one. A note bank keeps its
+-- | own: pitch is V/oct, not range-scaled, and its silent note is 0 V.
+silenced :: M.Destination -> M.Destination
+silenced d = d { bank = silence d.bank, range = rangeFor d.bank }
+  where
+  rangeFor = case _ of
+    M.GLfo _ -> Just M.Bipolar5V
+    M.GEnv _ -> Just M.Bipolar5V
+    M.GEuclid _ -> Just M.Unipolar5V
+    M.GClock _ -> Just M.Unipolar5V
+    M.GNote _ -> d.range
+
 silentLfo :: M.ModSlot
 silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0 }
 
@@ -301,8 +328,10 @@ silentEuclid = { beats: 0, steps: 8, rate: 4, accentRate: 0 }
 silentClock :: M.ClockSlot
 silentClock = { base: M.ClockQuarter, multiplier: 1, pulseWidth: 0, phase: 0 }
 
+-- | Note 12 (C0) is 0 V on V/oct (es9-daemon `note_to_cpal_level`); note 0
+-- | was −1 V.
 silentNote :: M.PresetNoteSlot
-silentNote = { note: 0 }
+silentNote = { note: 12 }
 
 -- Silent is `depth 0` — the envelope still fires, it just moves nothing. There is
 -- no "off" for an envelope the way pulseWidth 0 mutes a clock.

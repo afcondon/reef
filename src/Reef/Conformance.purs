@@ -113,7 +113,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Selene.Model (defaultSelene) as SM
-import Reef.Selene.Rack (parseRack, printRack) as SR
+import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced) as SR
 import Reef.Selene.Line (applyLine, parseLine, printLine, retrigsOf, rigLine) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -2083,7 +2083,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2146,6 +2146,31 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
   off acc src = case SL.rigLine src acc.rack of
     Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
     Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }
+  -- `mute` / `unmute`: the bank stays, its jacks go to 0 V (a range pinned
+  -- so that silence is 0 V), its reset pattern stops, and a line on a muted
+  -- bank changes the bank and keeps the mute
+  mutes = [ "== mute" ] <> (foldl mute { rack: SR.printRack final, out: [] }
+    [ "mute fh2cv0", "lfo fh2cv0 # rate 3", "unmute fh2cv0"
+    , "mute es9gt0", "mute fh2cv2", "unmute es9gt0" ]).out
+  mute acc src = case SL.rigLine src acc.rack of
+    Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
+    Right r ->
+      let
+        heads = filter (\l -> not (String.contains (String.Pattern "--") l) && l /= "" && String.take 2 l /= "  ") (String.split (String.Pattern "\n") r.rack)
+        retrigs' = map (\x -> show x.base <> " " <> x.pattern) (SL.retrigsOf r.rack)
+        -- what goes to the daemon, as rack text (the JSON's key order and
+        -- number spelling differ between the two runtimes' writeJSON)
+        sent = case SR.bankOf (fromMaybe "" (String.split (String.Pattern " ") src !! 1)) of
+          Right t -> case find (\d -> d.target == t) (SR.parseRack r.rack).destinations of
+            Just d -> intercalate " /" (take 2 (filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") (SR.printRack { destinations: [ if d.muted then SR.silenced d else d ] }))))
+            Nothing -> "?"
+          Left e -> e
+      in
+        { rack: r.rack
+        , out: acc.out <> [ src <> " | sends " <> sent <> (if r.note == "" then "" else " | " <> r.note)
+                          , "  headers: " <> intercalate " / " heads
+                          , "  retrigs: " <> intercalate ", " retrigs'
+                          , "  round-trips: " <> show (SR.printRack (SR.parseRack r.rack) == r.rack) ] }
   -- what the FH-2 will really do with an LFO rate it cannot reach
   rateNotes = [ "== rate notes" ] <> map rateNote
     [ "lfo fh2cv0 # rate 0.05", "lfo fh2cv0 # rate 20", "drift fh2cv1", "lfo es9main # rate 0.05", "lfo fh2cv0 # rate 2" ]

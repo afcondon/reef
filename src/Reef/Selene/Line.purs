@@ -123,7 +123,9 @@ applyLine line sel = do
     Nothing -> Right case existing >>= (sel.destinations !! _) of
       Just d | M.bankKind d.bank == kindOfLine && not fresh -> d.retrig
       _ -> Nothing
-  let dest = { target: line.target, range: Nothing, bank, retrig }
+  -- a mute is about the jacks, not the bank, so every line keeps it
+  let muted = maybe false _.muted (existing >>= (sel.destinations !! _))
+      dest = { target: line.target, range: Nothing, bank, retrig, muted }
   pure case existing of
     Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
     Nothing -> sel { destinations = snoc sel.destinations dest }
@@ -262,12 +264,13 @@ unquote :: String -> String
 unquote s = fromMaybe s (Str.stripPrefix (Str.Pattern "\"") s >>= Str.stripSuffix (Str.Pattern "\""))
 
 -- | Each retrig pattern in a rack, with the FH-2 output its bank's slot 1 is
--- | on (Architeuthis plays them; slot k resets output `base + k - 1`).
+-- | on (Architeuthis plays them; slot k resets output `base + k - 1`). A muted
+-- | bank's pattern is left out, so it stops with the mute.
 retrigsOf :: String -> Array { base :: Int, pattern :: String }
 retrigsOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
   where
   one d = case d.bank, d.retrig, M.retrigBase d.target of
-    M.GLfo _, Just pattern, Just base -> Just { base, pattern }
+    M.GLfo _, Just pattern, Just base | not d.muted -> Just { base, pattern }
     _, _, _ -> Nothing
 
 -- | What the rig does with a `selene $` line (Architeuthis's Handler): the
@@ -295,7 +298,7 @@ rigCommand src rack = case words src of
     let
       sel = Rack.parseRack rack
     dest <- note (t <> " is already free") (Array.find (\d -> d.target == target) sel.destinations)
-    let sent = Wire.destinationEnvelope (dest { bank = Rack.silence dest.bank })
+    let sent = Wire.destinationEnvelope (dest { muted = true })
     pure
       { rack: Rack.printRack (sel { destinations = filter (\d -> d.target /= target) sel.destinations })
       , line: "off " <> t
@@ -304,6 +307,27 @@ rigCommand src rack = case words src of
       , json: maybe "" _.json sent
       , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
       , note: ""
+      }
+  -- `mute <bank>` / `unmute <bank>`: the bank stays as it is and its jacks go
+  -- silent, or play it again
+  [ verb, t ] | verb == "mute" || verb == "unmute" -> do
+    target <- Rack.bankOf t
+    let
+      sel = Rack.parseRack rack
+      muted = verb == "mute"
+    i <- note (t <> " has nothing on it to " <> verb) (findIndex (\d -> d.target == target) sel.destinations)
+    dest <- note (t <> " went missing") (sel.destinations !! i)
+    let
+      dest' = dest { muted = muted }
+      sent = Wire.destinationEnvelope dest'
+    pure
+      { rack: Rack.printRack (sel { destinations = fromMaybe sel.destinations (updateAt i dest' sel.destinations) })
+      , line: verb <> " " <> t
+      , socket: maybe "" _.socket sent
+      , bank: maybe "" _.bank sent
+      , json: maybe "" _.json sent
+      , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
+      , note: if muted then "" else rateNote dest'
       }
   _ -> rigLine' src rack
 
@@ -320,7 +344,7 @@ rigLine' src rack = do
     , bank: maybe "" _.bank sent
     , json: maybe "" _.json sent
     , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
-    , note: rateNote dest
+    , note: if dest.muted then "muted: the jacks stay silent until unmute " <> M.targetWire dest.target else rateNote dest
     }
 
 -- | What an FH-2 LFO bank's rates will really be, when some clamp: said once
