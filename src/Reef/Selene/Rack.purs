@@ -246,7 +246,7 @@ kindOf = case _ of
 
 parseTarget :: String -> M.Target
 parseTarget tok =
-  fromMaybe (M.Virtual tok) (afterInt "es9gt" M.ES9Gt <|> afterInt "es98cv" M.ES9Cv <|> afterInt "fh2_" M.FH2 <|> afterInt "midi" M.Midi <|> exact)
+  fromMaybe (M.Virtual tok) (afterInt "es9gt" M.ES9Gt <|> afterInt "es98cv" M.ES9Cv <|> afterInt "fh2_" M.FH2 <|> afterInt "fh2cv" M.FH2Cv <|> afterInt "midi" M.Midi <|> exact)
   where
   exact = case tok of
     "es9main" -> Just M.ES9Main

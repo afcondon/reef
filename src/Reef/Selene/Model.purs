@@ -226,7 +226,8 @@ data Target
   = ES9Main          -- ES-9 buses 8–15 (panel jacks 1–8)
   | ES9Gt Int        -- ES-5 gate expander block
   | ES9Cv Int        -- ESX-8CV expander block
-  | FH2 Int          -- FH-2 + FHX-8 expander bank
+  | FH2 Int          -- the FH-2's own eight (0), then each FHX-8GT (1..)
+  | FH2Cv Int        -- FHX-8CV expander, by expansion index (0 = expansion 1)
   | Midi Int         -- a MIDI channel, 1..16
   | Virtual String   -- no hardware claim; live-control bus prefix
 
@@ -234,7 +235,7 @@ derive instance Eq Target
 
 -- | The hardware a group of eight is (AC's rack, as Triggerfish.Rig has it):
 -- | the ES-9's own jacks, the ES-5 then ESX-8GTs, ESX-8CVs, the FH-2's own
--- | eight then FHX-8GTs. A second of a kind is numbered.
+-- | eight then FHX-8GTs, FHX-8CVs. A second of a kind is numbered.
 targetLabel :: Target -> String
 targetLabel = case _ of
   ES9Main -> "ES-9"
@@ -243,6 +244,7 @@ targetLabel = case _ of
   ES9Cv n -> "ESX-8CV" <> numbered (n + 1)
   FH2 0 -> "FH-2"
   FH2 n -> "FHX-8GT" <> numbered n
+  FH2Cv n -> "FHX-8CV" <> numbered (n + 1)
   Midi n -> "MIDI · CH " <> show n
   Virtual s -> "VIRTUAL · " <> s
   where
@@ -254,6 +256,7 @@ targetWire = case _ of
   ES9Gt n -> "es9gt" <> show n
   ES9Cv n -> "es98cv" <> show n
   FH2 n -> "fh2_" <> show n
+  FH2Cv n -> "fh2cv" <> show n
   Midi n -> "midi" <> show n
   Virtual s -> "virtual:" <> s
 
@@ -261,7 +264,7 @@ targetWire = case _ of
 -- | A modest set for now — gate-likes near gate-likes, then MIDI, then virtual.
 targetCycle :: Array Target
 targetCycle =
-  [ ES9Main, ES9Gt 0, ES9Gt 1, ES9Cv 0, FH2 0, Midi 1, Midi 2, Virtual "bus" ]
+  [ ES9Main, ES9Gt 0, ES9Gt 1, ES9Cv 0, FH2 0, FH2Cv 0, Midi 1, Midi 2, Virtual "bus" ]
 
 cycleTarget :: Target -> Target
 cycleTarget t =

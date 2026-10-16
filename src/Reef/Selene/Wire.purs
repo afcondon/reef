@@ -29,12 +29,11 @@ type SeleneApply = { socket :: String, bank :: String, json :: String }
 -- | Target → (daemon socket, bank token), or Nothing when the target isn't a
 -- | modular CV/gate bank (Midi / Virtual are out of scope for #142).
 -- |
--- | ES-9 targets map cleanly (the model distinguishes gate/cv expander blocks).
--- | FH-2's `Target` is a bare index with no gate/cv distinction, so it maps to the
--- | FH-2 `main` bank for now; per-expander FH-2 addressing (cv0-6 / gt0-7) needs
--- | the `Target` model to grow FH-2 gate/cv constructors — deferred (FH-2 isn't in
--- | the default rack). The es9-daemon supports main / cv0 / gt0 today; other bank
--- | indices surface as an ERR in the reply, which is the intended feedback.
+-- | Both devices name their banks the same way: `main`, then `gtN` for gate
+-- | expanders and `cvN` for CV expanders, N counted from 0. The FH-2's `FH2 n`
+-- | is its own eight (0) then each FHX-8GT; `FH2Cv n` is FHX-8CV expansion
+-- | n + 1. A bank the daemon does not have surfaces as an ERR in the reply,
+-- | which is the intended feedback.
 targetSocketBank :: M.Target -> Maybe { socket :: String, bank :: String }
 targetSocketBank = case _ of
   M.ES9Main -> Just { socket: "es9", bank: "main" }
@@ -44,6 +43,8 @@ targetSocketBank = case _ of
   -- FHX-8GT, gates (Triggerfish.Rig's assumption, spelt out there)
   M.FH2 0 -> Just { socket: "fh2", bank: "main" }
   M.FH2 n -> Just { socket: "fh2", bank: "gt" <> show (n - 1) }
+  -- an FHX-8CV, by its expansion index: the FH-2 daemon's cv0..cv6
+  M.FH2Cv n -> Just { socket: "fh2", bank: "cv" <> show n }
   M.Midi _ -> Nothing
   M.Virtual _ -> Nothing
 

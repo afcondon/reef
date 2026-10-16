@@ -2104,6 +2104,8 @@ rack round-trip true
   lfo es9main # rate 2 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875"
 > euclid fh2_1 # hits 3
   euclid fh2_1 # hits 3 # steps "8 8 8 8 16 16 16 16"
+> lfo fh2cv0 # tri 1
+  lfo fh2cv0 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # tri 1
 == refusals
 squiggle es9main # rate 1 | refused: not a kind of polysignal or a block: squiggle (lfo, euclid, clock, note, env; or a block: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, chord)
 lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
@@ -2192,7 +2194,17 @@ euclid fh2_1
   3 16 @4   -- 5
   3 16 @4   -- 6
   3 16 @4   -- 7
-  3 16 @4   -- 8"""
+  3 16 @4   -- 8
+
+lfo fh2cv0
+  0.5 @0 sin 0.8 tri 1   -- 1
+  0.5 @0.125 sin 0.8 tri 1   -- 2
+  0.5 @0.25 sin 0.8 tri 1   -- 3
+  0.5 @0.375 sin 0.8 tri 1   -- 4
+  0.5 @0.5 sin 0.8 tri 1   -- 5
+  0.5 @0.625 sin 0.8 tri 1   -- 6
+  0.5 @0.75 sin 0.8 tri 1   -- 7
+  0.5 @0.875 sin 0.8 tri 1   -- 8"""
 
 -- | The frozen golden for `voicingRun` (conformance/voicing-golden.txt).
 voicingGolden :: String

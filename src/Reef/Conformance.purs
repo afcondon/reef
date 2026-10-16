@@ -2110,8 +2110,9 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     -- `# fresh`: the bank starts fresh, then the rest (a dropped module)
     , "lfo es9main # tri 0.4"
     , "lfo es9main # fresh # rate 2"
-    -- the FH-2's FHX-8GT is its own bank
+    -- the FH-2's FHX-8GT is its own bank, and so is an FHX-8CV
     , "euclid fh2_1 # hits 3"
+    , "lfo fh2cv0 # tri 1"
     ]
   step acc src = case SL.parseLine src >>= \l -> SL.applyLine l acc.sel <#> \sel -> { l, sel } of
     Left e -> acc { out = acc.out <> [ "> " <> src, "  refused: " <> e ] }
