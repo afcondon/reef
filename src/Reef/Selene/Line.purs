@@ -33,6 +33,7 @@ module Reef.Selene.Line
   , accepts
   , refusal
   , moduleText
+  , retrigsOf
   ) where
 
 import Prelude
@@ -104,12 +105,25 @@ applyLine line sel = do
   -- `# fresh` starts the bank fresh first: a module dropped on a bank
   -- replaces what was there, rather than changing only what it names
   let fresh = Array.any (\t -> t.param == "fresh") line.terms
-      named = filter (\t -> t.param /= "fresh") line.terms
+      named = filter (\t -> t.param /= "fresh" && t.param /= "retrig") line.terms
+      -- `# retrig "<pattern>"` sets the bank's reset pattern, `# retrig off`
+      -- clears it; the last one named wins
+      retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
   { start, terms } <- case line.block >>= Block.blockNamed of
     Just b -> (\x -> { start: x.bank, terms: x.rest }) <$> Block.expand b named
     Nothing -> pure { start: if fresh then M.freshBank kindOfLine else current, terms: named }
   bank <- foldM applyTerm start terms
-  let dest = { target: line.target, range: Nothing, bank }
+  retrig <- case retrigSet of
+    Just v | v == "off" || v == "~" || v == "" -> Right Nothing
+    Just v -> case M.retrigBase line.target of
+      Just _ | kindOfLine == M.KLfo -> Right (Just (unquote v))
+      Just _ -> Left ("retrig resets LFOs, and this line makes " <> M.kindLabel kindOfLine)
+      Nothing -> Left ("retrig needs an FH-2 LFO bank (fh2_0 or an FHX-8CV, fh2cvN), not " <> M.targetWire line.target)
+    -- unnamed: kept, unless the bank starts fresh or changes kind
+    Nothing -> Right case existing >>= (sel.destinations !! _) of
+      Just d | M.bankKind d.bank == kindOfLine && not fresh -> d.retrig
+      _ -> Nothing
+  let dest = { target: line.target, range: Nothing, bank, retrig }
   pure case existing of
     Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
     Nothing -> sel { destinations = snoc sel.destinations dest }
@@ -184,13 +198,14 @@ paramsOf = case _ of
 -- | whole of it.
 printLine :: M.Destination -> String
 printLine d =
-  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.targetWire d.target ] <> terms)
+  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.targetWire d.target ] <> terms <> retrigTerm)
   where
   fresh = M.freshBank (M.bankKind d.bank)
   terms = Array.catMaybes (map term (paramsOf (M.bankKind d.bank)))
   term p =
     let vs = valuesOf p d.bank
     in if vs == valuesOf p fresh && not (Array.elem p (mainOf (M.bankKind d.bank))) then Nothing else Just (p <> " " <> value vs)
+  retrigTerm = maybe [] (\p -> [ "retrig \"" <> p <> "\"" ]) d.retrig
   value vs = case head vs of
     Just v | all (_ == v) vs -> v
     _ -> "\"" <> joinWith " " vs <> "\""
@@ -242,6 +257,18 @@ valuesOf p = case _ of
 
 words :: String -> Array String
 words = filter (_ /= "") <<< Str.split (Str.Pattern " ") <<< trim
+
+unquote :: String -> String
+unquote s = fromMaybe s (Str.stripPrefix (Str.Pattern "\"") s >>= Str.stripSuffix (Str.Pattern "\""))
+
+-- | Each retrig pattern in a rack, with the FH-2 output its bank's slot 1 is
+-- | on (Architeuthis plays them; slot k resets output `base + k - 1`).
+retrigsOf :: String -> Array { base :: Int, pattern :: String }
+retrigsOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
+  where
+  one d = case d.bank, d.retrig, M.retrigBase d.target of
+    M.GLfo _, Just pattern, Just base -> Just { base, pattern }
+    _, _, _ -> Nothing
 
 -- | What the rig does with a `selene $` line (Architeuthis's Handler): the
 -- | rack it keeps on the stage (`selene/rack`) with the line applied, and the

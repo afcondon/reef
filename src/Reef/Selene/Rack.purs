@@ -73,6 +73,7 @@ printDest d =
   -- Printed only when the user pinned one, so an unpinned block round-trips
   -- byte-identically and a plain header stays a plain header.
   rangeTok = maybe "" (\r -> " " <> M.rangeToWire r) d.range
+    <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
   slotLine i row = "  " <> row <> "   -- " <> show (i + 1)
   bankSlots = case _ of
     M.GLfo slots -> map lfoLine slots
@@ -158,6 +159,7 @@ type PState =
       { target :: M.Target
       , kind :: M.GenKind
       , range :: Maybe M.OutputRange
+      , retrig :: Maybe String
       , rows :: Array (Maybe String)
       }
   }
@@ -175,7 +177,7 @@ parseRack doc =
     in
       if t == "" then closeBlock st
       else case headerOf t of
-        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, kind: hdr.kind, range: hdr.range, rows: [] } }
+        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, rows: [] } }
         Nothing -> case st.open of
           Just blk -> st { open = Just (addLine blk t) }
           Nothing -> st   -- a stray line outside any block: ignore
@@ -202,7 +204,7 @@ closeBlock st = case st.open of
   Nothing -> st
   Just blk ->
     let bank = buildBank blk.kind (fitTo M.slotCount blk.rows)
-    in { dests: snoc st.dests { target: blk.target, range: blk.range, bank }, open: Nothing }
+    in { dests: snoc st.dests { target: blk.target, range: blk.range, bank, retrig: blk.retrig }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are muted → silent).
 fitTo :: Int -> Array (Maybe String) -> Array (Maybe String)
@@ -225,15 +227,24 @@ buildBank kind rows = case kind of
 -- | third token is NOT silently dropped — the whole line stops being a header, so
 -- | a typo shows up as a missing block rather than as a range that quietly isn't
 -- | the one you typed.
-headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, range :: Maybe M.OutputRange }
-headerOf t = case words t of
+-- | A `retrig "<pattern>"` may close the header (the pattern is quoted and may
+-- | hold spaces, so it is taken off before the words are counted).
+headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, range :: Maybe M.OutputRange, retrig :: Maybe String }
+headerOf t0 = case words t of
   [] -> Nothing
   toks -> case toks !! 0 >>= kindOf of
     Just k -> case toks of
-      [ _, tgt ] -> Just { kind: k, target: parseTarget tgt, range: Nothing }
-      [ _, tgt, rng ] -> map (\r -> { kind: k, target: parseTarget tgt, range: Just r }) (M.rangeOfWire rng)
+      [ _, tgt ] -> Just { kind: k, target: parseTarget tgt, range: Nothing, retrig }
+      [ _, tgt, rng ] -> map (\r -> { kind: k, target: parseTarget tgt, range: Just r, retrig }) (M.rangeOfWire rng)
       _ -> Nothing
     Nothing -> Nothing
+  where
+  split = case Str.indexOf (Str.Pattern " retrig \"") t0 of
+    Just i -> { t: Str.take i t0, retrig: unquote (Str.trim (Str.drop (i + 8) t0)) }
+    Nothing -> { t: t0, retrig: Nothing }
+  t = split.t
+  retrig = split.retrig
+  unquote s = Str.stripPrefix (Str.Pattern "\"") s >>= Str.stripSuffix (Str.Pattern "\"")
 
 kindOf :: String -> Maybe M.GenKind
 kindOf = case _ of

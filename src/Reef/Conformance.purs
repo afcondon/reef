@@ -114,7 +114,7 @@ import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), 
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Selene.Model (defaultSelene) as SM
 import Reef.Selene.Rack (parseRack, printRack) as SR
-import Reef.Selene.Line (applyLine, parseLine, printLine, rigLine) as SL
+import Reef.Selene.Line (applyLine, parseLine, printLine, retrigsOf, rigLine) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -2083,7 +2083,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2113,6 +2113,11 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     -- the FH-2's FHX-8GT is its own bank, and so is an FHX-8CV
     , "euclid fh2_1 # hits 3"
     , "lfo fh2cv0 # tri 1"
+    -- a reset pattern rides on an FH-2 LFO bank, kept until changed or cleared
+    , "lfo fh2cv1 # retrig \"all ~ 3 ~\""
+    , "lfo fh2cv1 # retrig off"
+    , "lfo fh2cv0 # retrig \"1 ~ [3 5] ~\""
+    , "lfo fh2cv0 # rate 2"
     ]
   step acc src = case SL.parseLine src >>= \l -> SL.applyLine l acc.sel <#> \sel -> { l, sel } of
     Left e -> acc { out = acc.out <> [ "> " <> src, "  refused: " <> e ] }
@@ -2132,12 +2137,21 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     -- a typo is not a bank: only `virtual:` makes one
     , "divider fh2gt0"
     , "lfo virtual:bus # rate 1"
+    -- retrig: only an FH-2 LFO bank resets
+    , "lfo es9main # retrig \"1\""
+    , "euclid fh2_1 # retrig \"1\""
     ]
   -- `off <bank>` on the rig: the bank leaves the rack, its daemon sent silence
   offs = [ "== off" ] <> (foldl off { rack: SR.printRack final, out: [] } [ "off es9gt1", "off es9gt1", "off fh2_1", "off fh2gt0" ]).out
   off acc src = case SL.rigLine src acc.rack of
     Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
     Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }
+  -- the rack's reset patterns, as the rig reads them, and the rack (header and
+  -- all) printed, read back and printed again
+  retrigs = [ "== retrig" ]
+    <> map (\r -> "base " <> show r.base <> " | " <> r.pattern) (SL.retrigsOf (SR.printRack final))
+    <> [ "rack with retrig round-trips: " <> show (SR.printRack (SR.parseRack (SR.printRack withRetrig)) == SR.printRack withRetrig) ]
+  withRetrig = final { destinations = filter (\d -> d.retrig /= Nothing) final.destinations }
   -- `reset <bank> ["slots"]`: an FH-2 LFO bank restarted in phase; the rack unchanged
   resets = [ "== reset" ] <> map reset
     [ "reset fh2cv0"
@@ -2146,7 +2160,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     , "reset fh2cv0 3 6"
     , "reset es9main"
     , "reset fh2_1"
-    , "reset fh2cv1"
+    , "reset fh2cv2"
     ]
   reset src = src <> " | " <> case SL.rigLine src (SR.printRack final) of
     Left e -> "refused: " <> e

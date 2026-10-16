@@ -2106,6 +2106,14 @@ rack round-trip true
   euclid fh2_1 # hits 3 # steps "8 8 8 8 16 16 16 16"
 > lfo fh2cv0 # tri 1
   lfo fh2cv0 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # tri 1
+> lfo fh2cv1 # retrig "all ~ 3 ~"
+  lfo fh2cv1 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # retrig "all ~ 3 ~"
+> lfo fh2cv1 # retrig off
+  lfo fh2cv1 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875"
+> lfo fh2cv0 # retrig "1 ~ [3 5] ~"
+  lfo fh2cv0 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # tri 1 # retrig "1 ~ [3 5] ~"
+> lfo fh2cv0 # rate 2
+  lfo fh2cv0 # rate 2 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # tri 1 # retrig "1 ~ [3 5] ~"
 == refusals
 squiggle es9main # rate 1 | refused: not a kind of polysignal or a block: squiggle (lfo, euclid, clock, note, env; or a block: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, chord)
 lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
@@ -2116,6 +2124,8 @@ chord es98cv0 # quality fancy | refused: chord: no quality fancy (maj min maj7 m
 divider es9gt0 # by "2 x" | refused: divider: by wants whole numbers, not x
 divider fh2gt0 | refused: no bank fh2gt0: es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>
 lfo virtual:bus # rate 1 | accepted
+lfo es9main # retrig "1" | refused: retrig needs an FH-2 LFO bank (fh2_0 or an FHX-8CV, fh2cvN), not es9main
+euclid fh2_1 # retrig "1" | refused: retrig needs an FH-2 LFO bank (fh2_0 or an FHX-8CV, fh2cvN), not fh2_1
 == off
 off es9gt1 | es9 gt1 | still in the rack: false
 off es9gt1 | refused: es9gt1 is already free
@@ -2128,7 +2138,10 @@ reset fh2cv0 "9" | refused: a slot is 1 to 8, not 9
 reset fh2cv0 3 6 | refused: slots are a quoted list, as in reset fh2cv0 "1 3": 3 6
 reset es9main | refused: only the FH-2's LFOs can be reset, and es9main is an ES-9 bank
 reset fh2_1 | refused: reset restarts a bank's LFOs, and fh2_1 holds euclid
-reset fh2cv1 | refused: fh2cv1 has nothing on it to reset
+reset fh2cv2 | refused: fh2cv2 has nothing on it to reset
+== retrig
+base 8 | 1 ~ [3 5] ~
+rack with retrig round-trips: true
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
@@ -2204,15 +2217,25 @@ euclid fh2_1
   3 16 @4   -- 7
   3 16 @4   -- 8
 
-lfo fh2cv0
-  0.5 @0 sin 0.8 tri 1   -- 1
-  0.5 @0.125 sin 0.8 tri 1   -- 2
-  0.5 @0.25 sin 0.8 tri 1   -- 3
-  0.5 @0.375 sin 0.8 tri 1   -- 4
-  0.5 @0.5 sin 0.8 tri 1   -- 5
-  0.5 @0.625 sin 0.8 tri 1   -- 6
-  0.5 @0.75 sin 0.8 tri 1   -- 7
-  0.5 @0.875 sin 0.8 tri 1   -- 8"""
+lfo fh2cv0 retrig "1 ~ [3 5] ~"
+  2 @0 sin 0.8 tri 1   -- 1
+  2 @0.125 sin 0.8 tri 1   -- 2
+  2 @0.25 sin 0.8 tri 1   -- 3
+  2 @0.375 sin 0.8 tri 1   -- 4
+  2 @0.5 sin 0.8 tri 1   -- 5
+  2 @0.625 sin 0.8 tri 1   -- 6
+  2 @0.75 sin 0.8 tri 1   -- 7
+  2 @0.875 sin 0.8 tri 1   -- 8
+
+lfo fh2cv1
+  0.5 @0 sin 0.8   -- 1
+  0.5 @0.125 sin 0.8   -- 2
+  0.5 @0.25 sin 0.8   -- 3
+  0.5 @0.375 sin 0.8   -- 4
+  0.5 @0.5 sin 0.8   -- 5
+  0.5 @0.625 sin 0.8   -- 6
+  0.5 @0.75 sin 0.8   -- 7
+  0.5 @0.875 sin 0.8   -- 8"""
 
 -- | The frozen golden for `voicingRun` (conformance/voicing-golden.txt).
 voicingGolden :: String

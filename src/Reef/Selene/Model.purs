@@ -24,6 +24,7 @@ module Reef.Selene.Model
   , Target(..)
   , targetLabel
   , targetWire
+  , retrigBase
   , cycleTarget
   , defaultTargetFor
   , addDestination
@@ -260,6 +261,15 @@ targetWire = case _ of
   Midi n -> "midi" <> show n
   Virtual s -> "virtual:" <> s
 
+-- | The FH-2 output (0-based) a bank's slot 1 sits on, when its LFOs can be
+-- | reset: the FH-2's own eight and each FHX-8CV (an FHX-8GT has no LFOs, and
+-- | the ES-9's daemon has no reset). Slot k resets output base + k - 1.
+retrigBase :: Target -> Maybe Int
+retrigBase = case _ of
+  FH2 0 -> Just 0
+  FH2Cv n -> Just (8 + 8 * n)
+  _ -> Nothing
+
 -- | The cycle of targets the panel walks when you click a destination's chip.
 -- | A modest set for now — gate-likes near gate-likes, then MIDI, then virtual.
 targetCycle :: Array Target
@@ -403,10 +413,16 @@ clockBaseBeats = case _ of
 -- |
 -- | `Just r` is the user pinning it deliberately — e.g. `env fh2_0 unipolar8v`
 -- | for more envelope headroom than the +5V default.
+-- |
+-- | `retrig` is a Tidal mini-notation pattern of slot numbers (1..8, or `all`),
+-- | kept as text: the rig plays it as LFO resets on the beat (an FH-2 LFO bank
+-- | only, whose outputs reset on a note; `FH2.LfoReset`). reef never parses it,
+-- | which keeps Littorina out of reef.
 type Destination =
   { target :: Target
   , range :: Maybe OutputRange
   , bank :: GenBank
+  , retrig :: Maybe String
   }
 
 -- | The whole rack — an ordered list of destinations.
@@ -417,10 +433,10 @@ type Selene = { destinations :: Array Destination }
 defaultSelene :: Selene
 defaultSelene =
   { destinations:
-      [ { target: ES9Main, range: Nothing, bank: freshBank KLfo }
-      , { target: ES9Gt 0, range: Nothing, bank: freshBank KEuclid }
-      , { target: ES9Gt 1, range: Nothing, bank: freshBank KClock }
-      , { target: Midi 1, range: Nothing, bank: freshBank KNote }
+      [ { target: ES9Main, range: Nothing, bank: freshBank KLfo, retrig: Nothing }
+      , { target: ES9Gt 0, range: Nothing, bank: freshBank KEuclid, retrig: Nothing }
+      , { target: ES9Gt 1, range: Nothing, bank: freshBank KClock, retrig: Nothing }
+      , { target: Midi 1, range: Nothing, bank: freshBank KNote, retrig: Nothing }
       ]
   }
 
@@ -471,7 +487,7 @@ freshBank = case _ of
 
 addDestination :: GenKind -> Selene -> Selene
 addDestination kind s =
-  s { destinations = snoc s.destinations { target: defaultTargetFor kind, range: Nothing, bank: freshBank kind } }
+  s { destinations = snoc s.destinations { target: defaultTargetFor kind, range: Nothing, bank: freshBank kind, retrig: Nothing } }
 
 removeDestination :: Int -> Selene -> Selene
 removeDestination i s = s { destinations = fromMaybe s.destinations (deleteAt i s.destinations) }
