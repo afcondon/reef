@@ -276,9 +276,10 @@ retrigsOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
 -- | bank is not on the modular (a MIDI or virtual target): kept, not sent.
 -- | What a line does on the rig: the rack after it, the line as written back,
 -- | the daemon (socket) and bank it reaches, the apply envelope (`json`, empty
--- | when nothing is applied) and the whole `command` for the daemon (empty
--- | when nothing is sent).
-type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String, command :: String }
+-- | when nothing is applied), the whole `command` for the daemon (empty
+-- | when nothing is sent), and a `note` for the reply when the hardware will
+-- | not do quite what the line says (empty when it will).
+type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String, command :: String, note :: String }
 
 rigLine :: String -> String -> Either String RigLine
 rigLine src rack = case Str.stripPrefix (Str.Pattern "reset ") (trim src) of
@@ -302,6 +303,7 @@ rigCommand src rack = case words src of
       , bank: maybe "" _.bank sent
       , json: maybe "" _.json sent
       , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
+      , note: ""
       }
   _ -> rigLine' src rack
 
@@ -318,7 +320,20 @@ rigLine' src rack = do
     , bank: maybe "" _.bank sent
     , json: maybe "" _.json sent
     , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
+    , note: rateNote dest
     }
+
+-- | What an FH-2 LFO bank's rates will really be, when some clamp: said once
+-- | per distinct rate, as "0.05 Hz runs at 0.1 Hz".
+rateNote :: M.Destination -> String
+rateNote d = case d.bank of
+  M.GLfo slots ->
+    let
+      clamps = Array.nub (Array.mapMaybe (\sl -> map (\c -> Rack.fmt sl.rate <> " Hz runs at " <> Rack.fmt c <> " Hz") (M.lfoRateOn d.target sl.rate)) slots)
+    in
+      if Array.null clamps then ""
+      else joinWith ", " clamps <> " (the FH-2's LFOs span 0.1 to 10.36 Hz)"
+  _ -> ""
 
 -- | `reset <bank>` or `reset <bank> "3 6"`: restart the bank's LFOs, or some
 -- | of its slots, together, so each sits at exactly its phase offset. Only an
@@ -348,6 +363,7 @@ resetOn rest rack = do
     , bank: wired.bank
     , json: ""
     , command: "reset-lfos " <> wired.bank <> commaed
+    , note: ""
     }
   where
   slotsOf s

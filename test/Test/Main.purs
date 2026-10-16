@@ -2142,6 +2142,12 @@ reset fh2cv2 | refused: fh2cv2 has nothing on it to reset
 == retrig
 base 8 | 1 ~ [3 5] ~
 rack with retrig round-trips: true
+== rate notes
+lfo fh2cv0 # rate 0.05 | 0.05 Hz runs at 0.1 Hz (the FH-2's LFOs span 0.1 to 10.36 Hz)
+lfo fh2cv0 # rate 20 | 20 Hz runs at 10.36 Hz (the FH-2's LFOs span 0.1 to 10.36 Hz)
+drift fh2cv1 | 0.05 Hz runs at 0.1 Hz, 0.069 Hz runs at 0.1 Hz, 0.086 Hz runs at 0.1 Hz (the FH-2's LFOs span 0.1 to 10.36 Hz)
+lfo es9main # rate 0.05 | (no note)
+lfo fh2cv0 # rate 2 | (no note)
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.

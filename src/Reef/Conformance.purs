@@ -2083,7 +2083,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2146,6 +2146,12 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
   off acc src = case SL.rigLine src acc.rack of
     Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
     Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }
+  -- what the FH-2 will really do with an LFO rate it cannot reach
+  rateNotes = [ "== rate notes" ] <> map rateNote
+    [ "lfo fh2cv0 # rate 0.05", "lfo fh2cv0 # rate 20", "drift fh2cv1", "lfo es9main # rate 0.05", "lfo fh2cv0 # rate 2" ]
+  rateNote src = src <> " | " <> case SL.rigLine src (SR.printRack final) of
+    Left e -> "refused: " <> e
+    Right r -> if r.note == "" then "(no note)" else r.note
   -- the rack's reset patterns, as the rig reads them, and the rack (header and
   -- all) printed, read back and printed again
   retrigs = [ "== retrig" ]

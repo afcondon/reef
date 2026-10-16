@@ -25,6 +25,7 @@ module Reef.Selene.Model
   , targetLabel
   , targetWire
   , retrigBase
+  , lfoRateOn
   , cycleTarget
   , defaultTargetFor
   , addDestination
@@ -269,6 +270,21 @@ retrigBase = case _ of
   FH2 0 -> Just 0
   FH2Cv n -> Just (8 + 8 * n)
   _ -> Nothing
+
+-- | The rate an LFO slot really runs at on a target, when that is not the
+-- | rate asked for. The FH-2's free-running LFOs span 0.1 Hz to 10.36 Hz
+-- | (measured 2026-10-16; fh2-config `PolyLfo.hzAtSpeed`), so on an FH-2 bank
+-- | a slower or faster rate clamps to that end. Nothing elsewhere (the ES-9's
+-- | LFOs are computed, and go as slow as asked), and nothing for a rate of
+-- | zero or less, a slot that is a level rather than a wave.
+lfoRateOn :: Target -> Number -> Maybe Number
+lfoRateOn target hz = case target of
+  FH2 _ -> fh2
+  FH2Cv _ -> fh2
+  _ -> Nothing
+  where
+  clamped = max 0.1 (min 10.36 hz)
+  fh2 = if hz > 0.0 && clamped /= hz then Just clamped else Nothing
 
 -- | The cycle of targets the panel walks when you click a destination's chip.
 -- | A modest set for now — gate-likes near gate-likes, then MIDI, then virtual.
