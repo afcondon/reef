@@ -9,9 +9,10 @@
 -- |                            virtual:bus).
 -- |   <slot>                   one line per slot, following the header; the
 -- |                            block ends at the next blank line.
--- |   -- <slot>                a muted slot (that output goes silent); the
+-- |   -- <slot>                a muted slot: that output goes silent and keeps
+-- |                            its settings, so unmuting brings it back; the
 -- |                            position still counts, so mutes don't shift the
--- |                            bank. A blank line ends a block, so comments in
+-- |                            bank. A bare `--` is a silent slot. A blank line ends a block, so comments in
 -- |                            the gaps between blocks are free notes.
 -- |
 -- | Slot syntax per kind:
@@ -37,6 +38,7 @@ module Reef.Selene.Rack
   , fmt
   , silence
   , silenced
+  , slotsSilenced
   ) where
 
 import Prelude
@@ -45,9 +47,10 @@ import Data.Array as Array
 import Data.Array (drop, filter, foldl, mapWithIndex, range, snoc, take, (!!))
 import Data.Either (Either(..))
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Number as Number
 import Data.String as Str
+import Data.String.CodeUnits (charAt) as Str
 import Data.String.Common (joinWith, toLower)
 import Reef.Selene.Model as M
 import Reef.Conspicillum.Decimal (trimmed)
@@ -77,7 +80,7 @@ printDest d =
   rangeTok = maybe "" (\r -> " " <> M.rangeToWire r) d.range
     <> (if d.muted then " muted" else "")
     <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
-  slotLine i row = "  " <> row <> "   -- " <> show (i + 1)
+  slotLine i row = (if Array.elem i d.mutedSlots then "  -- " else "  ") <> row <> "   -- " <> show (i + 1)
   bankSlots = case _ of
     M.GLfo slots -> map lfoLine slots
     M.GEuclid slots -> map euclidLine slots
@@ -164,7 +167,7 @@ type PState =
       , range :: Maybe M.OutputRange
       , retrig :: Maybe String
       , muted :: Boolean
-      , rows :: Array (Maybe String)
+      , rows :: Array { text :: Maybe String, muted :: Boolean }
       }
   }
 
@@ -186,16 +189,24 @@ parseRack doc =
           Just blk -> st { open = Just (addLine blk t) }
           Nothing -> st   -- a stray line outside any block: ignore
 
-  -- A line inside an open block: every line is a slot row (muted → Nothing).
+  -- A line inside an open block: every line is a slot row.
   addLine blk line = blk { rows = snoc blk.rows (slotText line) }
 
--- A slot's text, or Nothing if the line is muted (leading `--`). Trailing
--- `-- n` tags are stripped either way.
-slotText :: String -> Maybe String
-slotText t =
-  if isMuted then Nothing else Just (stripTrailingComment t)
+-- A slot's text and whether it is muted (leading `--`), its settings kept.
+-- Trailing `-- n` tags are stripped either way; a bare `--` (no settings) is
+-- a silent slot, as it always was.
+slotText :: String -> { text :: Maybe String, muted :: Boolean }
+slotText t = case Str.stripPrefix (Str.Pattern "--") t of
+  Just rest ->
+    let body = stripTrailingComment (Str.trim rest)
+    in { text: if body == "" || not (startsSlot body) then Nothing else Just body, muted: true }
+  Nothing -> { text: Just (stripTrailingComment t), muted: false }
   where
-  isMuted = maybe false (const true) (Str.stripPrefix (Str.Pattern "--") t)
+  -- a muted slot starts as a slot does (a number, a note or clock name, or an
+  -- envelope's `a`); anything else after `--` is a note, not settings
+  startsSlot b = case Str.charAt 0 b of
+    Just c -> c >= '0' && c <= '9' || c >= 'A' && c <= 'G' || c == 'a'
+    Nothing -> false
 
 stripTrailingComment :: String -> String
 stripTrailingComment s = case Str.indexOf (Str.Pattern "--") s of
@@ -207,12 +218,14 @@ closeBlock :: PState -> PState
 closeBlock st = case st.open of
   Nothing -> st
   Just blk ->
-    let bank = buildBank blk.kind (fitTo M.slotCount blk.rows)
-    in { dests: snoc st.dests { target: blk.target, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted }, open: Nothing }
+    let rows = fitTo M.slotCount blk.rows
+        bank = buildBank blk.kind (map _.text rows)
+        mutedSlots = Array.catMaybes (mapWithIndex (\i r -> if r.muted && isJust r.text then Just i else Nothing) rows)
+    in { dests: snoc st.dests { target: blk.target, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots }, open: Nothing }
 
--- Pad/truncate the row list to n (missing positions are muted → silent).
-fitTo :: Int -> Array (Maybe String) -> Array (Maybe String)
-fitTo n rows = take n (rows <> map (const Nothing) (range 0 n))
+-- Pad/truncate the row list to n (missing positions are silent).
+fitTo :: Int -> Array { text :: Maybe String, muted :: Boolean } -> Array { text :: Maybe String, muted :: Boolean }
+fitTo n rows = take n (rows <> map (const { text: Nothing, muted: false }) (range 0 n))
 
 buildBank :: M.GenKind -> Array (Maybe String) -> M.GenBank
 buildBank kind rows = case kind of
@@ -318,6 +331,29 @@ silenced d = d { bank = silence d.bank, range = rangeFor d.bank }
     M.GEuclid _ -> Just M.Unipolar5V
     M.GClock _ -> Just M.Unipolar5V
     M.GNote _ -> d.range
+
+-- | A destination as it plays with its muted slots (`mutedSlots`) silent and
+-- | the rest as they are. An LFO slot's level is a position in its range, so on
+-- | a unipolar range a muted one sits at the bottom (level -1, 0 V), not at
+-- | level 0 (mid-range); on a bipolar range level 0 is 0 V.
+slotsSilenced :: M.Destination -> M.Destination
+slotsSilenced d
+  | Array.null d.mutedSlots = d
+  | otherwise = d { bank = quiet d.bank }
+  where
+  muted i = Array.elem i d.mutedSlots
+  over :: forall a. a -> Array a -> Array a
+  over silent = mapWithIndex (\i s -> if muted i then silent else s)
+  unipolar = case d.range of
+    Just M.Bipolar5V -> false
+    Just _ -> true
+    Nothing -> false
+  quiet = case _ of
+    M.GLfo s -> M.GLfo (over (silentLfo { level = if unipolar then -1.0 else 0.0 }) s)
+    M.GEuclid s -> M.GEuclid (over silentEuclid s)
+    M.GClock s -> M.GClock (over silentClock s)
+    M.GNote s -> M.GNote (over silentNote s)
+    M.GEnv s -> M.GEnv (over silentEnv s)
 
 silentLfo :: M.ModSlot
 silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0 }

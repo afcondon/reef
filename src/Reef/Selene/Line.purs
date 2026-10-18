@@ -124,9 +124,12 @@ applyLine line sel = do
     Nothing -> Right case existing >>= (sel.destinations !! _) of
       Just d | M.bankKind d.bank == kindOfLine && not fresh -> d.retrig
       _ -> Nothing
-  -- a mute is about the jacks, not the bank, so every line keeps it
-  let muted = maybe false _.muted (existing >>= (sel.destinations !! _))
-      dest = { target: line.target, range: Nothing, bank, retrig, muted }
+  -- a mute is about the jacks, not the bank, so every line keeps it, and
+  -- keeps each muted output too
+  let was = existing >>= (sel.destinations !! _)
+      muted = maybe false _.muted was
+      mutedSlots = maybe [] _.mutedSlots was
+      dest = { target: line.target, range: Nothing, bank, retrig, muted, mutedSlots }
   pure case existing of
     Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
     Nothing -> sel { destinations = snoc sel.destinations dest }

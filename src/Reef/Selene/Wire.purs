@@ -71,9 +71,10 @@ ownerOf sb = "selene:" <> sb.socket <> ":" <> sb.bank
 -- |
 -- | A muted destination sends its silent version (`Rack.silenced`): the jacks
 -- | go to 0 V and the bank itself is untouched, so unmuting sends it again.
+-- | Its muted slots (`mutedSlots`) go out silent in the same way.
 destinationEnvelope :: M.Destination -> Maybe SeleneApply
 destinationEnvelope d0 = do
-  let d = if d0.muted then Rack.silenced d0 else d0
+  let d = if d0.muted then Rack.silenced d0 else Rack.slotsSilenced d0
   sb <- targetSocketBank d.target
   let
     bank = sb.bank

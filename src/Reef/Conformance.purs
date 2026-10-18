@@ -70,7 +70,7 @@ module Reef.Conformance
 
 import Prelude
 
-import Data.Array (filter, find, length, null, range, snoc, mapWithIndex, take, (!!))
+import Data.Array (concatMap, filter, find, length, null, range, snoc, mapWithIndex, take, (!!))
 import Data.Either (Either(..), either)
 import Data.String as String
 import Data.String (Pattern(..), Replacement(..), replaceAll)
@@ -113,7 +113,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Selene.Model (defaultSelene) as SM
-import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced) as SR
+import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
@@ -2083,7 +2083,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2173,6 +2173,23 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
                           , "  headers: " <> intercalate " / " heads
                           , "  retrigs: " <> intercalate ", " retrigs'
                           , "  round-trips: " <> show (SR.printRack (SR.parseRack r.rack) == r.rack) ] }
+  -- one output muted: it keeps its settings in the text and goes out silent,
+  -- at 0 V on either range (level 0 on +-5V, level -1 on a unipolar one); a
+  -- bare `--` is a silent slot, as it always was
+  slotMutes = [ "== slot mutes" ] <> concatMap slotMute
+    [ "lfo fh2cv0\n  1 @0 sin 0.8   -- 1\n  -- 2 @0.25 tri 0.5   -- 2\n  3 @0 saw 1   -- 3"
+    , "lfo fh2cv0 unipolar5v\n  1 @0 sin 0.8   -- 1\n  -- 2 @0.25 tri 0.5   -- 2"
+    , "euclid fh2_1\n  3 8 @4   -- 1\n  -- 5 8 @4   -- 2\n  --"
+    ]
+  slotMute src =
+    let parsed = SR.parseRack src
+        printed = SR.printRack parsed
+        sent = SR.printRack { destinations: map (\d -> (SR.slotsSilenced d) { mutedSlots = [] }) parsed.destinations }
+        body t = filter (\l -> String.take 2 l == "  ") (String.split (String.Pattern "\n") t)
+    in [ "muted " <> intercalate "," (map (\d -> show d.mutedSlots) parsed.destinations)
+           <> " | round-trips " <> show (SR.printRack (SR.parseRack printed) == printed) ]
+         <> map ("  kept " <> _) (take 3 (body printed))
+         <> map ("  sent " <> _) (take 3 (body sent))
   -- what the FH-2 will really do with an LFO rate it cannot reach
   rateNotes = [ "== rate notes" ] <> map rateNote
     [ "lfo fh2cv0 # rate 0.05", "lfo fh2cv0 # rate 20", "drift fh2cv1", "lfo es9main # rate 0.05", "lfo fh2cv0 # rate 2" ]

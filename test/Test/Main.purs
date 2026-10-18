@@ -2171,6 +2171,28 @@ unmute es9gt0 | sends euclid es9gt0 /  4 5 @4   -- 1
   headers: lfo es9main / euclid es9gt0 / euclid es9gt1 / note midi1 / note es98cv0 / env fh2_0 / euclid fh2_1 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 8 1 ~ [3 5] ~
   round-trips: true
+== slot mutes
+muted [1] | round-trips true
+  kept   1 @0 sin 0.8   -- 1
+  kept   -- 2 @0.25 tri 0.5   -- 2
+  kept   3 @0 saw 1   -- 3
+  sent   1 @0 sin 0.8   -- 1
+  sent   0 @0   -- 2
+  sent   3 @0 saw 1   -- 3
+muted [1] | round-trips true
+  kept   1 @0 sin 0.8   -- 1
+  kept   -- 2 @0.25 tri 0.5   -- 2
+  kept   0 @0   -- 3
+  sent   1 @0 sin 0.8   -- 1
+  sent   0 @0 lvl -1   -- 2
+  sent   0 @0   -- 3
+muted [1] | round-trips true
+  kept   3 8 @4   -- 1
+  kept   -- 5 8 @4   -- 2
+  kept   0 8 @4   -- 3
+  sent   3 8 @4   -- 1
+  sent   0 8 @4   -- 2
+  sent   0 8 @4   -- 3
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
