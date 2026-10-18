@@ -86,8 +86,10 @@ destinationEnvelope d0 = do
     range = map M.rangeToWire d.range
     alias = ownerOf sb
     json = case d.bank of
+      -- `wave` is the editor's memory of a flat slot's shape; the daemon has
+      -- only the mix.
       M.GLfo slots ->
-        writeJSON { bank, family, alias, outputRange: range, slots }
+        writeJSON { bank, family, alias, outputRange: range, slots: map lfoWire slots }
       M.GEuclid slots ->
         writeJSON { bank, family, alias, outputRange: range, slots }
       M.GNote slots ->
@@ -100,6 +102,10 @@ destinationEnvelope d0 = do
         writeJSON { bank, family, alias, outputRange: range, slots: map clockWire slots }
   pure { socket: sb.socket, bank, json }
   where
+  lfoWire s =
+    { rate: s.rate, phase: s.phase, level: s.level
+    , sin: s.sin, sqr: s.sqr, tri: s.tri, saw: s.saw, rnd: s.rnd, nse: s.nse
+    }
   clockWire s =
     { base: M.clockBaseToWire s.base
     , multiplier: s.multiplier

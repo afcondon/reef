@@ -2083,7 +2083,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> flats <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2190,6 +2190,14 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
            <> " | round-trips " <> show (SR.printRack (SR.parseRack printed) == printed) ]
          <> map ("  kept " <> _) (take 3 (body printed))
          <> map ("  sent " <> _) (take 3 (body sent))
+  -- an LFO turned all the way down keeps its shape in the text (`sqr 0`), so
+  -- turning it back up gives the same wave; a flat sine prints as before
+  flats = [ "== flat slots" ] <> map flat
+    [ "lfo fh2cv0\n  1 @0 sqr 0   -- 1\n  2 @0.5 tri 0   -- 2\n  3 @0 sin 0   -- 3\n  4 @0 lvl 0.5 nse 0   -- 4" ]
+  flat src =
+    let printed = SR.printRack (SR.parseRack src)
+        body = filter (\l -> String.take 2 l == "  ") (String.split (String.Pattern "\n") printed)
+    in intercalate " / " body <> " | round-trips " <> show (SR.printRack (SR.parseRack printed) == printed)
   -- what the FH-2 will really do with an LFO rate it cannot reach
   rateNotes = [ "== rate notes" ] <> map rateNote
     [ "lfo fh2cv0 # rate 0.05", "lfo fh2cv0 # rate 20", "drift fh2cv1", "lfo es9main # rate 0.05", "lfo fh2cv0 # rate 2" ]

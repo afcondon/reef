@@ -137,8 +137,15 @@ lfoLine sl =
     <> amp "saw" sl.saw
     <> amp "rnd" sl.rnd
     <> amp "nse" sl.nse
+    <> flat
   where
   amp k v = if v == 0.0 then "" else " " <> k <> " " <> fmt v
+  -- A slot turned all the way down still says what shape it is (`sqr 0`), so
+  -- the shape survives the text; sine, the parser's default, goes unsaid.
+  flat =
+    if sl.sin == 0.0 && sl.sqr == 0.0 && sl.tri == 0.0 && sl.saw == 0.0 && sl.rnd == 0.0 && sl.nse == 0.0 && sl.wave /= M.WaveSin
+      then " " <> M.waveName sl.wave <> " 0"
+      else ""
 
 euclidLine :: M.EuclidSlot -> String
 euclidLine sl =
@@ -356,7 +363,7 @@ slotsSilenced d
     M.GEnv s -> M.GEnv (over silentEnv s)
 
 silentLfo :: M.ModSlot
-silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0 }
+silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0, wave: M.WaveSin }
 
 silentEuclid :: M.EuclidSlot
 silentEuclid = { beats: 0, steps: 8, rate: 4, accentRate: 0 }
@@ -393,12 +400,12 @@ parseLfo s = foldl apply (silentLfo { rate = rate0 }) (pairs rest)
   apply sl = case _ of
     Phase p -> sl { phase = p }
     Shape "lvl" v -> sl { level = v }
-    Shape "sin" v -> sl { sin = v }
-    Shape "sqr" v -> sl { sqr = v }
-    Shape "tri" v -> sl { tri = v }
-    Shape "saw" v -> sl { saw = v }
-    Shape "rnd" v -> sl { rnd = v }
-    Shape "nse" v -> sl { nse = v }
+    Shape "sin" v -> sl { sin = v, wave = M.WaveSin }
+    Shape "sqr" v -> sl { sqr = v, wave = M.WaveSqr }
+    Shape "tri" v -> sl { tri = v, wave = M.WaveTri }
+    Shape "saw" v -> sl { saw = v, wave = M.WaveSaw }
+    Shape "rnd" v -> sl { rnd = v, wave = M.WaveRnd }
+    Shape "nse" v -> sl { nse = v, wave = M.WaveNse }
     _ -> sl
 
 data Tok = Phase Number | Shape String Number

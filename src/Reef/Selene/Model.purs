@@ -40,6 +40,10 @@ module Reef.Selene.Model
   , clockBaseLabel
   , clockBaseBeats
   , ModSlot
+  , LfoWave(..)
+  , lfoWaves
+  , waveName
+  , waveOfName
   , ClockSlot
   , EuclidSlot
   , PresetNoteSlot
@@ -55,6 +59,7 @@ module Reef.Selene.Model
 
 import Prelude
 
+import Data.Array as Array
 import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -112,6 +117,9 @@ slotCount = 8
 
 -- | POLYLFO: one continuous waveform per slot = a DC `level` plus a mix of six
 -- | shapes, free-running at `rate` Hz from initial `phase`. Amps normalised.
+-- | `wave` is the shape the slot is edited as. While any amp is above zero the
+-- | mix speaks for itself; `wave` is what keeps a slot turned all the way down
+-- | a square (say), so that turning it back up gives the square again.
 type ModSlot =
   { rate :: Number
   , phase :: Number
@@ -122,7 +130,29 @@ type ModSlot =
   , saw :: Number
   , rnd :: Number
   , nse :: Number
+  , wave :: LfoWave
   }
+
+-- | The six shapes of a POLYLFO slot, in the rack's order.
+data LfoWave = WaveSin | WaveSqr | WaveTri | WaveSaw | WaveRnd | WaveNse
+
+derive instance Eq LfoWave
+
+lfoWaves :: Array LfoWave
+lfoWaves = [ WaveSin, WaveSqr, WaveTri, WaveSaw, WaveRnd, WaveNse ]
+
+-- | The rack's keyword for a shape.
+waveName :: LfoWave -> String
+waveName = case _ of
+  WaveSin -> "sin"
+  WaveSqr -> "sqr"
+  WaveTri -> "tri"
+  WaveSaw -> "saw"
+  WaveRnd -> "rnd"
+  WaveNse -> "nse"
+
+waveOfName :: String -> Maybe LfoWave
+waveOfName k = Array.find (\w -> waveName w == k) lfoWaves
 
 -- | POLYCLOCK: a tempo-locked gate train. `base` / `multiplier` set the
 -- | division (beats-per-pulse = base-beats / multiplier), `pulseWidth` the
@@ -481,6 +511,7 @@ freshBank = case _ of
   lfoSlot i =
     { rate: 0.5, phase: Int.toNumber i / Int.toNumber slotCount
     , level: 0.0, sin: 0.8, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0
+    , wave: WaveSin
     }
   -- divisions 1/4 ÷ (i+1): a metric fan
   clockSlot i = { base: ClockQuarter, multiplier: i + 1, pulseWidth: 50, phase: 0 }

@@ -2193,6 +2193,8 @@ muted [1] | round-trips true
   sent   3 8 @4   -- 1
   sent   0 8 @4   -- 2
   sent   0 8 @4   -- 3
+== flat slots
+  1 @0 sqr 0   -- 1 /   2 @0.5 tri 0   -- 2 /   3 @0   -- 3 /   4 @0 lvl 0.5 nse 0   -- 4 /   0 @0   -- 5 /   0 @0   -- 6 /   0 @0   -- 7 /   0 @0   -- 8 | round-trips true
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.

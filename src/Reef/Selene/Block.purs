@@ -213,6 +213,11 @@ lfo rate phase shape depth =
   , saw: if isSaw then depth else 0.0
   , sqr: if isSqr then depth else 0.0
   , rnd: 0.0, nse: 0.0
+  , wave: case shape of
+      Sin -> M.WaveSin
+      Tri -> M.WaveTri
+      Saw -> M.WaveSaw
+      Sqr -> M.WaveSqr
   }
   where
   isSin = case shape of
