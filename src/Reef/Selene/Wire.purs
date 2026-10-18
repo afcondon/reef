@@ -11,6 +11,7 @@ module Reef.Selene.Wire
   ( SeleneApply
   , destinationEnvelope
   , targetSocketBank
+  , ownerOf
   , familyOf
   ) where
 
@@ -58,6 +59,12 @@ familyOf = case _ of
   M.GNote _ -> "polypresetnote"
   M.GEnv _ -> "polyenv"
 
+-- | The name a bank's claim is held under in its daemon: one per (socket,
+-- | bank), whatever is on it, so a re-push replaces the claim and an `off`
+-- | releases it by the same name.
+ownerOf :: { socket :: String, bank :: String } -> String
+ownerOf sb = "selene:" <> sb.socket <> ":" <> sb.bank
+
 -- | Encode one destination into a `SeleneApply`, or Nothing when its target isn't
 -- | a modular bank. The alias is stable per (socket, bank) so a re-push replaces
 -- | the same claim cleanly.
@@ -76,7 +83,7 @@ destinationEnvelope d0 = do
     -- `Maybe` field writes `undefined`, and JSON.stringify drops those keys —
     -- verified against the actual emitted JSON, not assumed.
     range = map M.rangeToWire d.range
-    alias = "selene:" <> sb.socket <> ":" <> bank
+    alias = ownerOf sb
     json = case d.bank of
       M.GLfo slots ->
         writeJSON { bank, family, alias, outputRange: range, slots }

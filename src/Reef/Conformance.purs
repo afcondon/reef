@@ -2141,11 +2141,11 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     , "lfo es9main # retrig \"1\""
     , "euclid fh2_1 # retrig \"1\""
     ]
-  -- `off <bank>` on the rig: the bank leaves the rack, its daemon sent silence
+  -- `off <bank>` on the rig: the bank leaves the rack, its daemon releases it
   offs = [ "== off" ] <> (foldl off { rack: SR.printRack final, out: [] } [ "off es9gt1", "off es9gt1", "off fh2_1", "off fh2gt0" ]).out
   off acc src = case SL.rigLine src acc.rack of
     Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
-    Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }
+    Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | " <> r.command <> " | kept: " <> show (r.json /= "") <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }
   -- `mute` / `unmute`: the bank stays, its jacks go to 0 V (a range pinned
   -- so that silence is 0 V), its reset pattern stops, and a line on a muted
   -- bank changes the bank and keeps the mute

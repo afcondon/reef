@@ -2127,9 +2127,9 @@ lfo virtual:bus # rate 1 | accepted
 lfo es9main # retrig "1" | refused: retrig needs an FH-2 LFO bank (fh2_0 or an FHX-8CV, fh2cvN), not es9main
 euclid fh2_1 # retrig "1" | refused: retrig needs an FH-2 LFO bank (fh2_0 or an FHX-8CV, fh2cvN), not fh2_1
 == off
-off es9gt1 | es9 gt1 | still in the rack: false
+off es9gt1 | es9 gt1 | release-claim polysignal selene:es9:gt1 | kept: false | still in the rack: false
 off es9gt1 | refused: es9gt1 is already free
-off fh2_1 | fh2 gt0 | still in the rack: false
+off fh2_1 | fh2 gt0 | release-claim polysignal selene:fh2:gt0 | kept: false | still in the rack: false
 off fh2gt0 | refused: no bank fh2gt0: es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>
 == reset
 reset fh2cv0 | reset fh2cv0 -> reset-lfos cv0 | rack unchanged: true

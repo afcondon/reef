@@ -291,21 +291,23 @@ rigLine src rack = case Str.stripPrefix (Str.Pattern "reset ") (trim src) of
 
 rigCommand :: String -> String -> Either String RigLine
 rigCommand src rack = case words src of
-  -- `off <bank>`: the bank leaves the rack, and its daemon is sent the same
-  -- kind with every slot silent, so the outputs stop (a dropped "free")
+  -- `off <bank>`: the bank leaves the rack, and its daemon releases the
+  -- bank's claim, which silences its jacks, so the outputs stop and are free
+  -- for something else (a dropped "free"). No json: there is nothing for the
+  -- rig to keep and send again.
   [ "off", t ] -> do
     target <- Rack.bankOf t
     let
       sel = Rack.parseRack rack
-    dest <- note (t <> " is already free") (Array.find (\d -> d.target == target) sel.destinations)
-    let sent = Wire.destinationEnvelope (dest { muted = true })
+      sb = Wire.targetSocketBank target
+    _ <- note (t <> " is already free") (Array.find (\d -> d.target == target) sel.destinations)
     pure
       { rack: Rack.printRack (sel { destinations = filter (\d -> d.target /= target) sel.destinations })
       , line: "off " <> t
-      , socket: maybe "" _.socket sent
-      , bank: maybe "" _.bank sent
-      , json: maybe "" _.json sent
-      , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
+      , socket: maybe "" _.socket sb
+      , bank: maybe "" _.bank sb
+      , json: ""
+      , command: maybe "" (\b -> "release-claim polysignal " <> Wire.ownerOf b) sb
       , note: ""
       }
   -- `mute <bank>` / `unmute <bank>`: the bank stays as it is and its jacks go
