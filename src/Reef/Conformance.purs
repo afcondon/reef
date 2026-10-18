@@ -114,7 +114,7 @@ import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), 
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Selene.Model (defaultSelene) as SM
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced) as SR
-import Reef.Selene.Line (applyLine, parseLine, printLine, retrigsOf, rigLine) as SL
+import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -2143,6 +2143,8 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     ]
   -- `off <bank>` on the rig: the bank leaves the rack, its daemon releases it
   offs = [ "== off" ] <> (foldl off { rack: SR.printRack final, out: [] } [ "off es9gt1", "off es9gt1", "off fh2_1", "off fh2gt0" ]).out
+    -- the banks holding jacks, which the rig's keeper follows
+    <> [ "banks: " <> String.joinWith ", " (map (\b -> b.socket <> " " <> b.bank <> " as " <> b.owner) (SL.banksOf (SR.printRack final))) ]
   off acc src = case SL.rigLine src acc.rack of
     Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
     Right r -> { rack: r.rack, out: acc.out <> [ src <> " | " <> r.socket <> " " <> r.bank <> " | " <> r.command <> " | kept: " <> show (r.json /= "") <> " | still in the rack: " <> show (String.contains (String.Pattern (String.drop 4 src)) r.rack) ] }

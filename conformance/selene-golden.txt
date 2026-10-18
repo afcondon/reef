@@ -111,6 +111,7 @@ off es9gt1 | es9 gt1 | release-claim polysignal selene:es9:gt1 | kept: false | s
 off es9gt1 | refused: es9gt1 is already free
 off fh2_1 | fh2 gt0 | release-claim polysignal selene:fh2:gt0 | kept: false | still in the rack: false
 off fh2gt0 | refused: no bank fh2gt0: es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>
+banks: es9 main as selene:es9:main, es9 gt0 as selene:es9:gt0, es9 gt1 as selene:es9:gt1, es9 cv0 as selene:es9:cv0, fh2 main as selene:fh2:main, fh2 gt0 as selene:fh2:gt0, fh2 cv0 as selene:fh2:cv0, fh2 cv1 as selene:fh2:cv1
 == reset
 reset fh2cv0 | reset fh2cv0 -> reset-lfos cv0 | rack unchanged: true
 reset fh2cv0 "3 6" | reset fh2cv0 "3 6" -> reset-lfos cv0 3,6 | rack unchanged: true

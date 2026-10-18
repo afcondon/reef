@@ -34,6 +34,7 @@ module Reef.Selene.Line
   , refusal
   , moduleText
   , retrigsOf
+  , banksOf
   ) where
 
 import Prelude
@@ -272,6 +273,16 @@ retrigsOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
   one d = case d.bank, d.retrig, M.retrigBase d.target of
     M.GLfo _, Just pattern, Just base | not d.muted -> Just { base, pattern }
     _, _, _ -> Nothing
+
+-- | The modular banks a rack holds: each one's daemon (socket), bank, and the
+-- | name its claim is held under. What is not here has no business holding
+-- | jacks, so the rig's keeper releases any bank it kept that the rack has lost
+-- | (Architeuthis, selene_keeper), however it went. MIDI and virtual targets
+-- | hold no jacks and are left out.
+banksOf :: String -> Array { socket :: String, bank :: String, owner :: String }
+banksOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
+  where
+  one d = map (\sb -> { socket: sb.socket, bank: sb.bank, owner: Wire.ownerOf sb }) (Wire.targetSocketBank d.target)
 
 -- | What the rig does with a `selene $` line (Architeuthis's Handler): the
 -- | rack it keeps on the stage (`selene/rack`) with the line applied, and the
