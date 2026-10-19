@@ -65,6 +65,7 @@ module Reef.Selene.Model
   , clockBaseBeats
   , clockBaseTicks
   , clockOn
+  , euclidOn
   , ModSlot
   , LfoWave(..)
   , lfoWaves
@@ -200,7 +201,8 @@ type ClockSlot =
   }
 
 -- | POLYEUCLID: a Euclidean gate — `beats` pulses spread over `steps`, clocked
--- | at `rate` subdivisions/beat. `accentRate` is an FH-2 feature ES-9 drops.
+-- | at `rate` steps a beat (4 = 16ths), each gate half a step long, on every
+-- | rig. `accentRate` is an FH-2 feature ES-9 drops.
 type EuclidSlot =
   { beats :: Int
   , steps :: Int
@@ -545,6 +547,22 @@ clockBaseTicks = case _ of
   ClockThirtySecond -> 3
   ClockThirtySecondT -> 2
   ClockSixtyFourthT -> 1
+
+-- | Why a Euclid slot cannot be played as asked on a target, when it cannot:
+-- | the FH-2 then plays it silent, and the page marks it. The FH-2's step is a
+-- | whole number of ticks (24 a beat), so `rate` must divide 24 (1, 2, 3, 4,
+-- | 6, 8, 12, 24), and its patterns stop at 32 steps.
+euclidOn :: Target -> EuclidSlot -> Maybe String
+euclidOn target sl = case target of
+  FH2 _ -> fh2
+  FH2Cv _ -> fh2
+  _ -> Nothing
+  where
+  fh2
+    | sl.rate < 1 || 24 `mod` sl.rate /= 0 =
+        Just ("the FH-2's steps are 1, 2, 3, 4, 6, 8, 12 or 24 a beat, not " <> show sl.rate)
+    | sl.steps > 32 = Just ("the FH-2's patterns stop at 32 steps, not " <> show sl.steps)
+    | otherwise = Nothing
 
 -- | Why a clock slot cannot be played as asked on a target, when it cannot:
 -- | the FH-2 then plays it silent, and the page marks it. The FH-2's pulse is
