@@ -2043,7 +2043,7 @@ euclid es9gt0
   4 16 @4   -- 7
   5 16 @4   -- 8
 
-clock es9gt1
+clock fh2_1
   1/4 x1 50%   -- 1
   1/4 x2 50%   -- 2
   1/4 x3 50%   -- 3
@@ -2131,7 +2131,7 @@ off es9gt1 | es9 gt1 | release-claim polysignal selene:es9:gt1 | kept: false | s
 off es9gt1 | refused: es9gt1 is already free
 off fh2_1 | fh2 gt0 | release-claim polysignal selene:fh2:gt0 | kept: false | still in the rack: false
 off fh2gt0 | refused: no bank fh2gt0: es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>
-banks: es9 main as selene:es9:main, es9 gt0 as selene:es9:gt0, es9 gt1 as selene:es9:gt1, es9 cv0 as selene:es9:cv0, fh2 main as selene:fh2:main, fh2 gt0 as selene:fh2:gt0, fh2 cv0 as selene:fh2:cv0, fh2 cv1 as selene:fh2:cv1
+banks: es9 main as selene:es9:main, es9 gt0 as selene:es9:gt0, fh2 gt0 as selene:fh2:gt0, es9 gt1 as selene:es9:gt1, es9 cv0 as selene:es9:cv0, fh2 main as selene:fh2:main, fh2 cv0 as selene:fh2:cv0, fh2 cv1 as selene:fh2:cv1
 == reset
 reset fh2cv0 | reset fh2cv0 -> reset-lfos cv0 | rack unchanged: true
 reset fh2cv0 "3 6" | reset fh2cv0 "3 6" -> reset-lfos cv0 3,6 | rack unchanged: true
@@ -2151,24 +2151,24 @@ lfo es9main # rate 0.05 | (no note)
 lfo fh2cv0 # rate 2 | (no note)
 == mute
 mute fh2cv0 | sends lfo fh2cv0 bipolar5v muted retrig "1 ~ [3 5] ~" /  0 @0   -- 1
-  headers: lfo es9main / euclid es9gt0 / euclid es9gt1 / note midi1 / note es98cv0 / env fh2_0 / euclid fh2_1 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 
   round-trips: true
 lfo fh2cv0 # rate 3 | sends lfo fh2cv0 bipolar5v muted retrig "1 ~ [3 5] ~" /  0 @0   -- 1 | muted: the jacks stay silent until unmute fh2cv0
-  headers: lfo es9main / euclid es9gt0 / euclid es9gt1 / note midi1 / note es98cv0 / env fh2_0 / euclid fh2_1 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 
   round-trips: true
 unmute fh2cv0 | sends lfo fh2cv0 retrig "1 ~ [3 5] ~" /  3 @0 sin 0.8 tri 1   -- 1
-  headers: lfo es9main / euclid es9gt0 / euclid es9gt1 / note midi1 / note es98cv0 / env fh2_0 / euclid fh2_1 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 8 1 ~ [3 5] ~
   round-trips: true
 mute es9gt0 | sends euclid es9gt0 unipolar5v muted /  0 8 @4   -- 1
-  headers: lfo es9main / euclid es9gt0 muted / euclid es9gt1 / note midi1 / note es98cv0 / env fh2_0 / euclid fh2_1 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 muted / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 8 1 ~ [3 5] ~
   round-trips: true
 mute fh2cv2 | refused: fh2cv2 has nothing on it to mute
 unmute es9gt0 | sends euclid es9gt0 /  4 5 @4   -- 1
-  headers: lfo es9main / euclid es9gt0 / euclid es9gt1 / note midi1 / note es98cv0 / env fh2_0 / euclid fh2_1 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 8 1 ~ [3 5] ~
   round-trips: true
 == slot mutes
@@ -2327,15 +2327,15 @@ euclid es9gt0
   4 11 @4   -- 7
   4 12 @4   -- 8
 
-euclid es9gt1
-  6 16 @4   -- 1
-  2 8 @4   -- 2
-  3 9 @4   -- 3
-  4 11 @4   -- 4
-  4 8 @4   -- 5
-  6 16 @4   -- 6
-  4 11 @4   -- 7
-  6 13 @4   -- 8
+euclid fh2_1
+  3 8 @4   -- 1
+  3 8 @4   -- 2
+  3 8 @4   -- 3
+  3 8 @4   -- 4
+  3 16 @4   -- 5
+  3 16 @4   -- 6
+  3 16 @4   -- 7
+  3 16 @4   -- 8
 
 note midi1
   C2   -- 1
@@ -2346,6 +2346,16 @@ note midi1
   G3   -- 6
   C4   -- 7
   E4   -- 8
+
+euclid es9gt1
+  6 16 @4   -- 1
+  2 8 @4   -- 2
+  3 9 @4   -- 3
+  4 11 @4   -- 4
+  4 8 @4   -- 5
+  6 16 @4   -- 6
+  4 11 @4   -- 7
+  6 13 @4   -- 8
 
 note es98cv0
   D3   -- 1
@@ -2366,16 +2376,6 @@ env fh2_0
   a 10 d 200 s 64 r 400 vel 96 time 2   -- 6
   a 10 d 200 s 64 r 400 vel 96 time 2   -- 7
   a 10 d 200 s 64 r 400 vel 96 time 2   -- 8
-
-euclid fh2_1
-  3 8 @4   -- 1
-  3 8 @4   -- 2
-  3 8 @4   -- 3
-  3 8 @4   -- 4
-  3 16 @4   -- 5
-  3 16 @4   -- 6
-  3 16 @4   -- 7
-  3 16 @4   -- 8
 
 lfo fh2cv0 retrig "1 ~ [3 5] ~"
   2 @0 sin 0.8 tri 1   -- 1

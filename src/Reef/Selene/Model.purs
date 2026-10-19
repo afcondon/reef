@@ -404,7 +404,7 @@ lfoRateOn target hz = case target of
 -- | A modest set for now — gate-likes near gate-likes, then MIDI, then virtual.
 targetCycle :: Array Target
 targetCycle =
-  [ ES9Main, ES9Gt 0, ES9Gt 1, ES9Cv 0, FH2 0, FH2Cv 0, Midi 1, Midi 2, Virtual "bus" ]
+  [ ES9Main, ES9Gt 0, ES9Cv 0, FH2 0, FH2 1, FH2Cv 0, Midi 1, Midi 2, Virtual "bus" ]
 
 cycleTarget :: Target -> Target
 cycleTarget t =
@@ -418,7 +418,10 @@ defaultTargetFor = case _ of
   KLfo -> ES9Main
   KNote -> ES9Cv 0
   KEuclid -> ES9Gt 0
-  KClock -> ES9Gt 1
+  -- The FHX-8GT, so a new clock and a new rhythm don't meet on the ES-5. There
+  -- is no ESX-8GT (`ES9Gt 1`) in AC's rig; defaulting there put a bank no
+  -- daemon has on the page (2026-10-19).
+  KClock -> FH2 1
   -- Envelopes are CV, so never a gate bank. Defaults to the FH-2 because that is
   -- where the ADSR generator with curve shapes lives.
   KEnv -> FH2 0
@@ -583,7 +586,7 @@ defaultSelene =
   { destinations:
       [ { target: ES9Main, jacks: allJacks, range: Nothing, bank: freshBank KLfo, retrig: Nothing, muted: false, mutedSlots: [] }
       , { target: ES9Gt 0, jacks: allJacks, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, muted: false, mutedSlots: [] }
-      , { target: ES9Gt 1, jacks: allJacks, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false, mutedSlots: [] }
+      , { target: FH2 1, jacks: allJacks, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false, mutedSlots: [] }
       , { target: Midi 1, jacks: allJacks, range: Nothing, bank: freshBank KNote, retrig: Nothing, muted: false, mutedSlots: [] }
       ]
   }
