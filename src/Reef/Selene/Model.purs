@@ -64,6 +64,10 @@ module Reef.Selene.Model
   , clockBaseLabel
   , clockBaseBeats
   , clockBaseTicks
+  , clockTicks
+  , clockRatio
+  , clockOfTicks
+  , clockOfRatio
   , clockOn
   , euclidOn
   , ModSlot
@@ -187,12 +191,13 @@ waveName = case _ of
 waveOfName :: String -> Maybe LfoWave
 waveOfName k = Array.find (\w -> waveName w == k) lfoWaves
 
--- | POLYCLOCK: a tempo-locked gate train, a clock divider. A pulse comes
--- | every `base` × `multiplier`: `1/4 x1` is the beat, `1/4 x4` one pulse
--- | every four beats (the FH-2's own meaning of its multiplier, and so the
--- | one meaning on every rig, 2026-10-19). Faster than the beat is a shorter
--- | base: `1/8`, `1/16T`, `1/64T` (24 ppqn). `pulseWidth` is the duty %, 0
--- | silent; `phase` a degrees offset. Rate rides the Link tempo at playback.
+-- | POLYCLOCK: a tempo-locked gate train. A pulse comes every `base` ×
+-- | `multiplier` (the FH-2's own fields, and the wire's), but a clock is
+-- | written and shown as its ratio to the beat (`clockRatio`): `×1` the beat,
+-- | `÷4` one pulse every four beats, `×4` four a beat, `×3/2` a quarter
+-- | triplet. Every ratio is a whole number of ticks (24 a beat), which is
+-- | what both rigs play. `pulseWidth` is the duty %, 0 silent; `phase` a
+-- | degrees offset. Rate rides the Link tempo at playback.
 type ClockSlot =
   { base :: ClockBase
   , multiplier :: Int
@@ -547,6 +552,60 @@ clockBaseTicks = case _ of
   ClockThirtySecond -> 3
   ClockThirtySecondT -> 2
   ClockSixtyFourthT -> 1
+
+-- | A clock's period in ticks of 24 a beat.
+clockTicks :: ClockSlot -> Int
+clockTicks sl = clockBaseTicks sl.base * max 1 sl.multiplier
+
+-- | A clock as its ratio to the beat, exact: `×4` four pulses a beat, `÷4`
+-- | one every four beats, `×3/2` for the rest (a quarter triplet).
+clockRatio :: ClockSlot -> String
+clockRatio sl =
+  let
+    t = clockTicks sl
+    g = gcd 24 t
+    perBeat = 24 / g
+    beats = t / g
+  in
+    if beats == 1 then "×" <> show perBeat
+    else if perBeat == 1 then "÷" <> show beats
+    else "×" <> show perBeat <> "/" <> show beats
+
+-- | The base and multiplier of a period in ticks: a quarter's multiple when
+-- | it is whole beats, else the longest base that divides it.
+clockOfTicks :: Int -> Maybe { base :: ClockBase, multiplier :: Int }
+clockOfTicks t
+  | t < 1 = Nothing
+  | t `mod` 24 == 0 = Just { base: ClockQuarter, multiplier: t / 24 }
+  | otherwise =
+      Array.find (\b -> t `mod` clockBaseTicks b == 0) longestFirst
+        <#> \b -> { base: b, multiplier: t / clockBaseTicks b }
+  where
+  longestFirst =
+    [ ClockWhole, ClockHalf, ClockQuarter, ClockQuarterT, ClockEighth, ClockEighthT
+    , ClockSixteenth, ClockSixteenthT, ClockThirtySecond, ClockThirtySecondT, ClockSixtyFourthT ]
+
+-- | A ratio as written: `×4`, `x4`, `*4` or a bare `4` (pulses a beat, and
+-- | `×3/2` a fraction of them), `÷4` or `/4` (beats a pulse). Nothing for a
+-- | ratio that isn't a whole number of ticks (`×5`: 24/5), which no rig
+-- | plays.
+clockOfRatio :: String -> Maybe { base :: ClockBase, multiplier :: Int }
+clockOfRatio tok = case slower of
+  Just n -> positive n >>= \k -> clockOfTicks (24 * k)
+  Nothing -> case Str.split (Str.Pattern "/") faster of
+    [ p ] -> Int.fromString p >>= positive >>= \k -> ticksOf k 1
+    [ p, q ] -> do
+      k <- Int.fromString p >>= positive
+      d <- Int.fromString q >>= positive
+      ticksOf k d
+    _ -> Nothing
+  where
+  slower = firstOf [ "÷", "/" ] >>= Int.fromString
+  faster = fromMaybe tok (firstOf [ "×", "x", "*" ])
+  firstOf = Array.findMap (\pre -> Str.stripPrefix (Str.Pattern pre) tok)
+  positive n = if n >= 1 then Just n else Nothing
+  -- k pulses every d beats: a period of 24d/k ticks, when that is whole
+  ticksOf k d = if (24 * d) `mod` k == 0 then clockOfTicks (24 * d / k) else Nothing
 
 -- | Why a Euclid slot cannot be played as asked on a target, when it cannot:
 -- | the FH-2 then plays it silent, and the page marks it. The FH-2's step is a

@@ -183,7 +183,7 @@ euclidLine sl =
 
 clockLine :: M.ClockSlot -> String
 clockLine sl =
-  M.clockBaseLabel sl.base <> " x" <> show sl.multiplier <> " " <> show sl.pulseWidth <> "%"
+  M.clockRatio sl <> " " <> show sl.pulseWidth <> "%"
     <> (if sl.phase == 0 then "" else " ph" <> show sl.phase)
 
 noteLine :: M.PresetNoteSlot -> String
@@ -526,17 +526,22 @@ parseEuclid s =
   atRate = firstJust (map (\tk -> map (\r -> r) (intMaybe =<< Str.stripPrefix (Str.Pattern "@") tk)) toks)
   accVal = afterKey "acc" toks
 
--- clock <base> x<mult> [<pw>%] [ph<deg>]
+-- clock <ratio> [<pw>%] [ph<deg>]: `÷4 50%`, `×2 50%`, `×3/2 25% ph90`.
+-- The form before 2026-10-19, `<base> x<mult>` (`1/4 x4`), still reads, with
+-- the meaning it had last: a pulse every base × mult (so `1/4 x4` is `÷4`).
 parseClock :: String -> M.ClockSlot
 parseClock s =
-  { base: parseBase (idx 0)
-  , multiplier: fromMaybe 1 mult
+  { base: period.base
+  , multiplier: period.multiplier
   , pulseWidth: fromMaybe 50 pw
   , phase: fromMaybe 0 ph
   }
   where
   toks = words s
   idx i = fromMaybe "" (toks !! i)
+  period = case baseMaybe (idx 0) of
+    Just base -> { base, multiplier: fromMaybe 1 mult }
+    Nothing -> fromMaybe { base: M.ClockQuarter, multiplier: 1 } (M.clockOfRatio (idx 0))
   mult = firstJust (map (\tk -> intMaybe =<< Str.stripPrefix (Str.Pattern "x") tk) toks)
   pw = firstJust (map (\tk -> intMaybe =<< Str.stripSuffix (Str.Pattern "%") tk) toks)
   ph = firstJust (map (\tk -> intMaybe =<< Str.stripPrefix (Str.Pattern "ph") tk) toks)
@@ -603,7 +608,10 @@ parseNoteName tok =
     _ -> Nothing
 
 parseBase :: String -> M.ClockBase
-parseBase lbl = fromMaybe M.ClockQuarter (find (Str.toUpper lbl))
+parseBase lbl = fromMaybe M.ClockQuarter (baseMaybe lbl)
+
+baseMaybe :: String -> Maybe M.ClockBase
+baseMaybe lbl = find (Str.toUpper lbl)
   where
   find l = case l of
     "1/1" -> Just M.ClockWhole

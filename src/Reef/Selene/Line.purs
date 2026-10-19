@@ -3,12 +3,12 @@
 -- |
 -- |     lfo es9main # rate "0.5 1 2 4" # phase "0 0.25"
 -- |     euclid es9gt0 # hits 5
--- |     clock es9gt1 # div 1/4 # mult "1 2 3 4 5 6 7 8"
+-- |     clock es9gt0 # ratio "1 ÷2 ÷3 ÷4 ÷5 ÷6 ÷7 ÷8"
 -- |
 -- | `<kind> <bank>`, then `# <parameter> <value>` terms. A value is one token
 -- | (every slot) or a quoted list, which sets the slots in turn and wraps, as
 -- | Tidal's lists do. Parameters are the model's own field names, with the
--- | rack's short names beside them (`lvl`, `hits`, `acc`, `x`, `pw`, `ph`,
+-- | rack's short names beside them (`lvl`, `hits`, `acc`, `pw`, `ph`,
 -- | `a d s r`), so the line and the rack read alike.
 -- |
 -- | A line is atomic: `applyLine` returns the rack with that one bank
@@ -176,11 +176,15 @@ applyTerm bank t = case bank of
       | p == "acc" || p == "accentRate" -> (\x -> sl { accentRate = x }) <$> integer v
     _ -> unknown "euclid" "hits steps rate acc"
   M.GClock slots -> M.GClock <$> each slots \sl v -> case t.param of
-    p | p == "div" || p == "base" -> Right (sl { base = Rack.parseBase v })
+    p | p == "ratio" || p == "clock" ->
+          note ("ratio wants ×n (n a beat), ÷n (one every n beats) or ×p/q, whole 24ppqn ticks; not " <> v)
+            ((\c -> sl { base = c.base, multiplier = c.multiplier }) <$> M.clockOfRatio v)
+      -- the fields beneath the ratio, as the FH-2 names them
+      | p == "div" || p == "base" -> Right (sl { base = Rack.parseBase v })
       | p == "mult" || p == "x" || p == "multiplier" -> (\x -> sl { multiplier = x }) <$> integer v
       | p == "pw" || p == "pulseWidth" -> (\x -> sl { pulseWidth = x }) <$> integer v
       | p == "phase" || p == "ph" -> (\x -> sl { phase = x }) <$> integer v
-    _ -> unknown "clock" "div mult pw phase"
+    _ -> unknown "clock" "ratio pw phase"
   M.GNote slots -> M.GNote <$> each slots \sl v -> case t.param of
     p | p == "note" || p == "n" -> (\x -> sl { note = clamp 0 127 x }) <$> note ("not a note: " <> v) (Rack.noteToken v)
     _ -> unknown "note" "note"
@@ -218,7 +222,7 @@ paramsOf :: M.GenKind -> Array String
 paramsOf = case _ of
   M.KLfo -> [ "rate", "phase", "level", "sin", "sqr", "tri", "saw", "rnd", "nse" ]
   M.KEuclid -> [ "hits", "steps", "rate", "acc" ]
-  M.KClock -> [ "div", "mult", "pw", "phase" ]
+  M.KClock -> [ "ratio", "pw", "phase" ]
   M.KNote -> [ "note" ]
   M.KEnv -> [ "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
   M.KVoice -> [ "ch", "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
@@ -315,7 +319,7 @@ mainOf :: M.GenKind -> Array String
 mainOf = case _ of
   M.KLfo -> [ "rate", "phase" ]
   M.KEuclid -> [ "hits", "steps" ]
-  M.KClock -> [ "div", "mult" ]
+  M.KClock -> [ "ratio" ]
   M.KNote -> [ "note" ]
   M.KEnv -> [ "a", "d", "s", "r" ]
   M.KVoice -> [ "ch" ]
@@ -338,6 +342,7 @@ valuesOf p = case _ of
     "rate" -> sl.rate
     _ -> sl.accentRate) s
   M.GClock s -> map (\sl -> case p of
+    "ratio" -> M.clockRatio sl
     "div" -> M.clockBaseLabel sl.base
     "mult" -> show sl.multiplier
     "pw" -> show sl.pulseWidth

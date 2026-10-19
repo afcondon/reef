@@ -24,14 +24,14 @@ euclid es9gt0
   5 16 @4   -- 8
 
 clock fh2_1
-  1/4 x1 50%   -- 1
-  1/4 x2 50%   -- 2
-  1/4 x3 50%   -- 3
-  1/4 x4 50%   -- 4
-  1/4 x5 50%   -- 5
-  1/4 x6 50%   -- 6
-  1/4 x7 50%   -- 7
-  1/4 x8 50%   -- 8
+  ×1 50%   -- 1
+  ÷2 50%   -- 2
+  ÷3 50%   -- 3
+  ÷4 50%   -- 4
+  ÷5 50%   -- 5
+  ÷6 50%   -- 6
+  ÷7 50%   -- 7
+  ÷8 50%   -- 8
 
 note midi1
   C2   -- 1
@@ -53,7 +53,11 @@ rack round-trip true
 > euclid es9gt0 # hits "3 4 5 6 7 3 4 5" # steps "8 8 8 8 16 16 16 16" # acc 2
   euclid es9gt0 # hits "3 4 5 6 7 3 4 5" # steps "8 8 8 8 16 16 16 16" # acc 2
 > clock es9gt1 # div 1/8 # mult "1 2 3 4 5 6 7 8" # pw 25
-  clock es9gt1 # div 1/8 # mult "1 2 3 4 5 6 7 8" # pw 25
+  clock es9gt1 # ratio "×2 ×1 ×2/3 ÷2 ×2/5 ÷3 ×2/7 ÷4" # pw 25
+> clock es9gt1 # ratio "1 ÷2 ×2 ×3/2 ÷64 ×24 x4 /3"
+  clock es9gt1 # ratio "×1 ÷2 ×2 ×3/2 ÷64 ×24 ×4 ÷3" # pw 25
+> clock es9gt1 # ratio ×5
+  refused: ratio wants ×n (n a beat), ÷n (one every n beats) or ×p/q, whole 24ppqn ticks; not ×5
 > note es98cv0 # note "C3 E3 G3 B3"
   note es98cv0 # note "C3 E3 G3 B3 C3 E3 G3 B3"
 > env fh2_0 # a 10 # d 200 # s 64 # r 400
