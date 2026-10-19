@@ -46,7 +46,7 @@ import Data.Array (all, filter, findIndex, foldM, head, length, mapWithIndex, sn
 import Data.Array as Array
 import Data.Either (Either(..), hush, note)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Number as Number
 import Data.String as Str
 import Data.String.Common (joinWith, trim)
@@ -118,14 +118,20 @@ applyLine line sel = do
   -- `# fresh` starts the bank fresh first: a module dropped on a bank
   -- replaces what was there, rather than changing only what it names
   let fresh = Array.any (\t -> t.param == "fresh") line.terms
-      named = filter (\t -> t.param /= "fresh" && t.param /= "retrig") line.terms
+      -- a voice layout's `outputs` and `gates` are about the whole layout,
+      -- not each voice, so they are taken aside like `retrig`
+      layoutTerm k = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == k) line.terms))
+      named = filter (\t -> not (Array.elem t.param [ "fresh", "retrig", "outputs", "gates" ])) line.terms
       -- `# retrig "<pattern>"` sets the bank's reset pattern, `# retrig off`
       -- clears it; the last one named wins
       retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
   { start, terms } <- case line.block >>= Block.blockNamed of
     Just b -> (\x -> { start: M.takeSlots line.jacks.count x.bank, terms: x.rest }) <$> Block.expand b named
     Nothing -> pure { start: if fresh then M.freshBankOn line.jacks kindOfLine else current, terms: named }
-  bank <- foldM applyTerm start terms
+  laid <- case start of
+    M.GVoice vb -> M.GVoice <$> layoutOf line sel vb (layoutTerm "outputs") (layoutTerm "gates")
+    b -> Right b
+  bank <- foldM applyTerm laid terms
   retrig <- case retrigSet of
     Just v | v == "off" || v == "~" || v == "" -> Right Nothing
     Just v -> case M.retrigBase line.target of
@@ -191,6 +197,13 @@ applyTerm bank t = case bank of
       | p == "dshape" -> (\x -> sl { decayShape = x }) <$> integer v
       | p == "rshape" -> (\x -> sl { releaseShape = x }) <$> integer v
     _ -> unknown "env" "a d s r depth vel time rnd ashape dshape rshape"
+  M.GVoice vb
+    | t.param == "ch" || t.param == "channel" ->
+        (\vs -> M.GVoice vb { voices = vs }) <$> each vb.voices \v x -> (\c -> v { channel = clamp 1 16 c }) <$> integer x
+    | otherwise -> case applyTerm (M.GEnv (map _.env vb.voices)) t of
+        Right (M.GEnv envs) -> Right (M.GVoice vb { voices = Array.zipWith (\v e -> v { env = e }) vb.voices envs })
+        Right _ -> Right bank
+        Left _ -> unknown "voices" "ch, and a d s r depth vel time rnd ashape dshape rshape for its envelopes"
   where
   each :: forall s. Array s -> (s -> String -> Either String s) -> Either String (Array s)
   each slots f = foldM (\acc x -> snoc acc <$> x) [] (mapWithIndex (\i sl -> f sl (valueAt i)) slots)
@@ -208,6 +221,61 @@ paramsOf = case _ of
   M.KClock -> [ "div", "mult", "pw", "phase" ]
   M.KNote -> [ "note" ]
   M.KEnv -> [ "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
+  M.KVoice -> [ "ch", "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
+
+-- | A voice layout's outputs and gates for a line: set from its terms, the
+-- | voices sized to the run (as many whole voices as fit), and the gates on
+-- | their own bank: as named, else where they were, else the first run of a
+-- | gate bank nothing else holds.
+layoutOf :: Line -> M.Selene -> M.VoiceBank -> Maybe String -> Maybe String -> Either String M.VoiceBank
+layoutOf line sel vb0 outputsTerm gatesTerm = do
+  outputs <- case outputsTerm of
+    Just w -> note ("outputs is pitch, pitch+env, pitch+vel+env+pres …, not " <> w) (M.voiceOutsOfWord w)
+    Nothing -> Right vb0.outputs
+  let
+    stride = 1 + Array.length outputs
+    n = line.jacks.count / stride
+    fresh = case M.freshBank M.KVoice of
+      M.GVoice f -> f.voices
+      _ -> []
+    -- the voices this place already had keep their channels; new ones take
+    -- channels no other layout plays (from 11 up, then down from 10), so
+    -- two converters never answer one note
+    kept = case Array.find (M.samePlace line) sel.destinations of
+      Just { bank: M.GVoice old } -> old.voices
+      _ -> []
+    taken = Array.concatMap (\o -> case o.bank of
+      M.GVoice ov | not (M.samePlace o line) -> map _.channel ov.voices
+      _ -> []) sel.destinations <> map _.channel kept
+    spare = filter (\c -> not (Array.elem c taken)) (Array.range 11 16 <> Array.reverse (Array.range 1 10))
+    incoming = Array.drop (Array.length kept) (vb0.voices <> fresh <> fresh)
+    voices = Array.take n (Array.take n kept <> mapWithIndex (\k v -> v { channel = fromMaybe v.channel (spare !! k) }) incoming)
+  when (n < 1) $ Left (M.placeWire line.target line.jacks <> " is too narrow for one voice of " <> M.voiceOutsWord outputs)
+  gateBank <- note ("voices need a gate bank beside " <> M.targetWire line.target <> " for their gates") (gateBankFor line.target)
+  gates <- case gatesTerm of
+    Just g -> do
+      place <- Rack.placeOf g
+      when (place.target /= gateBank) $ Left ("the gates go on " <> M.targetWire gateBank <> ", the gate bank beside " <> M.targetWire line.target)
+      Right { target: place.target, jacks: place.jacks { count = n } }
+    Nothing -> case vb0.gates of
+      Just g | g.jacks.first + n - 1 <= M.slotCount && free gateBank (g.jacks { count = n }) -> Right (g { jacks = g.jacks { count = n } })
+      _ -> note ("no " <> show n <> " free jacks on " <> M.targetWire gateBank <> " for these voices' gates")
+             (Array.find (free gateBank) (map (\f -> { first: f, count: n }) (Array.range 1 (M.slotCount - n + 1))))
+               <#> \j -> { target: gateBank, jacks: j }
+  for_ (Array.find (\o -> not (M.samePlace o line) && Array.any (\p -> p.target == gates.target && M.jacksOverlap p.jacks gates.jacks) (M.placesOf o)) sel.destinations) \o ->
+    Left ("the voices' gates on " <> M.placeWire gates.target gates.jacks <> " share jacks with " <> M.placeWire o.target o.jacks)
+  pure { outputs, gates: Just gates, voices }
+  where
+  -- jacks nothing else on the rack holds (this layout's own place aside)
+  free target j = not (Array.any (\o -> not (M.samePlace o line) && Array.any (\p -> p.target == target && M.jacksOverlap p.jacks j) (M.placesOf o)) sel.destinations)
+
+-- | The gate bank a layout on a CV bank gathers its gates on: the FHX-8GT for
+-- | the FH-2 and its FHX-8CVs. (The ES-9's, the ES-5, when it has layouts.)
+gateBankFor :: M.Target -> Maybe M.Target
+gateBankFor = case _ of
+  M.FH2 0 -> Just (M.FH2 1)
+  M.FH2Cv _ -> Just (M.FH2 1)
+  _ -> Nothing
 
 -- | A bank as a line: the kind's main parameters always (`mainOf`), and any
 -- | other whose slots are not all at the kind's fresh value; eight equal
@@ -218,8 +286,20 @@ printLine :: M.Destination -> String
 printLine d =
   joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks ] <> terms <> retrigTerm)
   where
-  fresh = M.freshBankOn d.jacks (M.bankKind d.bank)
-  terms = Array.catMaybes (map term (paramsOf (M.bankKind d.bank)))
+  fresh = case d.bank of
+    -- a layout's voices against fresh voices like them (their envelopes)
+    M.GVoice vb -> case M.freshBank M.KVoice of
+      M.GVoice f -> M.GVoice vb { voices = map (\v -> v { env = fromMaybe v.env (map _.env (f.voices !! 0)) }) vb.voices }
+      other -> other
+    _ -> M.freshBankOn d.jacks (M.bankKind d.bank)
+  terms = layoutTerms <> Array.catMaybes (map term (filter said (paramsOf (M.bankKind d.bank))))
+  layoutTerms = case d.bank of
+    M.GVoice vb -> [ "outputs " <> M.voiceOutsWord vb.outputs ] <> maybe [] (\g -> [ "gates " <> M.placeWire g.target g.jacks ]) vb.gates
+    _ -> []
+  -- a layout with no envelope has no envelope to say
+  said p = case d.bank of
+    M.GVoice vb -> p == "ch" || Array.elem M.VEnvelope vb.outputs
+    _ -> true
   term p =
     let vs = valuesOf p d.bank
     in if vs == valuesOf p fresh && not (Array.elem p (mainOf (M.bankKind d.bank))) then Nothing else Just (p <> " " <> value vs)
@@ -236,6 +316,7 @@ mainOf = case _ of
   M.KClock -> [ "div", "mult" ]
   M.KNote -> [ "note" ]
   M.KEnv -> [ "a", "d", "s", "r" ]
+  M.KVoice -> [ "ch" ]
 
 valuesOf :: String -> M.GenBank -> Array String
 valuesOf p = case _ of
@@ -272,6 +353,9 @@ valuesOf p = case _ of
     "ashape" -> sl.attackShape
     "dshape" -> sl.decayShape
     _ -> sl.releaseShape) s
+  M.GVoice vb
+    | p == "ch" -> map (\v -> show v.channel) vb.voices
+    | otherwise -> valuesOf p (M.GEnv (map _.env vb.voices))
 
 words :: String -> Array String
 words = filter (_ /= "") <<< Str.split (Str.Pattern " ") <<< trim
@@ -528,6 +612,7 @@ accepts target kind = case target of
   M.ES9Gt _ -> gates
   M.FH2 n | n > 0 -> gates
   M.Midi _ -> kind == M.KNote
+  _ | kind == M.KVoice -> isJust (gateBankFor target)
   _ -> true
   where
   gates = kind == M.KEuclid || kind == M.KClock
@@ -551,6 +636,9 @@ envelopeWhole = "an envelope bank takes a whole bank: its envelopes answer MIDI 
 refusal :: M.Target -> M.GenKind -> String
 refusal target kind = case target of
   M.Midi _ -> "a MIDI channel takes notes, not " <> M.kindLabel kind
+  M.ES9Gt _ -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
+  M.FH2 n | n > 0 -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
+  _ | kind == M.KVoice -> "voices need the FH-2's converters: its own jacks or an FHX-8CV, with the FHX-8GT for their gates"
   _ -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
 
 -- | A module as the setting it makes, in its module form: a block or a kind
@@ -565,6 +653,8 @@ moduleText m = do
       M.KEuclid -> M.ES9Gt 0
       M.KClock -> M.ES9Gt 0
       M.KNote -> M.ES9Cv 0
+      -- voices need the FH-2's converters
+      M.KVoice -> M.FH2 0
       _ -> M.ES9Main
     isBlock = maybe false (\w -> Block.blockNamed w /= Nothing) (head (words m))
     src = onBank m bank <> (if isBlock then "" else " # fresh")

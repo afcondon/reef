@@ -96,6 +96,18 @@ blocks =
         , p "rate" "4" "steps per beat"
         ]
     }
+  , { name: "pitches", kind: M.KVoice
+    , what: "eight MIDI voices, a pitch each, their gates gathered on the FHX-8GT"
+    , params: []
+    }
+  , { name: "pitch-env", kind: M.KVoice
+    , what: "four MIDI voices, a pitch and an envelope each, their gates on the FHX-8GT"
+    , params: []
+    }
+  , { name: "full-voice", kind: M.KVoice
+    , what: "two MIDI voices with everything: pitch, velocity, envelope and pressure (aftertouch), their gates on the FHX-8GT"
+    , params: []
+    }
   , { name: "chord", kind: M.KNote
     , what: "a chord's notes climbing the octaves across eight outputs"
     , params:
@@ -188,10 +200,21 @@ expand b terms = do
         k = length shape
         noteAt i = root + fromMaybe 0 (shape !! (i `mod` k)) + 12 * (i / k)
       pure (M.GNote (map (\i -> { note: clamp 0 127 (noteAt i) }) slots))
+    "pitches" -> pure (voices [])
+    "pitch-env" -> pure (voices [ M.VEnvelope ])
+    "full-voice" -> pure (voices [ M.VVelocity, M.VEnvelope, M.VPressure ])
     other -> Left ("no block " <> other)
   pure { bank, rest }
   where
   slots = range 0 (M.slotCount - 1)
+  -- as many voices as fit eight jacks; their gates are placed with the bank
+  voices outputs =
+    let
+      n = M.slotCount / (1 + length outputs)
+      env = case M.freshBank M.KVoice of
+        M.GVoice vb -> fromMaybe M.defaultEnvSlot (map _.env (vb.voices !! 0))
+        _ -> M.defaultEnvSlot
+    in M.GVoice { outputs, gates: Nothing, voices: map (\k -> { channel: M.voiceChannel n k, env }) (range 0 (n - 1)) }
 
 data Shape = Sin | Tri | Saw | Sqr
 

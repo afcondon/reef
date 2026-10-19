@@ -2115,7 +2115,7 @@ rack round-trip true
 > lfo fh2cv0 # rate 2
   lfo fh2cv0 # rate 2 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # tri 1 # retrig "1 ~ [3 5] ~"
 == refusals
-squiggle es9main # rate 1 | refused: not a kind of polysignal or a block: squiggle (lfo, euclid, clock, note, env; or a block: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, chord)
+squiggle es9main # rate 1 | refused: not a kind of polysignal or a block: squiggle (lfo, euclid, clock, note, env; or a block: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, pitches, pitch-env, full-voice, chord)
 lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
 euclid es9gt0 # hits many | refused: hits wants a whole number, not many
 lfo | refused: a line starts with a kind and a bank, as in lfo es9main: lfo
@@ -2233,6 +2233,30 @@ env fh2cv0:5-8 # a 10 | refused: fh2cv0:5-8: an envelope bank takes a whole bank
 split es9main | main:1-4 | release-claim polysignal selene:es9:main then apply-polysignal polylfo on main offset 0, 4 slots, as selene:es9:main:1-4 | lfo es9main:1-4 /   0.5 @0 sin 0.8   -- 1 /   0.5 @0.125 sin 0.8   -- 2 /   0.5 @0.25 sin 0.8   -- 3 /   0.5 @0.375 sin 0.8   -- 4
 split midi1 | refused: a MIDI channel has no jacks to split
   overlaps: fh2_0 and fh2_0:5-8 share jacks
+== voice layouts
+pitch-env fh2_0 | main | voices fh2_0 # outputs pitch+env # gates fh2_1:1-4 # ch "11 12 13 14"
+  sent polyvoice on main, gates on gt0 from 1, outputs ["envelope"], channels [11,12,13,14], as selene:fh2:main
+full-voice fh2cv0 | cv0 | voices fh2cv0 # outputs pitch+vel+env+pres # gates fh2_1:5-6 # ch "15 16"
+  sent polyvoice on cv0, gates on gt0 from 5, outputs ["velocity","envelope","pressure"], channels [15,16], as selene:fh2:cv0
+voices fh2_0 # a "5 10" | main | voices fh2_0 # outputs pitch+env # gates fh2_1:1-4 # ch "11 12 13 14" # a "5 10 5 10"
+  sent polyvoice on main, gates on gt0 from 1, outputs ["envelope"], channels [11,12,13,14], as selene:fh2:main
+voices fh2_0 # outputs pitch | refused: no 8 free jacks on fh2_1 for these voices' gates
+pitches fh2cv0:5-8 | refused: fh2cv0:5-8 shares jacks with the voices on fh2cv0; free it first (off fh2cv0)
+pitch-env es9main | refused: voices need a gate bank beside es9main for their gates
+off fh2cv0 | cv0 | off fh2cv0
+  sent (nothing)
+voices fh2_0 # outputs pitch # gates fh2_1:1-8 | main | voices fh2_0 # outputs pitch # gates fh2_1 # ch "11 12 13 14 15 16 10 9"
+  sent polyvoice on main, gates on gt0 from 1, outputs [], channels [11,12,13,14,15,16,10,9], as selene:fh2:main
+  voices fh2_0 pitch gates fh2_1
+    ch 11   -- 1
+    ch 12   -- 2
+    ch 13   -- 3
+    ch 14   -- 4
+    ch 15   -- 5
+    ch 16   -- 6
+    ch 10   -- 7
+    ch 9   -- 8
+  round-trips true
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · <target>:5-8 takes jacks 5-8 · one slot per line · -- mutes a slot.

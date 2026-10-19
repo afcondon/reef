@@ -2087,7 +2087,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> flats <> splits <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> flats <> splits <> voiceLayouts <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2252,6 +2252,26 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
                  Right r -> r.bank <> " | " <> sentBy r <> " | " <> intercalate " / " (take 5 (Array.dropWhile (\l -> String.take 11 l /= "lfo es9main") (String.split (String.Pattern "\n") r.rack))))
           [ "split es9main", "split midi1" ]
         <> [ "  overlaps: " <> intercalate "; " (SM.overlaps clash) ]
+  -- voice layouts (docs/kb/plans/selene-voice-layouts.md): the presets as
+  -- lines, their gates placed on the FHX-8GT and their channels kept apart,
+  -- the rack they leave, and what goes to the daemon
+  voiceLayouts =
+    let
+      step acc src = case SL.rigLine src acc.rack of
+        Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
+        Right r -> acc { rack = r.rack, out = acc.out <> [ src <> " | " <> r.bank <> " | " <> r.line, "  sent " <> voiceFields r.json ] }
+      run = foldl step { rack: "", out: [] }
+        [ "pitch-env fh2_0", "full-voice fh2cv0", "voices fh2_0 # a \"5 10\"", "voices fh2_0 # outputs pitch"
+        , "pitches fh2cv0:5-8", "pitch-env es9main", "off fh2cv0", "voices fh2_0 # outputs pitch # gates fh2_1:1-8" ]
+      body = filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") run.rack)
+    in
+      [ "== voice layouts" ] <> run.out <> map ("  " <> _) body
+        <> [ "  round-trips " <> show (SR.printRack (SR.parseRack run.rack) == run.rack) ]
+  voiceFields j = case JSON.readJSON j of
+    Right (e :: { family :: String, bank :: String, alias :: String, gates :: { bank :: String, offset :: Int }, outputs :: Array String, slots :: Array { channel :: Int } }) ->
+      e.family <> " on " <> e.bank <> ", gates on " <> e.gates.bank <> " from " <> show (e.gates.offset + 1)
+        <> ", outputs " <> show e.outputs <> ", channels " <> show (map _.channel e.slots) <> ", as " <> e.alias
+    Left _ -> if j == "" then "(nothing)" else "unreadable"
   -- an LFO turned all the way down keeps its shape in the text (`sqr 0`), so
   -- turning it back up gives the same wave; a flat sine prints as before
   flats = [ "== flat slots" ] <> map flat

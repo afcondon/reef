@@ -18,6 +18,7 @@ module Reef.Selene.Wire
 
 import Prelude
 
+import Data.Array as Array
 import Data.Maybe (Maybe(..))
 import Simple.JSON (writeJSON)
 import Reef.Selene.Model as M
@@ -63,6 +64,7 @@ familyOf = case _ of
   M.GEuclid _ -> "polyeuclid"
   M.GNote _ -> "polypresetnote"
   M.GEnv _ -> "polyenv"
+  M.GVoice _ -> "polyvoice"
 
 -- | The name a bank's claim is held under in its daemon: one per (socket,
 -- | bank), whatever is on it, so a re-push replaces the claim and an `off`
@@ -100,22 +102,47 @@ destinationEnvelope d0 = do
     -- so a whole bank's envelope is what it always was
     offset = if M.isWholeBank d.jacks then Nothing else Just (d.jacks.first - 1)
     json = case d.bank of
+      -- a voice layout: its gates on their own bank (the same daemon's), its
+      -- outputs by name, and a channel and an envelope a voice. With nowhere
+      -- for its gates it has nothing to send.
+      M.GVoice vb -> do
+        g <- vb.gates
+        gsb <- targetSocketBank g.target
+        if gsb.socket /= sb.socket then Nothing else Just $
+          writeJSON
+            { bank, family, alias, offset
+            , gates: { bank: gsb.bank, offset: g.jacks.first - 1 }
+            , outputs: map outputName (Array.filter (\o -> Array.elem o vb.outputs) M.voiceOuts)
+            , slots: map voiceWire vb.voices
+            }
       -- `wave` is the editor's memory of a flat slot's shape; the daemon has
       -- only the mix.
       M.GLfo slots ->
-        writeJSON { bank, family, alias, offset, outputRange: range, slots: map lfoWire slots }
+        Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots: map lfoWire slots }
       M.GEuclid slots ->
-        writeJSON { bank, family, alias, offset, outputRange: range, slots }
+        Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots }
       M.GNote slots ->
-        writeJSON { bank, family, alias, offset, outputRange: range, slots }
+        Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots }
       -- Flat 0..127 bytes, field names already matching the daemon's record.
       M.GEnv slots ->
-        writeJSON { bank, family, alias, offset, outputRange: range, slots }
+        Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots }
       -- clock `base` is an ADT; the daemon wants the wire token string.
       M.GClock slots ->
-        writeJSON { bank, family, alias, offset, outputRange: range, slots: map clockWire slots }
-  pure { socket: sb.socket, bank: placeOn sb d.jacks, json }
+        Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots: map clockWire slots }
+  json' <- json
+  pure { socket: sb.socket, bank: placeOn sb d.jacks, json: json' }
   where
+  outputName = case _ of
+    M.VVelocity -> "velocity"
+    M.VEnvelope -> "envelope"
+    M.VPressure -> "pressure"
+  voiceWire v =
+    { channel: v.channel
+    , attack: v.env.attack, decay: v.env.decay, sustain: v.env.sustain, release: v.env.release
+    , depth: v.env.depth, velDepth: v.env.velDepth, timeRange: v.env.timeRange
+    , randomDepth: v.env.randomDepth
+    , attackShape: v.env.attackShape, decayShape: v.env.decayShape, releaseShape: v.env.releaseShape
+    }
   lfoWire s =
     { rate: s.rate, phase: s.phase, level: s.level
     , sin: s.sin, sqr: s.sqr, tri: s.tri, saw: s.saw, rnd: s.rnd, nse: s.nse

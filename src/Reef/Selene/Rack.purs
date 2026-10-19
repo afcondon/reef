@@ -78,7 +78,7 @@ printRack sel =
 -- | One destination: a `<kind> <target>` header then eight tagged slots.
 printDest :: M.Destination -> String
 printDest d =
-  (kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks <> rangeTok) <> "\n"
+  (kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks <> layoutTok <> rangeTok) <> "\n"
     <> joinWith "\n" (mapWithIndex slotLine (bankSlots d.bank))
   where
   -- Printed only when the user pinned one, so an unpinned block round-trips
@@ -87,13 +87,22 @@ printDest d =
     <> (if d.muted then " muted" else "")
     <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
   -- tagged with its jack, so a run on 5-8 reads 5, 6, 7, 8
-  slotLine i row = (if Array.elem i d.mutedSlots then "  -- " else "  ") <> row <> "   -- " <> show (d.jacks.first + i)
+  -- a voice layout's outputs and where its gates are gathered
+  layoutTok = case d.bank of
+    M.GVoice vb -> " " <> M.voiceOutsWord vb.outputs <> maybe "" (\g -> " gates " <> M.placeWire g.target g.jacks) vb.gates
+    _ -> ""
+  -- tagged with its jack (a voice, with its pitch's), so a run on 5-8 reads 5, 6, 7, 8
+  slotLine i row = (if Array.elem i d.mutedSlots then "  -- " else "  ") <> row <> "   -- " <> show (d.jacks.first + i * stride)
+  stride = case d.bank of
+    M.GVoice vb -> M.voiceStride vb
+    _ -> 1
   bankSlots = case _ of
     M.GLfo slots -> map lfoLine slots
     M.GEuclid slots -> map euclidLine slots
     M.GClock slots -> map clockLine slots
     M.GNote slots -> map noteLine slots
     M.GEnv slots -> map envLine slots
+    M.GVoice vb -> map (voiceLine vb) vb.voices
 
 kindKeyword :: M.GenBank -> String
 kindKeyword = case _ of
@@ -102,6 +111,7 @@ kindKeyword = case _ of
   M.GClock _ -> "clock"
   M.GNote _ -> "note"
   M.GEnv _ -> "env"
+  M.GVoice _ -> "voices"
 
 -- ADSR always; the rest only when moved off its default, so a plain envelope
 -- reads as four numbers and a shaped one shows exactly what was changed.
@@ -133,6 +143,18 @@ envLine sl =
   -- Elided against the SAME base `parseEnv` folds onto (`M.defaultEnvSlot`).
   -- These were literals, and drifted from the parser's — see that definition.
   opt k v def = if v == def then "" else " " <> k <> " " <> show v
+
+-- | A voice: its channel, and its envelope when the layout has one.
+voiceLine :: M.VoiceBank -> M.VoiceSlot -> String
+voiceLine vb v = "ch " <> show v.channel <> (if Array.elem M.VEnvelope vb.outputs then " " <> envLine v.env else "")
+
+-- | `ch <n> [envelope]`; a voice with no channel given takes `def`'s.
+parseVoice :: M.VoiceSlot -> String -> M.VoiceSlot
+parseVoice def s = case words s of
+  [] -> def
+  toks -> case toks !! 0, toks !! 1 >>= Int.fromString of
+    Just "ch", Just ch -> { channel: clamp 1 16 ch, env: if Array.length toks > 2 then parseEnv (joinWith " " (drop 2 toks)) else def.env }
+    _, _ -> def { env = parseEnv s }
 
 lfoLine :: M.ModSlot -> String
 lfoLine sl =
@@ -182,6 +204,7 @@ type PState =
       , range :: Maybe M.OutputRange
       , retrig :: Maybe String
       , muted :: Boolean
+      , layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }
       , rows :: Array { text :: Maybe String, muted :: Boolean }
       }
   }
@@ -199,7 +222,7 @@ parseRack doc =
     in
       if t == "" then closeBlock st
       else case headerOf t of
-        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, jacks: hdr.jacks, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, rows: [] } }
+        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, jacks: hdr.jacks, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, layout: hdr.layout, rows: [] } }
         Nothing -> case st.open of
           Just blk -> st { open = Just (addLine blk t) }
           Nothing -> st   -- a stray line outside any block: ignore
@@ -233,14 +256,25 @@ closeBlock :: PState -> PState
 closeBlock st = case st.open of
   Nothing -> st
   Just blk ->
-    let rows = fitTo blk.jacks.count blk.rows
-        bank = buildBank blk.kind (map _.text rows)
+    let stride = 1 + Array.length blk.layout.outputs
+        rows = fitTo (if blk.kind == M.KVoice then blk.jacks.count / stride else blk.jacks.count) blk.rows
+        bank = case blk.kind of
+          M.KVoice -> buildVoices blk.layout (map _.text rows)
+          k -> buildBank k (map _.text rows)
         mutedSlots = Array.catMaybes (mapWithIndex (\i r -> if r.muted && isJust r.text then Just i else Nothing) rows)
     in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are silent).
 fitTo :: Int -> Array { text :: Maybe String, muted :: Boolean } -> Array { text :: Maybe String, muted :: Boolean }
 fitTo n rows = take n (rows <> map (const { text: Nothing, muted: false }) (range 0 n))
+
+-- | A voice layout's voices, each read onto the fresh voice at its place.
+buildVoices :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } } -> Array (Maybe String) -> M.GenBank
+buildVoices layout rows =
+  M.GVoice { outputs: layout.outputs, gates: layout.gates, voices: mapWithIndex voice rows }
+  where
+  n = Array.length rows
+  voice k row = let def = { channel: M.voiceChannel n k, env: M.defaultEnvSlot } in maybe def (parseVoice def) row
 
 buildBank :: M.GenKind -> Array (Maybe String) -> M.GenBank
 buildBank kind rows = case kind of
@@ -249,6 +283,7 @@ buildBank kind rows = case kind of
   M.KClock -> M.GClock (map (maybe silentClock parseClock) rows)
   M.KNote -> M.GNote (map (maybe silentNote parseNote) rows)
   M.KEnv -> M.GEnv (map (maybe silentEnv parseEnv) rows)
+  M.KVoice -> buildVoices { outputs: [], gates: Nothing } rows
 
 -- ---------------------------------------------------------------------------
 -- Header
@@ -262,18 +297,26 @@ buildBank kind rows = case kind of
 -- | A `retrig "<pattern>"` may close the header (the pattern is quoted and may
 -- | hold spaces, so it is taken off before the words are counted). Before it,
 -- | the word `muted` marks a muted destination.
-headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean }
+headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean, layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } } }
 headerOf t0 = case words t of
   [] -> Nothing
   toks0 -> case toks0 !! 0 >>= kindOf of
     Just k ->
       let
         muted = Array.last toks0 == Just "muted"
-        toks = if muted then fromMaybe toks0 (Array.init toks0) else toks0
+        toks1 = if muted then fromMaybe toks0 (Array.init toks0) else toks0
+        -- a voice layout: `voices <place> <outputs> [gates <place>]`
+        gatesAt = Array.elemIndex "gates" toks1
+        gates = gatesAt >>= \i -> toks1 !! (i + 1) <#> parsePlace
+        toks2 = maybe toks1 (\i -> Array.take i toks1 <> Array.drop (i + 2) toks1) gatesAt
+        outputs = if k == M.KVoice then toks2 !! 2 >>= M.voiceOutsOfWord else Nothing
+        toks = if isJust outputs then Array.take 2 toks2 <> Array.drop 3 toks2 else toks2
+        layout = { outputs: fromMaybe [] outputs, gates }
+        at tgt r = { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: r, retrig, muted, layout }
       in
         case toks of
-          [ _, tgt ] -> Just { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: Nothing, retrig, muted }
-          [ _, tgt, rng ] -> map (\r -> { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: Just r, retrig, muted }) (M.rangeOfWire rng)
+          [ _, tgt ] -> Just (at tgt Nothing)
+          [ _, tgt, rng ] -> map (\r -> at tgt (Just r)) (M.rangeOfWire rng)
           _ -> Nothing
     Nothing -> Nothing
   where
@@ -291,6 +334,7 @@ kindOf = case _ of
   "clock" -> Just M.KClock
   "note" -> Just M.KNote
   "env" -> Just M.KEnv
+  "voices" -> Just M.KVoice
   _ -> Nothing
 
 parseTarget :: String -> M.Target
@@ -362,6 +406,9 @@ silence = case _ of
   M.GClock s -> M.GClock (map (const silentClock) s)
   M.GNote s -> M.GNote (map (const silentNote) s)
   M.GEnv s -> M.GEnv (map (const silentEnv) s)
+  -- a voice is silenced where its notes come from (the playhead, the
+  -- routing), not by the jacks: its converter only follows notes
+  M.GVoice vb -> M.GVoice vb
 
 -- | A destination as it plays while muted: every slot silent, on a range that
 -- | puts silence at 0 V. A slot's level is a position in its range (both
@@ -379,6 +426,7 @@ silenced d = d { bank = silence d.bank, range = rangeFor d.bank }
     M.GEuclid _ -> Just M.Unipolar5V
     M.GClock _ -> Just M.Unipolar5V
     M.GNote _ -> d.range
+    M.GVoice _ -> d.range
 
 -- | A destination as it plays with its muted slots (`mutedSlots`) silent and
 -- | the rest as they are. An LFO slot's level is a position in its range, so on
@@ -402,6 +450,7 @@ slotsSilenced d
     M.GClock s -> M.GClock (over silentClock s)
     M.GNote s -> M.GNote (over silentNote s)
     M.GEnv s -> M.GEnv (over silentEnv s)
+    M.GVoice vb -> M.GVoice vb
 
 silentLfo :: M.ModSlot
 silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0, wave: M.WaveSin }

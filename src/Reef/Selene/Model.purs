@@ -45,6 +45,16 @@ module Reef.Selene.Model
   , takeSlots
   , widenBank
   , bankSize
+  , bankJacks
+  , placesOf
+  , VoiceBank
+  , VoiceSlot
+  , VoiceOut(..)
+  , voiceOuts
+  , voiceOutsWord
+  , voiceOutsOfWord
+  , voiceStride
+  , voiceChannel
   , OutputRange(..)
   , rangeLabel
   , rangeToWire
@@ -90,12 +100,12 @@ import Reef.Numeric (ln, sin) as N
 -- |
 -- | `KEnv` (polyenv) was deferred until 2026-08-08. Both daemons had supported
 -- | the family all along; only this UI was missing.
-data GenKind = KLfo | KEuclid | KClock | KNote | KEnv
+data GenKind = KLfo | KEuclid | KClock | KNote | KEnv | KVoice
 
 derive instance Eq GenKind
 
 allKinds :: Array GenKind
-allKinds = [ KLfo, KEuclid, KClock, KNote, KEnv ]
+allKinds = [ KLfo, KEuclid, KClock, KNote, KEnv, KVoice ]
 
 kindLabel :: GenKind -> String
 kindLabel = case _ of
@@ -104,6 +114,7 @@ kindLabel = case _ of
   KClock -> "POLYCLOCK"
   KNote -> "POLYNOTE"
   KEnv -> "POLYENV"
+  KVoice -> "POLYVOICE"
 
 -- | An eight-slot bank, typed by its generator. The kind is implied by the
 -- | constructor (mirrors `Tidal.Selene`'s `Selene s` sum).
@@ -113,9 +124,13 @@ data GenBank
   | GClock (Array ClockSlot)
   | GNote (Array PresetNoteSlot)
   | GEnv (Array EnvSlot)
+  -- | a voice layout (docs/kb/plans/selene-voice-layouts.md): MIDI voices,
+  -- | not free-running signals, laid out as Yarns lays out its parts
+  | GVoice VoiceBank
 
 bankKind :: GenBank -> GenKind
 bankKind = case _ of
+  GVoice _ -> KVoice
   GLfo _ -> KLfo
   GEuclid _ -> KEuclid
   GClock _ -> KClock
@@ -239,6 +254,60 @@ type EnvSlot =
   , releaseShape :: Int
   }
 
+-- | A voice layout: N independent MIDI voices, each a converter on its own
+-- | channel. Each voice's CV outputs (pitch, then `outputs` in the FH-2's
+-- | order) take consecutive jacks of the destination's run, so a voice is
+-- | `voiceStride` jacks wide; its gate is the k-th jack of `gates`, a run of
+-- | a gate bank, gathered there as Yarns keeps its gates on their own jacks.
+type VoiceBank =
+  { outputs :: Array VoiceOut
+  , gates :: Maybe { target :: Target, jacks :: Jacks }
+  , voices :: Array VoiceSlot
+  }
+
+-- | One voice: the MIDI channel that plays it, and its envelope (used when
+-- | the layout has one).
+type VoiceSlot = { channel :: Int, env :: EnvSlot }
+
+-- | A voice's CV outputs beyond its pitch, in the order the FH-2 lays them out.
+data VoiceOut = VVelocity | VEnvelope | VPressure
+
+derive instance Eq VoiceOut
+
+voiceOuts :: Array VoiceOut
+voiceOuts = [ VVelocity, VEnvelope, VPressure ]
+
+-- | The rack's word for a layout's outputs: `pitch`, `pitch+env`,
+-- | `pitch+vel+env+pres`.
+voiceOutsWord :: Array VoiceOut -> String
+voiceOutsWord os = Str.joinWith "+" ([ "pitch" ] <> map short (Array.filter (\o -> Array.elem o os) voiceOuts))
+  where
+  short = case _ of
+    VVelocity -> "vel"
+    VEnvelope -> "env"
+    VPressure -> "pres"
+
+voiceOutsOfWord :: String -> Maybe (Array VoiceOut)
+voiceOutsOfWord w = case Array.uncons (Str.split (Str.Pattern "+") w) of
+  Just { head: "pitch", tail } -> map (\os -> Array.filter (\o -> Array.elem o os) voiceOuts) (traverseMaybe out tail)
+  _ -> Nothing
+  where
+  out = case _ of
+    "vel" -> Just VVelocity
+    "env" -> Just VEnvelope
+    "pres" -> Just VPressure
+    _ -> Nothing
+  traverseMaybe f xs = Array.foldl (\acc x -> (\a b -> Array.snoc a b) <$> acc <*> f x) (Just []) xs
+
+-- | How many jacks one voice takes: its pitch and its other outputs.
+voiceStride :: VoiceBank -> Int
+voiceStride vb = 1 + length vb.outputs
+
+-- | A voice's default MIDI channel: from 11 (the FH-2 voices' channels,
+-- | 11-14), or earlier when there are more voices than 11..16 holds.
+voiceChannel :: Int -> Int -> Int
+voiceChannel n k = min 11 (17 - n) + k
+
 -- | The base an envelope line is READ ONTO and WRITTEN AGAINST — one value, so
 -- | the two can't disagree.
 -- |
@@ -353,6 +422,8 @@ defaultTargetFor = case _ of
   -- Envelopes are CV, so never a gate bank. Defaults to the FH-2 because that is
   -- where the ADSR generator with curve shapes lives.
   KEnv -> FH2 0
+  -- MIDI voices: the FH-2 is where the converters are
+  KVoice -> FH2 0
 
 -- ---------------------------------------------------------------------------
 -- Output range + clock bases
@@ -526,6 +597,9 @@ freshBank = case _ of
   KClock -> GClock (map clockSlot ixs)
   KNote -> GNote (map noteSlot ixs)
   KEnv -> GEnv (map envSlot ixs)
+  -- eight pitches, the simplest layout; their gates found a place when the
+  -- bank is put on the rack (Reef.Selene.Line)
+  KVoice -> GVoice { outputs: [], gates: Nothing, voices: map (\k -> { channel: voiceChannel slotCount k, env: envSlot 4 }) ixs }
   where
   ixs = range 0 (slotCount - 1)
   -- eight sines, phase-spread over the cycle (a travelling wave)
@@ -625,14 +699,23 @@ samePlace a b = a.target == b.target && a.jacks == b.jacks
 -- | page and the line refuse to make one, and the daemons refuse to play one.
 overlaps :: Selene -> Array String
 overlaps s = Array.catMaybes do
-  i <- range 0 (length s.destinations - 1)
-  j <- Array.filter (_ > i) (range 0 (length s.destinations - 1))
-  pure case s.destinations !! i, s.destinations !! j of
+  i <- range 0 (length places - 1)
+  j <- Array.filter (_ > i) (range 0 (length places - 1))
+  pure case places !! i, places !! j of
     Just a, Just b | a.target == b.target && jacksOverlap a.jacks b.jacks ->
       Just (placeWire a.target a.jacks <> " and " <> placeWire b.target b.jacks <> " share jacks")
     _, _ -> Nothing
+  where
+  places = Array.concatMap placesOf s.destinations
 
--- | The first `n` slots of a bank: a bank sized to a run.
+-- | Every place a destination holds: its run, and a voice layout's gates.
+placesOf :: Destination -> Array { target :: Target, jacks :: Jacks }
+placesOf d = [ { target: d.target, jacks: d.jacks } ] <> case d.bank of
+  GVoice vb -> Array.fromFoldable vb.gates
+  _ -> []
+
+-- | The first `n` jacks' worth of a bank: a bank sized to a run (a slot a
+-- | jack; a voice layout's whole voices).
 takeSlots :: Int -> GenBank -> GenBank
 takeSlots n = case _ of
   GLfo xs -> GLfo (Array.take n xs)
@@ -640,6 +723,10 @@ takeSlots n = case _ of
   GClock xs -> GClock (Array.take n xs)
   GNote xs -> GNote (Array.take n xs)
   GEnv xs -> GEnv (Array.take n xs)
+  -- `n` jacks hold n / stride whole voices, and that many gates
+  GVoice vb ->
+    let m = n / voiceStride vb
+    in GVoice vb { voices = Array.take m vb.voices, gates = map (\g -> g { jacks = g.jacks { count = min g.jacks.count m } }) vb.gates }
 
 -- | How many slots (and so jacks) a bank has.
 bankSize :: GenBank -> Int
@@ -649,6 +736,13 @@ bankSize = case _ of
   GClock xs -> length xs
   GNote xs -> length xs
   GEnv xs -> length xs
+  GVoice vb -> length vb.voices
+
+-- | How many jacks a bank drives: a slot each, or a voice's stride each.
+bankJacks :: GenBank -> Int
+bankJacks = case _ of
+  GVoice vb -> length vb.voices * voiceStride vb
+  b -> bankSize b
 
 -- | A run's bank spread back over the whole of the bank: its slots on their
 -- | jacks, and the fresh eight's slots on the rest.
@@ -659,10 +753,21 @@ widenBank j bank = case freshBank (bankKind bank), bank of
   GClock f, GClock xs -> GClock (spread f xs)
   GNote f, GNote xs -> GNote (spread f xs)
   GEnv f, GEnv xs -> GEnv (spread f xs)
+  -- a layout grows by whole voices, before and after its run
+  _, GVoice vb ->
+    let
+      n = slotCount / voiceStride vb
+      before = (j.first - 1) / voiceStride vb
+      fresh = map (\k -> { channel: voiceChannel n k, env: (freshVoice k).env }) (range 0 (n - 1))
+      vs = Array.take before fresh <> vb.voices <> Array.drop (before + length vb.voices) fresh
+    in GVoice vb { voices = Array.take n vs, gates = map (\g -> g { jacks = g.jacks { count = n } }) vb.gates }
   _, b -> b
   where
   spread :: forall a. Array a -> Array a -> Array a
   spread f xs = Array.take (j.first - 1) f <> xs <> Array.drop (j.first - 1 + j.count) f
+  freshVoice k = case freshBank KVoice of
+    GVoice vb -> fromMaybe { channel: 11, env: defaultEnvSlot } (vb.voices !! k)
+    _ -> { channel: 11, env: defaultEnvSlot }
 
 -- | A fresh bank of a kind sized to a run: the fresh eight's first slots.
 freshBankOn :: Jacks -> GenKind -> GenBank
