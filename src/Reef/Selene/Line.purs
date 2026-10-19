@@ -259,8 +259,10 @@ layoutOf line sel vb0 outputsTerm gatesTerm = do
       Right { target: place.target, jacks: place.jacks { count = n } }
     Nothing -> case vb0.gates of
       Just g | g.jacks.first + n - 1 <= M.slotCount && free gateBank (g.jacks { count = n }) -> Right (g { jacks = g.jacks { count = n } })
+      -- the same jack numbers as the layout's own run first (pitches on 5-8,
+      -- gates on 5-8: easy to patch and to remember), else the first free run
       _ -> note ("no " <> show n <> " free jacks on " <> M.targetWire gateBank <> " for these voices' gates")
-             (Array.find (free gateBank) (map (\f -> { first: f, count: n }) (Array.range 1 (M.slotCount - n + 1))))
+             (Array.find (free gateBank) (map (\f -> { first: f, count: n }) (Array.nub ([ line.jacks.first ] <> Array.range 1 (M.slotCount - n + 1)) # filter (\f -> f + n - 1 <= M.slotCount))))
                <#> \j -> { target: gateBank, jacks: j }
   for_ (Array.find (\o -> not (M.samePlace o line) && Array.any (\p -> p.target == gates.target && M.jacksOverlap p.jacks gates.jacks) (M.placesOf o)) sel.destinations) \o ->
     Left ("the voices' gates on " <> M.placeWire gates.target gates.jacks <> " share jacks with " <> M.placeWire o.target o.jacks)
