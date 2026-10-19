@@ -29,6 +29,7 @@ module Reef.Selene.Line
   , rigLine
   , moduleOf
   , onBank
+  , onPlace
   , moduleKind
   , accepts
   , refusal
@@ -47,6 +48,7 @@ import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Number as Number
 import Data.String as Str
 import Data.String.Common (joinWith, trim)
+import Data.Foldable (for_)
 import Data.Traversable (traverse)
 import Reef.Selene.Model as M
 import Reef.Selene.Rack as Rack
@@ -59,6 +61,8 @@ type Line =
   -- | a block (Reef.Selene.Block) in place of the kind: it sets the whole bank
   , block :: Maybe String
   , target :: M.Target
+  -- | the run of the target's jacks the line's bank sits on (`fh2_0:5-8`)
+  , jacks :: M.Jacks
   , terms :: Array { param :: String, values :: Array String }
   }
 
@@ -74,9 +78,9 @@ parseLine src = do
         (case named of
           Just b -> Just b.kind
           Nothing -> Rack.kindOf k)
-      target <- Rack.bankOf t
+      place <- Rack.placeOf t
       terms <- foldM (\acc part -> snoc acc <$> term part) [] (filter (_ /= "") rest)
-      pure { kind, block: map _.name named, target, terms }
+      pure { kind, block: map _.name named, target: place.target, jacks: place.jacks, terms }
     _ -> Left ("a line starts with a kind and a bank, as in lfo es9main: " <> h)
   where
   term part = case Str.indexOf (Str.Pattern " ") part of
@@ -96,11 +100,15 @@ parseLine src = do
 applyLine :: Line -> M.Selene -> Either String M.Selene
 applyLine line sel = do
   let
-    existing = findIndex (\d -> d.target == line.target) sel.destinations
+    existing = findIndex (M.samePlace line) sel.destinations
     current = case existing >>= (sel.destinations !! _) of
       Just d | M.bankKind d.bank == kindOfLine -> d.bank
-      _ -> M.freshBank kindOfLine
+      _ -> M.freshBankOn line.jacks kindOfLine
     kindOfLine = line.kind
+    -- another destination on jacks this line's run shares: refused, as two
+    -- generators on one jack would sum in the daemon
+    clash = Array.find (\d -> d.target == line.target && not (M.samePlace line d) && M.jacksOverlap d.jacks line.jacks) sel.destinations
+  for_ clash \d -> Left (M.placeWire line.target line.jacks <> " shares jacks with the " <> Rack.kindKeyword d.bank <> " on " <> M.placeWire d.target d.jacks <> "; free it first (off " <> M.placeWire d.target d.jacks <> ")")
   -- a block sets the whole bank from its own parameters; the line's other
   -- terms then apply to that, as plain parameters
   -- `# fresh` starts the bank fresh first: a module dropped on a bank
@@ -111,8 +119,8 @@ applyLine line sel = do
       -- clears it; the last one named wins
       retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
   { start, terms } <- case line.block >>= Block.blockNamed of
-    Just b -> (\x -> { start: x.bank, terms: x.rest }) <$> Block.expand b named
-    Nothing -> pure { start: if fresh then M.freshBank kindOfLine else current, terms: named }
+    Just b -> (\x -> { start: M.takeSlots line.jacks.count x.bank, terms: x.rest }) <$> Block.expand b named
+    Nothing -> pure { start: if fresh then M.freshBankOn line.jacks kindOfLine else current, terms: named }
   bank <- foldM applyTerm start terms
   retrig <- case retrigSet of
     Just v | v == "off" || v == "~" || v == "" -> Right Nothing
@@ -129,7 +137,7 @@ applyLine line sel = do
   let was = existing >>= (sel.destinations !! _)
       muted = maybe false _.muted was
       mutedSlots = maybe [] _.mutedSlots was
-      dest = { target: line.target, range: Nothing, bank, retrig, muted, mutedSlots }
+      dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, muted, mutedSlots }
   pure case existing of
     Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
     Nothing -> sel { destinations = snoc sel.destinations dest }
@@ -204,9 +212,9 @@ paramsOf = case _ of
 -- | whole of it.
 printLine :: M.Destination -> String
 printLine d =
-  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.targetWire d.target ] <> terms <> retrigTerm)
+  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks ] <> terms <> retrigTerm)
   where
-  fresh = M.freshBank (M.bankKind d.bank)
+  fresh = M.freshBankOn d.jacks (M.bankKind d.bank)
   terms = Array.catMaybes (map term (paramsOf (M.bankKind d.bank)))
   term p =
     let vs = valuesOf p d.bank
@@ -274,7 +282,7 @@ retrigsOf :: String -> Array { base :: Int, pattern :: String }
 retrigsOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
   where
   one d = case d.bank, d.retrig, M.retrigBase d.target of
-    M.GLfo _, Just pattern, Just base | not d.muted -> Just { base, pattern }
+    M.GLfo _, Just pattern, Just base | not d.muted -> Just { base: base + d.jacks.first - 1, pattern }
     _, _, _ -> Nothing
 
 -- | The modular banks a rack holds: each one's daemon (socket), bank, and the
@@ -285,7 +293,7 @@ retrigsOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
 banksOf :: String -> Array { socket :: String, bank :: String, owner :: String }
 banksOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
   where
-  one d = map (\sb -> { socket: sb.socket, bank: sb.bank, owner: Wire.ownerOf sb }) (Wire.targetSocketBank d.target)
+  one d = map (\sb -> { socket: sb.socket, bank: Wire.placeOn sb d.jacks, owner: Wire.ownerOf sb d.jacks }) (Wire.targetSocketBank d.target)
 
 -- | What the rig does with a `selene $` line (Architeuthis's Handler): the
 -- | rack it keeps on the stage (`selene/rack`) with the line applied, and the
@@ -310,28 +318,56 @@ rigCommand src rack = case words src of
   -- for something else (a dropped "free"). No json: there is nothing for the
   -- rig to keep and send again.
   [ "off", t ] -> do
-    target <- Rack.bankOf t
+    place <- Rack.placeOf t
     let
       sel = Rack.parseRack rack
-      sb = Wire.targetSocketBank target
-    _ <- note (t <> " is already free") (Array.find (\d -> d.target == target) sel.destinations)
+      sb = Wire.targetSocketBank place.target
+    _ <- note (t <> " is already free") (Array.find (M.samePlace place) sel.destinations)
     pure
-      { rack: Rack.printRack (sel { destinations = filter (\d -> d.target /= target) sel.destinations })
+      { rack: Rack.printRack (sel { destinations = filter (not <<< M.samePlace place) sel.destinations })
       , line: "off " <> t
       , socket: maybe "" _.socket sb
-      , bank: maybe "" _.bank sb
+      , bank: maybe "" (\b -> Wire.placeOn b place.jacks) sb
       , json: ""
-      , command: maybe "" (\b -> "release-claim polysignal " <> Wire.ownerOf b) sb
+      , command: maybe "" (\b -> "release-claim polysignal " <> Wire.ownerOf b place.jacks) sb
+      , note: ""
+      }
+  -- `split <bank>`: a whole bank becomes its first four jacks, keeping their
+  -- slots, and jacks 5-8 are free for something else (two rows of four on
+  -- the page). `join <bank>:<run>`: a run grows back to the whole bank, its
+  -- slots on its jacks and fresh ones on the rest, if nothing else is on
+  -- the bank. Either is two daemon commands, in order: the old claim
+  -- released (which silences its jacks), then the new one applied, since the
+  -- daemon refuses a claim that shares jacks with another.
+  [ verb, t ] | verb == "split" || verb == "join" -> do
+    place <- Rack.placeOf t
+    let sel = Rack.parseRack rack
+    i <- note (t <> " has nothing on it to " <> verb) (findIndex (M.samePlace place) sel.destinations)
+    d <- note (t <> " went missing") (sel.destinations !! i)
+    d' <- if verb == "split" then splitDest d else joinDest sel d
+    let
+      sel' = sel { destinations = fromMaybe sel.destinations (updateAt i d' sel.destinations) }
+      sb = Wire.targetSocketBank d.target
+      sent = Wire.destinationEnvelope d'
+    pure
+      { rack: Rack.printRack sel'
+      , line: verb <> " " <> t
+      , socket: maybe "" _.socket sb
+      , bank: maybe "" _.bank sent
+      , json: maybe "" _.json sent
+      , command: case sb, sent of
+          Just b, Just w -> "release-claim polysignal " <> Wire.ownerOf b d.jacks <> "\n" <> "apply-polysignal " <> w.json
+          _, _ -> ""
       , note: ""
       }
   -- `mute <bank>` / `unmute <bank>`: the bank stays as it is and its jacks go
   -- silent, or play it again
   [ verb, t ] | verb == "mute" || verb == "unmute" -> do
-    target <- Rack.bankOf t
+    place <- Rack.placeOf t
     let
       sel = Rack.parseRack rack
       muted = verb == "mute"
-    i <- note (t <> " has nothing on it to " <> verb) (findIndex (\d -> d.target == target) sel.destinations)
+    i <- note (t <> " has nothing on it to " <> verb) (findIndex (M.samePlace place) sel.destinations)
     dest <- note (t <> " went missing") (sel.destinations !! i)
     let
       dest' = dest { muted = muted }
@@ -347,11 +383,36 @@ rigCommand src rack = case words src of
       }
   _ -> rigLine' src rack
 
+-- | A whole bank as its first four jacks (`split`).
+splitDest :: M.Destination -> Either String M.Destination
+splitDest d
+  | not (M.isWholeBank d.jacks) = Left (M.placeWire d.target d.jacks <> " is already a run of its bank; split takes a whole bank")
+  | otherwise = case d.target of
+      M.Midi _ -> Left "a MIDI channel has no jacks to split"
+      M.Virtual _ -> Left "a virtual bank has no jacks to split"
+      _ -> Right d
+        { jacks = { first: 1, count: 4 }
+        , bank = M.takeSlots 4 d.bank
+        , mutedSlots = filter (_ < 4) d.mutedSlots
+        }
+
+-- | A run as the whole of its bank (`join`), if nothing else is on it.
+joinDest :: M.Selene -> M.Destination -> Either String M.Destination
+joinDest sel d
+  | M.isWholeBank d.jacks = Left (M.placeWire d.target d.jacks <> " is already the whole bank")
+  | otherwise = case Array.find (\o -> o.target == d.target && not (M.samePlace o d)) sel.destinations of
+      Just o -> Left (M.placeWire o.target o.jacks <> " is on the same bank; free it first (off " <> M.placeWire o.target o.jacks <> ")")
+      Nothing -> Right d
+        { jacks = M.allJacks
+        , bank = M.widenBank d.jacks d.bank
+        , mutedSlots = map (\k -> k + d.jacks.first - 1) d.mutedSlots
+        }
+
 rigLine' :: String -> String -> Either String RigLine
 rigLine' src rack = do
   line <- parseLine src
   sel <- applyLine line (Rack.parseRack rack)
-  dest <- note "the line's bank went missing" (Array.find (\d -> d.target == line.target) sel.destinations)
+  dest <- note "the line's bank went missing" (Array.find (M.samePlace line) sel.destinations)
   let sent = Wire.destinationEnvelope dest
   pure
     { rack: Rack.printRack sel
@@ -360,7 +421,7 @@ rigLine' src rack = do
     , bank: maybe "" _.bank sent
     , json: maybe "" _.json sent
     , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
-    , note: if dest.muted then "muted: the jacks stay silent until unmute " <> M.targetWire dest.target else rateNote dest
+    , note: if dest.muted then "muted: the jacks stay silent until unmute " <> M.placeWire dest.target dest.jacks else rateNote dest
     }
 
 -- | What an FH-2 LFO bank's rates will really be, when some clamp: said once
@@ -385,35 +446,39 @@ resetOn rest rack = do
   let
     t = fromMaybe "" (head (words rest))
     after = trim (Str.drop (Str.length t) (trim rest))
-  target <- Rack.bankOf t
-  dest <- note (t <> " has nothing on it to reset") (Array.find (\d -> d.target == target) (Rack.parseRack rack).destinations)
+  place <- Rack.placeOf t
+  dest <- note (t <> " has nothing on it to reset") (Array.find (M.samePlace place) (Rack.parseRack rack).destinations)
   case dest.bank of
     M.GLfo _ -> pure unit
     other -> Left ("reset restarts a bank's LFOs, and " <> t <> " holds " <> Rack.kindKeyword other)
-  wired <- note (t <> " is not a modular bank") (Wire.targetSocketBank target)
+  wired <- note (t <> " is not a modular bank") (Wire.targetSocketBank place.target)
   when (wired.socket /= "fh2") (Left ("only the FH-2's LFOs can be reset, and " <> t <> " is an ES-9 bank"))
-  slots <- slotsOf after
+  slots <- slotsOf place.jacks.count after
   let
     listed = if Array.null slots then "" else " \"" <> joinWith " " (map show slots) <> "\""
-    commaed = if Array.null slots then "" else " " <> joinWith "," (map show slots)
+    -- the daemon counts a bank's outputs 1..8; a run's slot k is its jack
+    -- first + k - 1, and a reset of a whole run names every one of its jacks
+    onBank' = if Array.null slots then (if M.isWholeBank place.jacks then [] else M.jackNumbers place.jacks)
+              else map (\k -> place.jacks.first + k - 1) slots
+    commaed = if Array.null onBank' then "" else " " <> joinWith "," (map show onBank')
   pure
     { rack
     , line: "reset " <> t <> listed
     , socket: wired.socket
-    , bank: wired.bank
+    , bank: Wire.placeOn wired place.jacks
     , json: ""
     , command: "reset-lfos " <> wired.bank <> commaed
     , note: ""
     }
   where
-  slotsOf s
+  slotsOf n s
     | s == "" = Right []
     | otherwise = case Str.stripPrefix (Str.Pattern "\"") s >>= Str.stripSuffix (Str.Pattern "\"") of
-        Just inner -> traverse slot (words inner)
+        Just inner -> traverse (slot n) (words inner)
         Nothing -> Left ("slots are a quoted list, as in reset fh2cv0 \"1 3\": " <> s)
-  slot w = case Int.fromString w of
-    Just n | n >= 1 && n <= 8 -> Right n
-    _ -> Left ("a slot is 1 to 8, not " <> w)
+  slot n w = case Int.fromString w of
+    Just k | k >= 1 && k <= n -> Right k
+    _ -> Left ("a slot is 1 to " <> show n <> ", not " <> w)
 
 -- ---------------------------------------------------------------------------
 -- Modules: a bank's worth, free of any bank (docs/kb/plans/selene-in-tidal.md)
@@ -431,9 +496,16 @@ moduleOf d = case Str.indexOf (Str.Pattern " # ") line of
 -- | A module (or a block's name, with its terms) put on a bank: the line to
 -- | send, `<kind or block> <bank> # …`.
 onBank :: String -> M.Target -> String
-onBank m target = case Str.indexOf (Str.Pattern " ") (trim m) of
-  Just at -> Str.take at (trim m) <> " " <> M.targetWire target <> Str.drop at (trim m)
-  Nothing -> trim m <> " " <> M.targetWire target
+onBank m target = onPlace m target M.allJacks
+
+-- | A module put on a run of a bank's jacks (`fh2_0:5-8`): it fills the run
+-- | with the module's first slots.
+onPlace :: String -> M.Target -> M.Jacks -> String
+onPlace m target jacks = case Str.indexOf (Str.Pattern " ") (trim m) of
+  Just at -> Str.take at (trim m) <> " " <> place <> Str.drop at (trim m)
+  Nothing -> trim m <> " " <> place
+  where
+  place = M.placeWire target jacks
 
 -- | The kind of bank a module makes: its first word, a kind or a block.
 moduleKind :: String -> Maybe M.GenKind

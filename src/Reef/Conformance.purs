@@ -71,7 +71,10 @@ module Reef.Conformance
 import Prelude
 
 import Data.Array (concatMap, filter, find, length, null, range, snoc, mapWithIndex, take, (!!))
+import Data.Array as Array
 import Data.Either (Either(..), either)
+import Foreign (Foreign)
+import Simple.JSON as JSON
 import Data.String as String
 import Data.String (Pattern(..), Replacement(..), replaceAll)
 import Reef.Route as Route
@@ -112,7 +115,8 @@ import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
-import Reef.Selene.Model (defaultSelene) as SM
+import Reef.Selene.Model (defaultSelene, overlaps) as SM
+import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
 
@@ -2083,7 +2087,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> flats <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> flats <> splits <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2190,6 +2194,63 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
            <> " | round-trips " <> show (SR.printRack (SR.parseRack printed) == printed) ]
          <> map ("  kept " <> _) (take 3 (body printed))
          <> map ("  sent " <> _) (take 3 (body sent))
+  -- a bank split into runs of jacks (docs/kb/plans/selene-split-banks.md):
+  -- four LFOs on jacks 1-4 and four pitches on 5-8 of the FH-2, each its own
+  -- destination, envelope (with `offset`), claim and place; lines address one
+  -- run and leave the other; a line onto shared jacks is refused
+  splits =
+    let
+      rack = "lfo fh2_0:1-4\n  1 @0 sin 0.8   -- 1\n  2 @0 tri 0.5   -- 2\n\nnote fh2_0:5-8\n  C3   -- 5\n  E3   -- 6\n  G3   -- 7\n  B3   -- 8\n\nlfo fh2cv0:3\n  0.25 @0 saw 1   -- 3"
+      parsed = SR.parseRack rack
+      printed = SR.printRack parsed
+      body t = filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") t)
+      -- the envelope's fields, not its text: the two runtimes order a JSON
+      -- object's keys differently, and the daemon reads it by key
+      sent = map (\d -> maybe "(not sent)" (\w -> w.socket <> " " <> w.bank <> " " <> envelopeFields w.json) (SW.destinationEnvelope d)) parsed.destinations
+      envelopeFields j = case JSON.readJSON j of
+        Right (e :: { bank :: String, family :: String, alias :: String, offset :: Maybe Int, slots :: Array Foreign }) ->
+          e.family <> " on " <> e.bank <> " offset " <> maybe "-" show e.offset <> ", " <> show (length e.slots) <> " slots, as " <> e.alias
+        Left _ -> "unreadable: " <> j
+      said src = src <> " | " <> case SL.rigLine src printed of
+        Left e -> "refused: " <> e
+        Right r -> r.bank <> " | " <> sentBy r <> " | " <> r.line
+      -- an apply as its envelope's fields (key order is not the same in the
+      -- two runtimes); anything else as the command it is
+      sentBy r
+        | r.command == "" = "(nothing sent)"
+        | otherwise = intercalate " then " (map sentOne (String.split (String.Pattern "\n") r.command))
+      sentOne c = case String.stripPrefix (String.Pattern "apply-polysignal ") c of
+        Just j -> "apply-polysignal " <> envelopeFields j
+        Nothing -> c
+      clash = SR.parseRack "lfo fh2_0\n\nnote fh2_0:5-8"
+    in
+      [ "== split banks", "round-trips " <> show (SR.printRack (SR.parseRack printed) == printed) ]
+        <> map ("  " <> _) (body printed)
+        <> map ("  sent " <> _) sent
+        <> map (\b -> "  holds " <> b.socket <> " " <> b.bank <> " as " <> b.owner) (SL.banksOf printed)
+        <> map said
+          [ "lfo fh2_0:1-4 # rate 2"
+          , "note fh2_0:5-8 # note \"D3 F3\""
+          , "note fh2_0:3-6 # note C4"
+          , "lfo fh2_0:9-10 # rate 1"
+          , "lfo midi1:1-4 # rate 1"
+          , "lfo fh2cv0:5-8 # rate 1"
+          , "reset fh2_0:1-4 \"2\""
+          , "reset fh2_0:1-4"
+          , "reset fh2_0:1-4 \"5\""
+          , "off fh2_0:5-8"
+          , "off fh2_0"
+          , "join fh2_0:1-4"
+          , "join fh2cv0:3"
+          , "split fh2_0:1-4"
+          ]
+        <> map (\src -> src <> " | " <> case SL.rigLine src r0 of
+                 Left e -> "refused: " <> e
+                 -- by whole lines: the rack's legend is not ASCII, and the two
+                 -- runtimes count a string's characters differently
+                 Right r -> r.bank <> " | " <> sentBy r <> " | " <> intercalate " / " (take 5 (Array.dropWhile (\l -> String.take 11 l /= "lfo es9main") (String.split (String.Pattern "\n") r.rack))))
+          [ "split es9main", "split midi1" ]
+        <> [ "  overlaps: " <> intercalate "; " (SM.overlaps clash) ]
   -- an LFO turned all the way down keeps its shape in the text (`sqr 0`), so
   -- turning it back up gives the same wave; a flat sine prints as before
   flats = [ "== flat slots" ] <> map flat

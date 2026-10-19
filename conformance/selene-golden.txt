@@ -1,6 +1,6 @@
 == the default rack
 -- SELENE · edit the numbers; the rack follows.
--- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
+-- <kind> <target> [range] opens a group of 8 · <target>:5-8 takes jacks 5-8 · one slot per line · -- mutes a slot.
 -- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind.
 
 lfo es9main
@@ -175,9 +175,46 @@ muted [1] | round-trips true
   sent   0 8 @4   -- 3
 == flat slots
   1 @0 sqr 0   -- 1 /   2 @0.5 tri 0   -- 2 /   3 @0   -- 3 /   4 @0 lvl 0.5 nse 0   -- 4 /   0 @0   -- 5 /   0 @0   -- 6 /   0 @0   -- 7 /   0 @0   -- 8 | round-trips true
+== split banks
+round-trips true
+  lfo fh2_0:1-4
+    1 @0 sin 0.8   -- 1
+    2 @0 tri 0.5   -- 2
+    0 @0   -- 3
+    0 @0   -- 4
+  note fh2_0:5-8
+    C3   -- 5
+    E3   -- 6
+    G3   -- 7
+    B3   -- 8
+  lfo fh2cv0:3
+    0.25 @0 saw 1   -- 3
+  sent fh2 main:1-4 polylfo on main offset 0, 4 slots, as selene:fh2:main:1-4
+  sent fh2 main:5-8 polypresetnote on main offset 4, 4 slots, as selene:fh2:main:5-8
+  sent fh2 cv0:3 polylfo on cv0 offset 2, 1 slots, as selene:fh2:cv0:3
+  holds fh2 main:1-4 as selene:fh2:main:1-4
+  holds fh2 main:5-8 as selene:fh2:main:5-8
+  holds fh2 cv0:3 as selene:fh2:cv0:3
+lfo fh2_0:1-4 # rate 2 | main:1-4 | apply-polysignal polylfo on main offset 0, 4 slots, as selene:fh2:main:1-4 | lfo fh2_0:1-4 # rate 2 # phase 0 # sin "0.8 0 0 0" # tri "0 0.5 0 0"
+note fh2_0:5-8 # note "D3 F3" | main:5-8 | apply-polysignal polypresetnote on main offset 4, 4 slots, as selene:fh2:main:5-8 | note fh2_0:5-8 # note "D3 F3 D3 F3"
+note fh2_0:3-6 # note C4 | refused: fh2_0:3-6 shares jacks with the lfo on fh2_0:1-4; free it first (off fh2_0:1-4)
+lfo fh2_0:9-10 # rate 1 | refused: a run of jacks is a-b or one jack, inside 1-8, not 9-10
+lfo midi1:1-4 # rate 1 | refused: a MIDI channel has no jacks to take a run of
+lfo fh2cv0:5-8 # rate 1 | cv0:5-8 | apply-polysignal polylfo on cv0 offset 4, 4 slots, as selene:fh2:cv0:5-8 | lfo fh2cv0:5-8 # rate 1 # phase "0 0.125 0.25 0.375"
+reset fh2_0:1-4 "2" | main:1-4 | reset-lfos main 2 | reset fh2_0:1-4 "2"
+reset fh2_0:1-4 | main:1-4 | reset-lfos main 1,2,3,4 | reset fh2_0:1-4
+reset fh2_0:1-4 "5" | refused: a slot is 1 to 4, not 5
+off fh2_0:5-8 | main:5-8 | release-claim polysignal selene:fh2:main:5-8 | off fh2_0:5-8
+off fh2_0 | refused: fh2_0 is already free
+join fh2_0:1-4 | refused: fh2_0:5-8 is on the same bank; free it first (off fh2_0:5-8)
+join fh2cv0:3 | cv0 | release-claim polysignal selene:fh2:cv0:3 then apply-polysignal polylfo on cv0 offset -, 8 slots, as selene:fh2:cv0 | join fh2cv0:3
+split fh2_0:1-4 | refused: fh2_0:1-4 is already a run of its bank; split takes a whole bank
+split es9main | main:1-4 | release-claim polysignal selene:es9:main then apply-polysignal polylfo on main offset 0, 4 slots, as selene:es9:main:1-4 | lfo es9main:1-4 /   0.5 @0 sin 0.8   -- 1 /   0.5 @0.125 sin 0.8   -- 2 /   0.5 @0.25 sin 0.8   -- 3 /   0.5 @0.375 sin 0.8   -- 4
+split midi1 | refused: a MIDI channel has no jacks to split
+  overlaps: fh2_0 and fh2_0:5-8 share jacks
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
--- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot.
+-- <kind> <target> [range] opens a group of 8 · <target>:5-8 takes jacks 5-8 · one slot per line · -- mutes a slot.
 -- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind.
 
 lfo es9main

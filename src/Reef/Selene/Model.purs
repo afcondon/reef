@@ -31,6 +31,20 @@ module Reef.Selene.Model
   , addDestination
   , removeDestination
   , retargetDestination
+  , Jacks
+  , allJacks
+  , isWholeBank
+  , jacksToken
+  , jacksOfToken
+  , jackNumbers
+  , jacksOverlap
+  , placeWire
+  , samePlace
+  , overlaps
+  , freshBankOn
+  , takeSlots
+  , widenBank
+  , bankSize
   , OutputRange(..)
   , rangeLabel
   , rangeToWire
@@ -63,6 +77,7 @@ import Data.Array as Array
 import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.String as Str
 import Reef.Numeric (ln, sin) as N
 
 -- ---------------------------------------------------------------------------
@@ -472,8 +487,14 @@ clockBaseBeats = case _ of
 -- |
 -- | `mutedSlots` does the same for single outputs (0-based): each keeps its
 -- | settings and goes out silent, so unmuting one brings it back as it is.
+-- |
+-- | `jacks` is the run of the target's eight that the destination sits on
+-- | (docs/kb/plans/selene-split-banks.md): the whole bank (`allJacks`), or
+-- | part of it, as four LFOs on jacks 1-4 beside four pitches on 5-8. The
+-- | bank has one slot per jack of the run.
 type Destination =
   { target :: Target
+  , jacks :: Jacks
   , range :: Maybe OutputRange
   , bank :: GenBank
   , retrig :: Maybe String
@@ -489,10 +510,10 @@ type Selene = { destinations :: Array Destination }
 defaultSelene :: Selene
 defaultSelene =
   { destinations:
-      [ { target: ES9Main, range: Nothing, bank: freshBank KLfo, retrig: Nothing, muted: false, mutedSlots: [] }
-      , { target: ES9Gt 0, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, muted: false, mutedSlots: [] }
-      , { target: ES9Gt 1, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false, mutedSlots: [] }
-      , { target: Midi 1, range: Nothing, bank: freshBank KNote, retrig: Nothing, muted: false, mutedSlots: [] }
+      [ { target: ES9Main, jacks: allJacks, range: Nothing, bank: freshBank KLfo, retrig: Nothing, muted: false, mutedSlots: [] }
+      , { target: ES9Gt 0, jacks: allJacks, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, muted: false, mutedSlots: [] }
+      , { target: ES9Gt 1, jacks: allJacks, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false, mutedSlots: [] }
+      , { target: Midi 1, jacks: allJacks, range: Nothing, bank: freshBank KNote, retrig: Nothing, muted: false, mutedSlots: [] }
       ]
   }
 
@@ -544,7 +565,7 @@ freshBank = case _ of
 
 addDestination :: GenKind -> Selene -> Selene
 addDestination kind s =
-  s { destinations = snoc s.destinations { target: defaultTargetFor kind, range: Nothing, bank: freshBank kind, retrig: Nothing, muted: false, mutedSlots: [] } }
+  s { destinations = snoc s.destinations { target: defaultTargetFor kind, jacks: allJacks, range: Nothing, bank: freshBank kind, retrig: Nothing, muted: false, mutedSlots: [] } }
 
 removeDestination :: Int -> Selene -> Selene
 removeDestination i s = s { destinations = fromMaybe s.destinations (deleteAt i s.destinations) }
@@ -552,6 +573,100 @@ removeDestination i s = s { destinations = fromMaybe s.destinations (deleteAt i 
 retargetDestination :: Int -> Selene -> Selene
 retargetDestination i s =
   s { destinations = mapWithIndex (\j d -> if j == i then d { target = cycleTarget d.target } else d) s.destinations }
+
+-- ---------------------------------------------------------------------------
+-- Runs of jacks (docs/kb/plans/selene-split-banks.md)
+-- ---------------------------------------------------------------------------
+
+-- | A contiguous run of a bank's eight jacks, 1-based: `first` and how many.
+type Jacks = { first :: Int, count :: Int }
+
+allJacks :: Jacks
+allJacks = { first: 1, count: slotCount }
+
+isWholeBank :: Jacks -> Boolean
+isWholeBank j = j == allJacks
+
+-- | How a run follows the bank in text: nothing for the whole bank, `:5-8`
+-- | for a run, `:3` for one jack.
+jacksToken :: Jacks -> String
+jacksToken j
+  | isWholeBank j = ""
+  | j.count == 1 = ":" <> show j.first
+  | otherwise = ":" <> show j.first <> "-" <> show (j.first + j.count - 1)
+
+-- | `5-8` or `3` (what follows the colon), inside 1..8, low to high.
+jacksOfToken :: String -> Maybe Jacks
+jacksOfToken tok = case map Int.fromString (splitDash tok) of
+  [ Just a ] | a >= 1 && a <= slotCount -> Just { first: a, count: 1 }
+  [ Just a, Just b ] | a >= 1 && b <= slotCount && a <= b -> Just { first: a, count: b - a + 1 }
+  _ -> Nothing
+  where
+  splitDash t = case Str.indexOf (Str.Pattern "-") t of
+    Just at -> [ Str.take at t, Str.drop (at + 1) t ]
+    Nothing -> [ t ]
+
+-- | The run's jack numbers, 1-based.
+jackNumbers :: Jacks -> Array Int
+jackNumbers j = range j.first (j.first + j.count - 1)
+
+jacksOverlap :: Jacks -> Jacks -> Boolean
+jacksOverlap a b = a.first <= b.first + b.count - 1 && b.first <= a.first + a.count - 1
+
+-- | A destination's place as text: the target's wire token and its run.
+placeWire :: Target -> Jacks -> String
+placeWire t j = targetWire t <> jacksToken j
+
+samePlace :: forall r s. { target :: Target, jacks :: Jacks | r } -> { target :: Target, jacks :: Jacks | s } -> Boolean
+samePlace a b = a.target == b.target && a.jacks == b.jacks
+
+-- | Each pair of destinations that share a jack, said. Empty when none do.
+-- | The rack keeps such a pair (the editor never blanks while you type); the
+-- | page and the line refuse to make one, and the daemons refuse to play one.
+overlaps :: Selene -> Array String
+overlaps s = Array.catMaybes do
+  i <- range 0 (length s.destinations - 1)
+  j <- Array.filter (_ > i) (range 0 (length s.destinations - 1))
+  pure case s.destinations !! i, s.destinations !! j of
+    Just a, Just b | a.target == b.target && jacksOverlap a.jacks b.jacks ->
+      Just (placeWire a.target a.jacks <> " and " <> placeWire b.target b.jacks <> " share jacks")
+    _, _ -> Nothing
+
+-- | The first `n` slots of a bank: a bank sized to a run.
+takeSlots :: Int -> GenBank -> GenBank
+takeSlots n = case _ of
+  GLfo xs -> GLfo (Array.take n xs)
+  GEuclid xs -> GEuclid (Array.take n xs)
+  GClock xs -> GClock (Array.take n xs)
+  GNote xs -> GNote (Array.take n xs)
+  GEnv xs -> GEnv (Array.take n xs)
+
+-- | How many slots (and so jacks) a bank has.
+bankSize :: GenBank -> Int
+bankSize = case _ of
+  GLfo xs -> length xs
+  GEuclid xs -> length xs
+  GClock xs -> length xs
+  GNote xs -> length xs
+  GEnv xs -> length xs
+
+-- | A run's bank spread back over the whole of the bank: its slots on their
+-- | jacks, and the fresh eight's slots on the rest.
+widenBank :: Jacks -> GenBank -> GenBank
+widenBank j bank = case freshBank (bankKind bank), bank of
+  GLfo f, GLfo xs -> GLfo (spread f xs)
+  GEuclid f, GEuclid xs -> GEuclid (spread f xs)
+  GClock f, GClock xs -> GClock (spread f xs)
+  GNote f, GNote xs -> GNote (spread f xs)
+  GEnv f, GEnv xs -> GEnv (spread f xs)
+  _, b -> b
+  where
+  spread :: forall a. Array a -> Array a -> Array a
+  spread f xs = Array.take (j.first - 1) f <> xs <> Array.drop (j.first - 1 + j.count) f
+
+-- | A fresh bank of a kind sized to a run: the fresh eight's first slots.
+freshBankOn :: Jacks -> GenKind -> GenBank
+freshBankOn j k = takeSlots j.count (freshBank k)
 
 -- ---------------------------------------------------------------------------
 -- Derived

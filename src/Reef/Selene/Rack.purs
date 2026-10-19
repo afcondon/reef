@@ -7,6 +7,10 @@
 -- |                            lfo | euclid | clock | note; target is a wire
 -- |                            token (es9main, es9gt0, es98cv0, fh2_0, midi1,
 -- |                            virtual:bus).
+-- |   <kind> <target>:<a>-<b>  a destination on jacks a..b of the target's
+-- |                            eight (`fh2_0:5-8`, or one jack, `fh2cv0:3`),
+-- |                            one slot per jack; two on one target may not
+-- |                            share a jack (docs/kb/plans/selene-split-banks.md).
 -- |   <slot>                   one line per slot, following the header; the
 -- |                            block ends at the next blank line.
 -- |   -- <slot>                a muted slot: that output goes silent and keeps
@@ -29,6 +33,8 @@ module Reef.Selene.Rack
   , printDest
   , parseRack
   , parseTarget
+  , parsePlace
+  , placeOf
   , bankOf
   , kindKeyword
   -- for the line form (Reef.Selene.Line), which reads the same tokens
@@ -66,13 +72,13 @@ printRack sel =
   legend =
     joinWith "\n"
       [ "-- SELENE · edit the numbers; the rack follows."
-      , "-- <kind> <target> [range] opens a group of 8 · one slot per line · -- mutes a slot."
+      , "-- <kind> <target> [range] opens a group of 8 · <target>:5-8 takes jacks 5-8 · one slot per line · -- mutes a slot."
       , "-- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind." ]
 
 -- | One destination: a `<kind> <target>` header then eight tagged slots.
 printDest :: M.Destination -> String
 printDest d =
-  (kindKeyword d.bank <> " " <> M.targetWire d.target <> rangeTok) <> "\n"
+  (kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks <> rangeTok) <> "\n"
     <> joinWith "\n" (mapWithIndex slotLine (bankSlots d.bank))
   where
   -- Printed only when the user pinned one, so an unpinned block round-trips
@@ -80,7 +86,8 @@ printDest d =
   rangeTok = maybe "" (\r -> " " <> M.rangeToWire r) d.range
     <> (if d.muted then " muted" else "")
     <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
-  slotLine i row = (if Array.elem i d.mutedSlots then "  -- " else "  ") <> row <> "   -- " <> show (i + 1)
+  -- tagged with its jack, so a run on 5-8 reads 5, 6, 7, 8
+  slotLine i row = (if Array.elem i d.mutedSlots then "  -- " else "  ") <> row <> "   -- " <> show (d.jacks.first + i)
   bankSlots = case _ of
     M.GLfo slots -> map lfoLine slots
     M.GEuclid slots -> map euclidLine slots
@@ -170,6 +177,7 @@ type PState =
   { dests :: Array M.Destination
   , open :: Maybe
       { target :: M.Target
+      , jacks :: M.Jacks
       , kind :: M.GenKind
       , range :: Maybe M.OutputRange
       , retrig :: Maybe String
@@ -191,7 +199,7 @@ parseRack doc =
     in
       if t == "" then closeBlock st
       else case headerOf t of
-        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, rows: [] } }
+        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, jacks: hdr.jacks, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, rows: [] } }
         Nothing -> case st.open of
           Just blk -> st { open = Just (addLine blk t) }
           Nothing -> st   -- a stray line outside any block: ignore
@@ -225,10 +233,10 @@ closeBlock :: PState -> PState
 closeBlock st = case st.open of
   Nothing -> st
   Just blk ->
-    let rows = fitTo M.slotCount blk.rows
+    let rows = fitTo blk.jacks.count blk.rows
         bank = buildBank blk.kind (map _.text rows)
         mutedSlots = Array.catMaybes (mapWithIndex (\i r -> if r.muted && isJust r.text then Just i else Nothing) rows)
-    in { dests: snoc st.dests { target: blk.target, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots }, open: Nothing }
+    in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are silent).
 fitTo :: Int -> Array { text :: Maybe String, muted :: Boolean } -> Array { text :: Maybe String, muted :: Boolean }
@@ -254,7 +262,7 @@ buildBank kind rows = case kind of
 -- | A `retrig "<pattern>"` may close the header (the pattern is quoted and may
 -- | hold spaces, so it is taken off before the words are counted). Before it,
 -- | the word `muted` marks a muted destination.
-headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean }
+headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean }
 headerOf t0 = case words t of
   [] -> Nothing
   toks0 -> case toks0 !! 0 >>= kindOf of
@@ -264,8 +272,8 @@ headerOf t0 = case words t of
         toks = if muted then fromMaybe toks0 (Array.init toks0) else toks0
       in
         case toks of
-          [ _, tgt ] -> Just { kind: k, target: parseTarget tgt, range: Nothing, retrig, muted }
-          [ _, tgt, rng ] -> map (\r -> { kind: k, target: parseTarget tgt, range: Just r, retrig, muted }) (M.rangeOfWire rng)
+          [ _, tgt ] -> Just { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: Nothing, retrig, muted }
+          [ _, tgt, rng ] -> map (\r -> { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: Just r, retrig, muted }) (M.rangeOfWire rng)
           _ -> Nothing
     Nothing -> Nothing
   where
@@ -298,6 +306,24 @@ parseTarget tok =
     Just rest -> map ctor (Int.fromString rest)
     Nothing -> Nothing
 
+-- | A target with an optional run of its jacks (`fh2_0:5-8`); lenient, as
+-- | `parseTarget` is: a run that is not one, or a run on a target with no
+-- | jacks (MIDI, virtual), leaves the whole bank.
+parsePlace :: String -> { target :: M.Target, jacks :: M.Jacks }
+parsePlace tok = case split tok of
+  Just p | Just j <- M.jacksOfToken p.run, hasJacks (parseTarget p.target) -> { target: parseTarget p.target, jacks: j }
+  _ -> { target: parseTarget tok, jacks: M.allJacks }
+  where
+  split t = case Str.stripPrefix (Str.Pattern "virtual:") t of
+    Just _ -> Nothing
+    Nothing -> case Str.lastIndexOf (Str.Pattern ":") t of
+      Just at -> Just { target: Str.take at t, run: Str.drop (at + 1) t }
+      Nothing -> Nothing
+  hasJacks = case _ of
+    M.Midi _ -> false
+    M.Virtual _ -> false
+    _ -> true
+
 -- | A bank as a line names it: strict, where `parseTarget` (for saved racks)
 -- | takes any unknown token as a virtual bank. On a line that turned a typo
 -- | into a bank that is kept and never sent (`fh2gt0`, AC 2026-10-05), so a
@@ -307,6 +333,21 @@ bankOf tok = case parseTarget tok of
   M.Virtual v | Str.stripPrefix (Str.Pattern "virtual:") tok == Nothing ->
     Left ("no bank " <> v <> ": es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>")
   t -> Right t
+
+-- | A place as a line names it, strict: a bank (`bankOf`) and, after a colon,
+-- | a run of its jacks (`fh2_0:5-8`, `fh2cv0:3`).
+placeOf :: String -> Either String { target :: M.Target, jacks :: M.Jacks }
+placeOf tok = case Str.stripPrefix (Str.Pattern "virtual:") tok, Str.lastIndexOf (Str.Pattern ":") tok of
+  Nothing, Just at -> do
+    let run = Str.drop (at + 1) tok
+    target <- bankOf (Str.take at tok)
+    jacks <- case M.jacksOfToken run of
+      Just j -> Right j
+      Nothing -> Left ("a run of jacks is a-b or one jack, inside 1-8, not " <> run)
+    case target of
+      M.Midi _ -> Left "a MIDI channel has no jacks to take a run of"
+      _ -> Right { target, jacks }
+  _, _ -> map (\target -> { target, jacks: M.allJacks }) (bankOf tok)
 
 -- ---------------------------------------------------------------------------
 -- Per-kind slot parsers + silent defaults
