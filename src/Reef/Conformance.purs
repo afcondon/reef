@@ -2101,7 +2101,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     , "note es98cv0 # note \"C3 E3 G3 B3\""
     , "env fh2_0 # a 10 # d 200 # s 64 # r 400"
     , "lfo es9gt0 # rate 2"
-    -- blocks (Reef.Selene.Block): each sets a whole bank, then plain terms
+    -- recipes (Reef.Selene.Recipe): each sets a whole bank, then plain terms
     , "ochd es9main # rate 0.03 # spread 40"
     , "ochd es9main # shape sin # tri 0.2"
     , "quadrature es9main # rate 0.5"
@@ -2259,14 +2259,30 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     let
       step acc src = case SL.rigLine src acc.rack of
         Left e -> acc { out = acc.out <> [ src <> " | refused: " <> e ] }
-        Right r -> acc { rack = r.rack, out = acc.out <> [ src <> " | " <> r.bank <> " | " <> r.line, "  sent " <> voiceFields r.json ] }
+        Right r -> acc { rack = r.rack, out = acc.out <> [ src <> " | " <> r.bank <> " | " <> r.line ] <> map ("  sent " <> _) (commandsOf r.command) }
       run = foldl step { rack: "", out: [] }
         [ "pitch-env fh2_0", "full-voice fh2cv0", "voices fh2_0 # a \"5 10\"", "voices fh2_0 # outputs pitch"
         , "pitches fh2cv0:5-8", "pitch-env es9main", "off fh2cv0", "voices fh2_0 # outputs pitch # gates fh2_1:1-8" ]
       body = filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") run.rack)
+      -- swapping a bank's halves: what is on each changes place, a voice
+      -- layout's gates included, and a run across the middle is refused
+      swaps = foldl step { rack: "", out: [] }
+        [ "euclid fh2_1:1-4", "pitches fh2cv0:1-4", "swap fh2_1", "lfo fh2cv0:5-8", "swap fh2cv0"
+        , "lfo fh2_0:3-6", "swap fh2_0", "swap fh2_1" ]
+      swapBody = filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") swaps.rack)
     in
       [ "== voice layouts" ] <> run.out <> map ("  " <> _) body
         <> [ "  round-trips " <> show (SR.printRack (SR.parseRack run.rack) == run.rack) ]
+        <> [ "== swaps" ] <> swaps.out <> map ("  " <> _) swapBody
+  -- each daemon command a line sends: a voice layout by its fields, any
+  -- other apply by its family and owner, a release as it is
+  commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)
+    where
+    one x = case String.stripPrefix (String.Pattern "apply-polysignal ") x of
+      Just j -> case JSON.readJSON j of
+        Right (e :: { family :: String, alias :: String }) | e.family /= "polyvoice" -> e.family <> " as " <> e.alias
+        _ -> voiceFields j
+      Nothing -> x
   voiceFields j = case JSON.readJSON j of
     Right (e :: { family :: String, bank :: String, alias :: String, gates :: { bank :: String, offset :: Int }, outputs :: Array String, slots :: Array { channel :: Int } }) ->
       e.family <> " on " <> e.bank <> ", gates on " <> e.gates.bank <> " from " <> show (e.gates.offset + 1)

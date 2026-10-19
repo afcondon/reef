@@ -1,24 +1,27 @@
--- | **Blocks**: named virtual modules, each a whole bank of eight from a few
--- | musical parameters (docs/kb/plans/selene-in-tidal.md, AC 2026-10-05: "that
--- | part of modular more programmable, and cheaper in modules and hp").
+-- | **Recipes**: named virtual modules, each a whole bank from a few musical
+-- | parameters (docs/kb/plans/selene-in-tidal.md, AC 2026-10-05: "that part of
+-- | modular more programmable, and cheaper in modules and hp"). A recipe has
+-- | ingredients you vary (ochd's rate and spread) and makes something definite;
+-- | a kind (POLYLFO) is an empty bank, and a preset a setting kept as it is.
+-- | Called blocks until 2026-10-19.
 -- |
 -- |     selene $ ochd es9main # rate 0.03 # spread 40
 -- |     selene $ divider es9gt0 # by "1 2 3 4 6 8 12 16"
 -- |     selene $ toussaint es9gt1
 -- |     selene $ chord es98cv0 # root D3 # quality min9
 -- |
--- | A block takes the place of the kind. Its own parameters set every slot;
+-- | A recipe takes the place of the kind. Its own parameters set every slot;
 -- | any other `#` terms on the line then apply as plain parameters of the kind
--- | it makes (`ochd es9main # tri 0.5`). A bank made by a block is plain
+-- | it makes (`ochd es9main # tri 0.5`). A bank made by a recipe is plain
 -- | settings afterwards: it prints back as an `lfo …` line.
 -- |
--- | Every block is a definition here, not code in a daemon, so a new one costs
+-- | Every recipe is a definition here, not code in a daemon, so a new one costs
 -- | no hardware. Pure and compiled to both columns; any randomness is seeded
 -- | and kept in small integers, so the BEAM and JS draw the same.
-module Reef.Selene.Block
-  ( Block
-  , blocks
-  , blockNamed
+module Reef.Selene.Recipe
+  ( Recipe
+  , recipes
+  , recipeNamed
   , expand
   ) where
 
@@ -35,17 +38,17 @@ import Reef.Numeric (pow)
 import Reef.Selene.Model as M
 import Reef.Selene.Rack as Rack
 
--- | A block: its name, the kind of bank it makes, what it is (for the
+-- | A recipe: its name, the kind of bank it makes, what it is (for the
 -- | cheatsheet), and its parameters with their defaults, as a line writes them.
-type Block =
+type Recipe =
   { name :: String
   , kind :: M.GenKind
   , what :: String
   , params :: Array { name :: String, default :: String, what :: String }
   }
 
-blocks :: Array Block
-blocks =
+recipes :: Array Recipe
+recipes =
   [ { name: "ochd", kind: M.KLfo
     , what: "eight free LFOs, slow to fast at uneven ratios so they never lock (after Instruō's ochd)"
     , params:
@@ -119,13 +122,13 @@ blocks =
   where
   p name default what = { name, default, what }
 
-blockNamed :: String -> Maybe Block
-blockNamed n = find (\b -> b.name == n) blocks
+recipeNamed :: String -> Maybe Recipe
+recipeNamed n = find (\b -> b.name == n) recipes
 
--- | A block's bank from the line's terms: its own parameters (the rest are
+-- | A recipe's bank from the line's terms: its own parameters (the rest are
 -- | handed back, to apply as plain parameters).
 expand
-  :: Block
+  :: Recipe
   -> Array { param :: String, values :: Array String }
   -> Either String { bank :: M.GenBank, rest :: Array { param :: String, values :: Array String } }
 expand b terms = do
@@ -203,7 +206,7 @@ expand b terms = do
     "pitches" -> pure (voices [])
     "pitch-env" -> pure (voices [ M.VEnvelope ])
     "full-voice" -> pure (voices [ M.VVelocity, M.VEnvelope, M.VPressure ])
-    other -> Left ("no block " <> other)
+    other -> Left ("no recipe " <> other)
   pure { bank, rest }
   where
   slots = range 0 (M.slotCount - 1)
@@ -219,12 +222,12 @@ expand b terms = do
 data Shape = Sin | Tri | Saw | Sqr
 
 shapeOf :: String -> String -> Either String Shape
-shapeOf block = case _ of
+shapeOf recipe = case _ of
   "sin" -> Right Sin
   "tri" -> Right Tri
   "saw" -> Right Saw
   "sqr" -> Right Sqr
-  s -> Left (block <> ": shape is sin, tri, saw or sqr, not " <> s)
+  s -> Left (recipe <> ": shape is sin, tri, saw or sqr, not " <> s)
 
 -- | One LFO slot of a shape and depth, its rate kept to the rack's three
 -- | places so it prints back as it is.

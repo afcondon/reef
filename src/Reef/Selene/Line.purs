@@ -54,14 +54,14 @@ import Data.Foldable (for_)
 import Data.Traversable (traverse)
 import Reef.Selene.Model as M
 import Reef.Selene.Rack as Rack
-import Reef.Selene.Block as Block
+import Reef.Selene.Recipe as Recipe
 import Reef.Selene.Wire as Wire
 
 -- | A line, read: the kind, the bank it addresses, and its terms in order.
 type Line =
   { kind :: M.GenKind
-  -- | a block (Reef.Selene.Block) in place of the kind: it sets the whole bank
-  , block :: Maybe String
+  -- | a recipe (Reef.Selene.Recipe) in place of the kind: it sets the whole bank
+  , recipe :: Maybe String
   , target :: M.Target
   -- | the run of the target's jacks the line's bank sits on (`fh2_0:5-8`)
   , jacks :: M.Jacks
@@ -75,14 +75,14 @@ parseLine src = do
   { head: h, tail: rest } <- note "an empty line" (uncons parts)
   case words h of
     [ k, t ] -> do
-      let named = Block.blockNamed k
-      kind <- note ("not a kind of polysignal or a block: " <> k <> " (lfo, euclid, clock, note, env; or a block: " <> joinWith ", " (map _.name Block.blocks) <> ")")
+      let named = Recipe.recipeNamed k
+      kind <- note ("not a kind of polysignal or a recipe: " <> k <> " (lfo, euclid, clock, note, env, voices; or a recipe: " <> joinWith ", " (map _.name Recipe.recipes) <> ")")
         (case named of
           Just b -> Just b.kind
           Nothing -> Rack.kindOf k)
       place <- Rack.placeOf t
       terms <- foldM (\acc part -> snoc acc <$> term part) [] (filter (_ /= "") rest)
-      pure { kind, block: map _.name named, target: place.target, jacks: place.jacks, terms }
+      pure { kind, recipe: map _.name named, target: place.target, jacks: place.jacks, terms }
     _ -> Left ("a line starts with a kind and a bank, as in lfo es9main: " <> h)
   where
   term part = case Str.indexOf (Str.Pattern " ") part of
@@ -113,7 +113,7 @@ applyLine line sel = do
   when (kindOfLine == M.KEnv && not (M.isWholeBank line.jacks)) $
     Left (M.placeWire line.target line.jacks <> ": " <> envelopeWhole)
   for_ clash \d -> Left (M.placeWire line.target line.jacks <> " shares jacks with the " <> Rack.kindKeyword d.bank <> " on " <> M.placeWire d.target d.jacks <> "; free it first (off " <> M.placeWire d.target d.jacks <> ")")
-  -- a block sets the whole bank from its own parameters; the line's other
+  -- a recipe sets the whole bank from its own parameters; the line's other
   -- terms then apply to that, as plain parameters
   -- `# fresh` starts the bank fresh first: a module dropped on a bank
   -- replaces what was there, rather than changing only what it names
@@ -125,8 +125,8 @@ applyLine line sel = do
       -- `# retrig "<pattern>"` sets the bank's reset pattern, `# retrig off`
       -- clears it; the last one named wins
       retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
-  { start, terms } <- case line.block >>= Block.blockNamed of
-    Just b -> (\x -> { start: M.takeSlots line.jacks.count x.bank, terms: x.rest }) <$> Block.expand b named
+  { start, terms } <- case line.recipe >>= Recipe.recipeNamed of
+    Just b -> (\x -> { start: M.takeSlots line.jacks.count x.bank, terms: x.rest }) <$> Recipe.expand b named
     Nothing -> pure { start: if fresh then M.freshBankOn line.jacks kindOfLine else current, terms: named }
   laid <- case start of
     M.GVoice vb -> M.GVoice <$> layoutOf line sel vb (layoutTerm "outputs") (layoutTerm "gates")
@@ -394,7 +394,9 @@ banksOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
 -- | when nothing is applied), the whole `command` for the daemon (empty
 -- | when nothing is sent), and a `note` for the reply when the hardware will
 -- | not do quite what the line says (empty when it will).
-type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String, command :: String, note :: String }
+-- | `also`: more places the line applied, for the rig to keep beside
+-- | `bank`/`json` (a `swap` moves two).
+type RigLine = { rack :: String, line :: String, socket :: String, bank :: String, json :: String, command :: String, note :: String, also :: Array { bank :: String, json :: String } }
 
 rigLine :: String -> String -> Either String RigLine
 rigLine src rack = case Str.stripPrefix (Str.Pattern "reset ") (trim src) of
@@ -421,6 +423,7 @@ rigCommand src rack = case words src of
       , json: ""
       , command: maybe "" (\b -> "release-claim polysignal " <> Wire.ownerOf b place.jacks) sb
       , note: ""
+      , also: []
       }
   -- `split <bank>`: a whole bank becomes its first four jacks, keeping their
   -- slots, and jacks 5-8 are free for something else (two rows of four on
@@ -449,6 +452,35 @@ rigCommand src rack = case words src of
           Just b, Just w -> "release-claim polysignal " <> Wire.ownerOf b d.jacks <> "\n" <> "apply-polysignal " <> w.json
           _, _ -> ""
       , note: ""
+      , also: []
+      }
+  -- `swap <bank>`: what is on the bank's jacks 1-4 and what is on 5-8
+  -- change places, a voice layout's gates there included (AC: "pitches 1-4
+  -- go with gates 1-4"). Every place that moves is released, then every one
+  -- applied again where it now is, in that order, so no claim meets one it
+  -- is about to replace.
+  [ "swap", t ] -> do
+    target <- Rack.bankOf t
+    let sel = Rack.parseRack rack
+    sb <- note (t <> " is not a modular bank") (Wire.targetSocketBank target)
+    moved <- traverse (swapOne target) sel.destinations
+    let
+      -- what moved: its run, or a voice layout's gates
+      changed = Array.catMaybes (Array.zipWith (\d d' -> if M.placesOf d == M.placesOf d' then Nothing else Just { was: d, now: d' }) sel.destinations moved)
+      sel' = sel { destinations = moved }
+      releases = map (\c -> maybe "" (\b -> "release-claim polysignal " <> Wire.ownerOf b c.was.jacks) (Wire.targetSocketBank c.was.target)) changed
+      applies = Array.mapMaybe (\c -> Wire.destinationEnvelope c.now) changed
+    when (Array.null changed) $ Left (t <> " has nothing on either half to swap")
+    for_ (Array.find (\a -> a.socket /= sb.socket) applies) \_ -> Left "a swap stays on one device"
+    pure
+      { rack: Rack.printRack sel'
+      , line: "swap " <> t
+      , socket: sb.socket
+      , bank: maybe "" _.bank (head applies)
+      , json: maybe "" _.json (head applies)
+      , command: joinWith "\n" (filter (_ /= "") releases <> map (\a -> "apply-polysignal " <> a.json) applies)
+      , note: ""
+      , also: map (\a -> { bank: a.bank, json: a.json }) (Array.drop 1 applies)
       }
   -- `mute <bank>` / `unmute <bank>`: the bank stays as it is and its jacks go
   -- silent, or play it again
@@ -470,8 +502,27 @@ rigCommand src rack = case words src of
       , json: maybe "" _.json sent
       , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
       , note: if muted then "" else rateNote dest'
+      , also: []
       }
   _ -> rigLine' src rack
+
+-- | A destination with the halves of `target` exchanged: its run if it is on
+-- | one half (or refused, if it straddles them), and a voice layout's gates if
+-- | they are on one half of `target`.
+swapOne :: M.Target -> M.Destination -> Either String M.Destination
+swapOne target d = do
+  jacks <- if d.target == target then flip d.jacks else Right d.jacks
+  bank <- case d.bank of
+    M.GVoice vb -> case vb.gates of
+      Just g | g.target == target -> (\j -> M.GVoice vb { gates = Just g { jacks = j } }) <$> flip g.jacks
+      _ -> Right d.bank
+    b -> Right b
+  pure d { jacks = jacks, bank = bank }
+  where
+  flip j
+    | j.first + j.count - 1 <= 4 = Right j { first = j.first + 4 }
+    | j.first >= 5 = Right j { first = j.first - 4 }
+    | otherwise = Left (M.placeWire target j <> " is across both halves; a swap needs the bank in halves (split it first)")
 
 -- | A whole bank as its first four jacks (`split`).
 splitDest :: M.Destination -> Either String M.Destination
@@ -513,6 +564,7 @@ rigLine' src rack = do
     , json: maybe "" _.json sent
     , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
     , note: if dest.muted then "muted: the jacks stay silent until unmute " <> M.placeWire dest.target dest.jacks else rateNote dest
+    , also: []
     }
 
 -- | What an FH-2 LFO bank's rates will really be, when some clamp: said once
@@ -560,6 +612,7 @@ resetOn rest rack = do
     , json: ""
     , command: "reset-lfos " <> wired.bank <> commaed
     , note: ""
+    , also: []
     }
   where
   slotsOf n s
@@ -584,8 +637,8 @@ moduleOf d = case Str.indexOf (Str.Pattern " # ") line of
   where
   line = printLine d
 
--- | A module (or a block's name, with its terms) put on a bank: the line to
--- | send, `<kind or block> <bank> # …`.
+-- | A module (or a recipe's name, with its terms) put on a bank: the line to
+-- | send, `<kind or recipe> <bank> # …`.
 onBank :: String -> M.Target -> String
 onBank m target = onPlace m target M.allJacks
 
@@ -598,10 +651,10 @@ onPlace m target jacks = case Str.indexOf (Str.Pattern " ") (trim m) of
   where
   place = M.placeWire target jacks
 
--- | The kind of bank a module makes: its first word, a kind or a block.
+-- | The kind of bank a module makes: its first word, a kind or a recipe.
 moduleKind :: String -> Maybe M.GenKind
 moduleKind m = case head (words m) of
-  Just w -> case Block.blockNamed w of
+  Just w -> case Recipe.recipeNamed w of
     Just b -> Just b.kind
     Nothing -> Rack.kindOf w
   Nothing -> Nothing
@@ -643,7 +696,7 @@ refusal target kind = case target of
   _ | kind == M.KVoice -> "voices need the FH-2's converters: its own jacks or an FHX-8CV, with the FHX-8GT for their gates"
   _ -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
 
--- | A module as the setting it makes, in its module form: a block or a kind
+-- | A module as the setting it makes, in its module form: a recipe or a kind
 -- | with terms, expanded on a fresh bank, then written back without the
 -- | bank. The same setting so has the same text (and rebus) in the drawer,
 -- | on a row, and wherever it is dropped. Nothing for what is not a module.
@@ -658,8 +711,8 @@ moduleText m = do
       -- voices need the FH-2's converters
       M.KVoice -> M.FH2 0
       _ -> M.ES9Main
-    isBlock = maybe false (\w -> Block.blockNamed w /= Nothing) (head (words m))
-    src = onBank m bank <> (if isBlock then "" else " # fresh")
+    isRecipe = maybe false (\w -> Recipe.recipeNamed w /= Nothing) (head (words m))
+    src = onBank m bank <> (if isRecipe then "" else " # fresh")
   line <- hush (parseLine src)
   sel <- hush (applyLine line { destinations: [] })
   moduleOf <$> Array.find (\d -> d.target == bank) sel.destinations
