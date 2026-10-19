@@ -568,7 +568,8 @@ rigLine' src rack = do
     }
 
 -- | What an FH-2 LFO bank's rates will really be, when some clamp: said once
--- | per distinct rate, as "0.05 Hz runs at 0.1 Hz".
+-- | per distinct rate, as "0.05 Hz runs at 0.1 Hz". For an FH-2 clock bank,
+-- | why some slots will play silent.
 rateNote :: M.Destination -> String
 rateNote d = case d.bank of
   M.GLfo slots ->
@@ -577,6 +578,12 @@ rateNote d = case d.bank of
     in
       if Array.null clamps then ""
       else joinWith ", " clamps <> " (the FH-2's LFOs span 0.1 to 10.36 Hz)"
+  M.GClock slots ->
+    let
+      silent = Array.nub (Array.mapMaybe (M.clockOn d.target) slots)
+    in
+      if Array.null silent then ""
+      else "silent where " <> joinWith ", and " silent
   _ -> ""
 
 -- | `reset <bank>` or `reset <bank> "3 6"`: restart the bank's LFOs, or some

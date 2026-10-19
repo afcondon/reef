@@ -63,6 +63,8 @@ module Reef.Selene.Model
   , clockBaseToWire
   , clockBaseLabel
   , clockBaseBeats
+  , clockBaseTicks
+  , clockOn
   , ModSlot
   , LfoWave(..)
   , lfoWaves
@@ -184,9 +186,12 @@ waveName = case _ of
 waveOfName :: String -> Maybe LfoWave
 waveOfName k = Array.find (\w -> waveName w == k) lfoWaves
 
--- | POLYCLOCK: a tempo-locked gate train. `base` / `multiplier` set the
--- | division (beats-per-pulse = base-beats / multiplier), `pulseWidth` the
--- | duty %, `phase` a degrees offset. Rate rides the Link tempo at playback.
+-- | POLYCLOCK: a tempo-locked gate train, a clock divider. A pulse comes
+-- | every `base` × `multiplier`: `1/4 x1` is the beat, `1/4 x4` one pulse
+-- | every four beats (the FH-2's own meaning of its multiplier, and so the
+-- | one meaning on every rig, 2026-10-19). Faster than the beat is a shorter
+-- | base: `1/8`, `1/16T`, `1/64T` (24 ppqn). `pulseWidth` is the duty %, 0
+-- | silent; `phase` a degrees offset. Rate rides the Link tempo at playback.
 type ClockSlot =
   { base :: ClockBase
   , multiplier :: Int
@@ -525,6 +530,45 @@ clockBaseBeats = case _ of
   ClockThirtySecondT -> 1.0 / 12.0
   ClockSixtyFourthT -> 1.0 / 24.0
 
+-- | A base in ticks of 24 per beat, the FH-2's own count (fh2-config
+-- | `baseDurationByte`): every clock on every rig is a whole number of them.
+clockBaseTicks :: ClockBase -> Int
+clockBaseTicks = case _ of
+  ClockWhole -> 96
+  ClockHalf -> 48
+  ClockQuarter -> 24
+  ClockQuarterT -> 16
+  ClockEighth -> 12
+  ClockEighthT -> 8
+  ClockSixteenth -> 6
+  ClockSixteenthT -> 4
+  ClockThirtySecond -> 3
+  ClockThirtySecondT -> 2
+  ClockSixtyFourthT -> 1
+
+-- | Why a clock slot cannot be played as asked on a target, when it cannot:
+-- | the FH-2 then plays it silent, and the page marks it. The FH-2's pulse is
+-- | 50% or a fixed length in milliseconds, so a duty is exact only at 50%
+-- | (or 0, silent); its multiplier stops at 127, and its shift (the phase,
+-- | in ticks of 24 a beat) at 127 too. The ES-9 computes its
+-- | clocks and plays any of them.
+clockOn :: Target -> ClockSlot -> Maybe String
+clockOn target sl = case target of
+  FH2 _ -> fh2
+  FH2Cv _ -> fh2
+  _ -> Nothing
+  where
+  fh2
+    | sl.pulseWidth /= 0 && sl.pulseWidth /= 50 =
+        Just ("the FH-2's clocks are 50% or a fixed pulse, not " <> show sl.pulseWidth <> "%")
+    | sl.multiplier > 127 = Just ("the FH-2's multiplier stops at 127, not " <> show sl.multiplier)
+    | shiftTicks > 127 = Just ("the FH-2 shifts a clock by at most 127 ticks of 24 a beat, not " <> show shiftTicks)
+    | otherwise = Nothing
+  period = clockBaseTicks sl.base * max 1 sl.multiplier
+  -- non-negative before `mod`: purerl's Int `mod` truncates
+  degrees = ((sl.phase `mod` 360) + 360) `mod` 360
+  shiftTicks = ((degrees * period + 180) / 360) `mod` period
+
 -- ---------------------------------------------------------------------------
 -- The rack
 -- ---------------------------------------------------------------------------
@@ -611,7 +655,7 @@ freshBank = case _ of
     , level: 0.0, sin: 0.8, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0
     , wave: WaveSin
     }
-  -- divisions 1/4 ÷ (i+1): a metric fan
+  -- a clock divider: the beat, then one pulse every 2, 3 … 8 beats
   clockSlot i = { base: ClockQuarter, multiplier: i + 1, pulseWidth: 50, phase: 0 }
   -- a spread of classic Euclidean rhythms over 8 or 16 steps
   euclidSlot i =
