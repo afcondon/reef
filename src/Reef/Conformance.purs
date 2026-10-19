@@ -2097,6 +2097,8 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     , "lfo es9main # tri 0.6 # sin 0"
     , "euclid es9gt0 # hits 5"
     , "euclid es9gt0 # hits \"3 4 5 6 7 3 4 5\" # steps \"8 8 8 8 16 16 16 16\" # acc 2"
+    -- turned rings, and a ring cut to 32 steps
+    , "euclid es9gt0 # rot \"0 1 2 3 -1 9\" # steps \"8 8 8 8 8 40\""
     , "clock es9gt1 # div 1/8 # mult \"1 2 3 4 5 6 7 8\" # pw 25"
     -- a clock as its ratio to the beat: ×n a beat, ÷n one every n beats
     , "clock es9gt1 # ratio \"1 ÷2 ×2 ×3/2 ÷64 ×24 x4 /3\""

@@ -179,6 +179,7 @@ lfoLine sl =
 euclidLine :: M.EuclidSlot -> String
 euclidLine sl =
   show sl.beats <> " " <> show sl.steps <> " @" <> show sl.rate
+    <> (if sl.rotation == 0 then "" else " r" <> show sl.rotation)
     <> (if sl.accentRate == 0 then "" else " acc " <> show sl.accentRate)
 
 clockLine :: M.ClockSlot -> String
@@ -456,7 +457,7 @@ silentLfo :: M.ModSlot
 silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0, wave: M.WaveSin }
 
 silentEuclid :: M.EuclidSlot
-silentEuclid = { beats: 0, steps: 8, rate: 4, accentRate: 0 }
+silentEuclid = { beats: 0, steps: 8, rotation: 0, rate: 4, accentRate: 0 }
 
 silentClock :: M.ClockSlot
 silentClock = { base: M.ClockQuarter, multiplier: 1, pulseWidth: 0, phase: 0 }
@@ -512,11 +513,12 @@ collectPairs = go
         Nothing -> []
   snocTok x xs = [ x ] <> xs
 
--- euclid <beats> <steps> [@rate] [acc n]
+-- euclid <beats> <steps> [@rate] [r<rotation>] [acc n]
 parseEuclid :: String -> M.EuclidSlot
 parseEuclid s =
   { beats: int (idx 0) silentEuclid.beats
-  , steps: max 1 (int (idx 1) silentEuclid.steps)
+  , steps
+  , rotation: ((fromMaybe 0 rot `mod` steps) + steps) `mod` steps
   , rate: fromMaybe 4 atRate
   , accentRate: fromMaybe 0 accVal
   }
@@ -524,6 +526,8 @@ parseEuclid s =
   toks = words s
   idx i = fromMaybe "" (toks !! i)
   atRate = firstJust (map (\tk -> map (\r -> r) (intMaybe =<< Str.stripPrefix (Str.Pattern "@") tk)) toks)
+  steps = clamp 1 M.maxEuclidSteps (int (idx 1) silentEuclid.steps)
+  rot = firstJust (map (\tk -> intMaybe =<< Str.stripPrefix (Str.Pattern "r") tk) toks)
   accVal = afterKey "acc" toks
 
 -- clock <ratio> [<pw>%] [ph<deg>]: `÷4 50%`, `×2 50%`, `×3/2 25% ph90`.

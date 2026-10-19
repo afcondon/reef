@@ -171,10 +171,11 @@ applyTerm bank t = case bank of
     _ -> unknown "lfo" "rate phase level sin sqr tri saw rnd nse"
   M.GEuclid slots -> M.GEuclid <$> each slots \sl v -> case t.param of
     p | p == "beats" || p == "hits" -> (\x -> sl { beats = x }) <$> integer v
-      | p == "steps" -> (\x -> sl { steps = x }) <$> integer v
+      | p == "steps" -> (\x -> let n = clamp 1 M.maxEuclidSteps x in sl { steps = n, beats = min sl.beats n, rotation = sl.rotation `mod` n }) <$> integer v
+      | p == "rot" || p == "rotation" -> (\x -> sl { rotation = ((x `mod` sl.steps) + sl.steps) `mod` sl.steps }) <$> integer v
       | p == "rate" -> (\x -> sl { rate = x }) <$> integer v
       | p == "acc" || p == "accentRate" -> (\x -> sl { accentRate = x }) <$> integer v
-    _ -> unknown "euclid" "hits steps rate acc"
+    _ -> unknown "euclid" "hits steps rot rate acc"
   M.GClock slots -> M.GClock <$> each slots \sl v -> case t.param of
     p | p == "ratio" || p == "clock" ->
           note ("ratio wants ×n (n a beat), ÷n (one every n beats) or ×p/q, whole 24ppqn ticks; not " <> v)
@@ -221,7 +222,7 @@ applyTerm bank t = case bank of
 paramsOf :: M.GenKind -> Array String
 paramsOf = case _ of
   M.KLfo -> [ "rate", "phase", "level", "sin", "sqr", "tri", "saw", "rnd", "nse" ]
-  M.KEuclid -> [ "hits", "steps", "rate", "acc" ]
+  M.KEuclid -> [ "hits", "steps", "rot", "rate", "acc" ]
   M.KClock -> [ "ratio", "pw", "phase" ]
   M.KNote -> [ "note" ]
   M.KEnv -> [ "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
@@ -339,6 +340,7 @@ valuesOf p = case _ of
   M.GEuclid s -> map (\sl -> show case p of
     "hits" -> sl.beats
     "steps" -> sl.steps
+    "rot" -> sl.rotation
     "rate" -> sl.rate
     _ -> sl.accentRate) s
   M.GClock s -> map (\sl -> case p of

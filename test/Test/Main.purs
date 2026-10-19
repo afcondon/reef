@@ -2072,6 +2072,8 @@ rack round-trip true
   euclid es9gt0 # hits 5 # steps "8 8 8 8 16 16 16 16"
 > euclid es9gt0 # hits "3 4 5 6 7 3 4 5" # steps "8 8 8 8 16 16 16 16" # acc 2
   euclid es9gt0 # hits "3 4 5 6 7 3 4 5" # steps "8 8 8 8 16 16 16 16" # acc 2
+> euclid es9gt0 # rot "0 1 2 3 -1 9" # steps "8 8 8 8 8 40"
+  euclid es9gt0 # hits "3 4 5 6 7 3 4 5" # steps "8 8 8 8 8 32 8 8" # rot "0 1 2 3 7 9 0 1" # acc 2
 > clock es9gt1 # div 1/8 # mult "1 2 3 4 5 6 7 8" # pw 25
   clock es9gt1 # ratio "×2 ×1 ×2/3 ÷2 ×2/5 ÷3 ×2/7 ÷4" # pw 25
 > clock es9gt1 # ratio "1 ÷2 ×2 ×3/2 ÷64 ×24 x4 /3"

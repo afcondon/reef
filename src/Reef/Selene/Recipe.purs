@@ -167,19 +167,19 @@ expand b terms = do
       rate <- int "rate"
       by <- traverse' (\v -> note ("divider: by wants whole numbers, not " <> v) (Int.fromString v)) (vals "by")
       let n i = clamp 1 32 (fromMaybe 1 (by !! (i `mod` length by)))
-      pure (M.GEuclid (map (\i -> { beats: 1, steps: n i, rate: max 1 rate, accentRate: 0 }) slots))
+      pure (M.GEuclid (map (\i -> { beats: 1, steps: n i, rate: max 1 rate, rotation: 0, accentRate: 0 }) slots))
     "toussaint" ->
       let
         rhythms = [ Tuple 3 8, Tuple 5 8, Tuple 4 7, Tuple 2 5, Tuple 7 12, Tuple 5 12, Tuple 5 16, Tuple 9 16 ]
         -- each on its natural grid: twelves in triplet eighths, sixteens in
         -- sixteenths, the rest in eighths
         grid steps = if steps `mod` 3 == 0 then 3 else if steps == 16 then 4 else 2
-        slot (Tuple hits steps) = { beats: hits, steps, rate: grid steps, accentRate: 0 }
+        slot (Tuple hits steps) = { beats: hits, steps, rate: grid steps, rotation: 0, accentRate: 0 }
       in pure (M.GEuclid (map (\i -> slot (fromMaybe (Tuple 3 8) (rhythms !! i))) slots))
     "polymeter" -> do
       hits <- int "hits"
       rate <- int "rate"
-      pure (M.GEuclid (map (\i -> { beats: clamp 1 (5 + i) hits, steps: 5 + i, rate: max 1 rate, accentRate: 0 }) slots))
+      pure (M.GEuclid (map (\i -> { beats: clamp 1 (5 + i) hits, steps: 5 + i, rate: max 1 rate, rotation: 0, accentRate: 0 }) slots))
     "scatter" -> do
       seed <- int "seed"
       rate <- int "rate"
@@ -194,7 +194,7 @@ expand b terms = do
             lo = max 1 (steps / 4)
             hi = max lo (steps / 2)
             hits = lo + (s2 / 256) `mod` (hi - lo + 1)
-          in { s: s2, out: acc.out <> [ { beats: hits, steps, rate: max 1 rate, accentRate: 0 } ] }) { s: start seed, out: [] } slots).out
+          in { s: s2, out: acc.out <> [ { beats: hits, steps, rate: max 1 rate, rotation: 0, accentRate: 0 } ] }) { s: start seed, out: [] } slots).out
       pure (M.GEuclid drawn)
     "chord" -> do
       root <- note ("chord: root wants a note, like C3 or 48, not " <> one "root") (Rack.noteToken (one "root"))

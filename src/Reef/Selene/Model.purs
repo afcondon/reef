@@ -82,6 +82,7 @@ module Reef.Selene.Model
   , defaultEnvSlot
   , slotCount
   , euclidBits
+  , maxEuclidSteps
   , noteName
   , lfoValue
   , lfoCyclesShown
@@ -205,15 +206,23 @@ type ClockSlot =
   , phase :: Int
   }
 
--- | POLYEUCLID: a Euclidean gate — `beats` pulses spread over `steps`, clocked
--- | at `rate` steps a beat (4 = 16ths), each gate half a step long, on every
--- | rig. `accentRate` is an FH-2 feature ES-9 drops.
+-- | POLYEUCLID: a Euclidean gate — `beats` pulses spread over `steps` (1 to
+-- | `maxEuclidSteps`), turned by `rotation` steps (the pattern starts that
+-- | many steps later, as Odonus's ring turns), clocked at `rate` steps a beat
+-- | (4 = 16ths), each gate half a step long, on every rig. `accentRate` is an
+-- | FH-2 feature ES-9 drops.
 type EuclidSlot =
   { beats :: Int
   , steps :: Int
+  , rotation :: Int
   , rate :: Int
   , accentRate :: Int
   }
+
+-- | The longest Euclid on any rig: the FH-2's patterns and es9-daemon's
+-- | pattern word both stop at 32 steps.
+maxEuclidSteps :: Int
+maxEuclidSteps = 32
 
 -- | POLYPRESETNOTE: a static V/oct pitch, one held MIDI note per slot.
 type PresetNoteSlot =
@@ -610,7 +619,7 @@ clockOfRatio tok = case slower of
 -- | Why a Euclid slot cannot be played as asked on a target, when it cannot:
 -- | the FH-2 then plays it silent, and the page marks it. The FH-2's step is a
 -- | whole number of ticks (24 a beat), so `rate` must divide 24 (1, 2, 3, 4,
--- | 6, 8, 12, 24), and its patterns stop at 32 steps.
+-- | 6, 8, 12, 24).
 euclidOn :: Target -> EuclidSlot -> Maybe String
 euclidOn target sl = case target of
   FH2 _ -> fh2
@@ -620,7 +629,6 @@ euclidOn target sl = case target of
   fh2
     | sl.rate < 1 || 24 `mod` sl.rate /= 0 =
         Just ("the FH-2's steps are 1, 2, 3, 4, 6, 8, 12 or 24 a beat, not " <> show sl.rate)
-    | sl.steps > 32 = Just ("the FH-2's patterns stop at 32 steps, not " <> show sl.steps)
     | otherwise = Nothing
 
 -- | Why a clock slot cannot be played as asked on a target, when it cannot:
@@ -738,7 +746,7 @@ freshBank = case _ of
   euclidSlot i =
     let steps = if i < 4 then 8 else 16
         beats = clamp 1 steps (3 + (i `mod` 5))
-    in { beats, steps, rate: 4, accentRate: 0 }
+    in { beats, steps, rotation: 0, rate: 4, accentRate: 0 }
   -- C2 G2 C3 D3 E3 G3 C4 E4 — a Cadd9 voicing climbing the bank
   noteSlot i = { note: fromMaybe 60 (chord !! i) }
   chord = [ 36, 43, 48, 50, 52, 55, 60, 64 ]
@@ -901,11 +909,16 @@ freshBankOn j k = takeSlots j.count (freshBank k)
 -- Derived
 -- ---------------------------------------------------------------------------
 
--- | The Euclidean step pattern (Bresenham): step k is a pulse iff
--- | `(k * beats) mod steps < beats`. The rule the daemon uses.
+-- | The Euclidean step pattern (Bresenham), turned: step k is a pulse iff
+-- | `((k - rotation) * beats) mod steps < beats`. The rule both daemons are
+-- | given, and `Triggerfish.Ui.Euclid.hit`'s.
 euclidBits :: EuclidSlot -> Array Boolean
 euclidBits sl =
-  map (\k -> (k * sl.beats) `mod` sl.steps < sl.beats) (range 0 (sl.steps - 1))
+  map (\k -> (wrapStep (k - sl.rotation) * sl.beats) `mod` n < sl.beats) (range 0 (n - 1))
+  where
+  n = max 1 sl.steps
+  -- non-negative before `mod`: purerl's Int `mod` truncates
+  wrapStep a = ((a `mod` n) + n) `mod` n
 
 -- | A MIDI note as pitch-class + octave (middle C = 60 = "C4").
 noteName :: Int -> String
