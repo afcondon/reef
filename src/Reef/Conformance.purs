@@ -2243,6 +2243,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
           , "join fh2_0:1-4"
           , "join fh2cv0:3"
           , "split fh2_0:1-4"
+          , "env fh2cv0:5-8 # a 10"
           ]
         <> map (\src -> src <> " | " <> case SL.rigLine src r0 of
                  Left e -> "refused: " <> e

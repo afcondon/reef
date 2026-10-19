@@ -209,6 +209,7 @@ off fh2_0 | refused: fh2_0 is already free
 join fh2_0:1-4 | refused: fh2_0:5-8 is on the same bank; free it first (off fh2_0:5-8)
 join fh2cv0:3 | cv0 | release-claim polysignal selene:fh2:cv0:3 then apply-polysignal polylfo on cv0 offset -, 8 slots, as selene:fh2:cv0 | join fh2cv0:3
 split fh2_0:1-4 | refused: fh2_0:1-4 is already a run of its bank; split takes a whole bank
+env fh2cv0:5-8 # a 10 | refused: fh2cv0:5-8: an envelope bank takes a whole bank: its envelopes answer MIDI channels 1-8, one per slot
 split es9main | main:1-4 | release-claim polysignal selene:es9:main then apply-polysignal polylfo on main offset 0, 4 slots, as selene:es9:main:1-4 | lfo es9main:1-4 /   0.5 @0 sin 0.8   -- 1 /   0.5 @0.125 sin 0.8   -- 2 /   0.5 @0.25 sin 0.8   -- 3 /   0.5 @0.375 sin 0.8   -- 4
 split midi1 | refused: a MIDI channel has no jacks to split
   overlaps: fh2_0 and fh2_0:5-8 share jacks

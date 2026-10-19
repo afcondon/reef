@@ -29,6 +29,8 @@ module Reef.Selene.Line
   , rigLine
   , moduleOf
   , onBank
+  , acceptsAt
+  , refusalAt
   , onPlace
   , moduleKind
   , accepts
@@ -108,6 +110,8 @@ applyLine line sel = do
     -- another destination on jacks this line's run shares: refused, as two
     -- generators on one jack would sum in the daemon
     clash = Array.find (\d -> d.target == line.target && not (M.samePlace line d) && M.jacksOverlap d.jacks line.jacks) sel.destinations
+  when (kindOfLine == M.KEnv && not (M.isWholeBank line.jacks)) $
+    Left (M.placeWire line.target line.jacks <> ": " <> envelopeWhole)
   for_ clash \d -> Left (M.placeWire line.target line.jacks <> " shares jacks with the " <> Rack.kindKeyword d.bank <> " on " <> M.placeWire d.target d.jacks <> "; free it first (off " <> M.placeWire d.target d.jacks <> ")")
   -- a block sets the whole bank from its own parameters; the line's other
   -- terms then apply to that, as plain parameters
@@ -387,6 +391,7 @@ rigCommand src rack = case words src of
 splitDest :: M.Destination -> Either String M.Destination
 splitDest d
   | not (M.isWholeBank d.jacks) = Left (M.placeWire d.target d.jacks <> " is already a run of its bank; split takes a whole bank")
+  | M.bankKind d.bank == M.KEnv = Left (M.placeWire d.target d.jacks <> ": " <> envelopeWhole)
   | otherwise = case d.target of
       M.Midi _ -> Left "a MIDI channel has no jacks to split"
       M.Virtual _ -> Left "a virtual bank has no jacks to split"
@@ -526,6 +531,21 @@ accepts target kind = case target of
   _ -> true
   where
   gates = kind == M.KEuclid || kind == M.KClock
+
+-- | Whether a run of a bank's jacks can take a kind: as the bank can, and
+-- | an envelope bank only whole. Its eight envelopes are the FH-2's first
+-- | eight MIDI converters, triggered on channels 1-8 by slot, so half a bank
+-- | of them would answer channels nothing plays them on.
+acceptsAt :: M.Target -> M.Jacks -> M.GenKind -> Boolean
+acceptsAt target jacks kind = accepts target kind && (M.isWholeBank jacks || kind /= M.KEnv)
+
+refusalAt :: M.Target -> M.Jacks -> M.GenKind -> String
+refusalAt target jacks kind
+  | not (accepts target kind) = refusal target kind
+  | otherwise = envelopeWhole
+
+envelopeWhole :: String
+envelopeWhole = "an envelope bank takes a whole bank: its envelopes answer MIDI channels 1-8, one per slot"
 
 -- | Why a bank cannot take a kind, for the page to say.
 refusal :: M.Target -> M.GenKind -> String
