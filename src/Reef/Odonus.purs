@@ -124,6 +124,7 @@ import Data.Int.Bits (and, shl, shr)
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Either (either)
 import Data.String (trim)
+import Reef.Euclid as Euclid
 import Reef.Scale (Scale, Distribution(..), mkScaleFromIvls, normaliseIvls, pitchClassesOf, quantiseToChordPCs, quantiseToScale, randomisableScales, recogniseScale, scaleTypes, spreadIvls)
 import Reef.PitchSet (PitchSet(..), cardinality)
 import Reef.PitchSet (equalIndex, nearestIn, periodsIn, quantiseToVoicing, realize, realizeEqualShift, voicing) as PS
@@ -1042,12 +1043,10 @@ nudgeHeadEuclidRotation h d = editHead h \hd ->
   hd { rotation = modPos (hd.rotation + d) (clampI 1 maxEsteps hd.esteps) }
 
 -- | Is step `i` a pulse of the even Euclidean rhythm E(pulses, steps)? 0 pulses
--- | is silent; pulses ≥ steps is every step; otherwise pulses spread evenly.
+-- | is silent; pulses ≥ steps is every step; otherwise `Reef.Euclid`'s rule,
+-- | the one Selene and the FH-2 play.
 euclidHit :: Int -> Int -> Int -> Boolean
-euclidHit pulses steps i
-  | pulses <= 0 = false
-  | pulses >= steps = true
-  | otherwise = ((i `mod` steps) * pulses) `mod` steps < pulses
+euclidHit pulses steps i = Euclid.hit pulses steps 0 i
 
 toggleHeadMute :: Int -> Odonus -> Odonus
 toggleHeadMute h = editHead h \hd -> hd { mute = not hd.mute }

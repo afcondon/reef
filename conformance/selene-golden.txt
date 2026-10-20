@@ -288,6 +288,32 @@ swap fh2_1 | gt0:1-4 | swap fh2_1
     0.5 @0.125 sin 0.8   -- 4
     0.5 @0.25 sin 0.8   -- 5
     0.5 @0.375 sin 0.8   -- 6
+== euclid (the FH-2's rule)
+E(3,8) r0 x..x..x.
+E(5,8) r0 x.xx.xx.
+E(4,6) r0 xx.xx.
+E(3,7) r0 x.x.x..
+E(4,9) r0 x.x.x.x..
+E(6,8) r0 xxx.xxx.
+E(6,10) r0 x.x.xx.x.x
+E(7,10) r0 xx.xx.xx.x
+E(3,16) r0 x....x....x.....
+E(5,16) r0 x..x..x..x..x...
+E(7,16) r0 x.x.x..x.x.x..x.
+E(9,16) r0 x.x.x.xx.x.x.xx.
+E(12,20) r0 x.x.xx.x.xx.x.xx.x.x
+E(17,29) r0 x.x.xx.x.xx.x.x.xx.x.xx.x.x.x
+E(5,32) r0 x.....x......x.....x......x.....
+E(7,32) r0 x....x...x....x...x....x...x....
+E(11,32) r0 x..x..x..x..x..x..x..x..x..x..x.
+E(13,32) r0 x.x..x.x..x.x..x.x..x.x..x.x..x.
+E(3,8) r1 .x..x..x
+E(5,32) r3 ...x.....x......x.....x......x..
+E(13,32) r9 ..x.x..x.x.x..x.x..x.x..x.x..x.x
+E(3,8) r-1 ..x..x.x
+E(0,8) r0 ........
+E(8,8) r0 xxxxxxxx
+E(9,8) r2 xxxxxxxx
 == the rack after
 -- SELENE · edit the numbers; the rack follows.
 -- <kind> <target> [range] opens a group of 8 · <target>:5-8 takes jacks 5-8 · one slot per line · -- mutes a slot.

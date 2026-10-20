@@ -115,6 +115,7 @@ import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
+import Reef.Euclid as Euclid
 import Reef.Selene.Model (defaultSelene, overlaps) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
@@ -2087,7 +2088,7 @@ conspicillumProgressionRun = case CN.parse progressionLine, CN.parse (progressio
 -- ---------------------------------------------------------------------------
 
 seleneRun :: String
-seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> flats <> splits <> voiceLayouts <> [ "== the rack after", SR.printRack final ])
+seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <> resets <> retrigs <> rateNotes <> mutes <> slotMutes <> flats <> splits <> voiceLayouts <> euclids <> [ "== the rack after", SR.printRack final ])
   where
   r0 = SR.printRack SM.defaultSelene
   rack0 = [ "== the default rack", r0 ]
@@ -2302,6 +2303,19 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         body = filter (\l -> String.take 2 l == "  ") (String.split (String.Pattern "\n") printed)
     in intercalate " / " body <> " | round-trips " <> show (SR.printRack (SR.parseRack printed) == printed)
   -- what the FH-2 will really do with an LFO rate it cannot reach
+  -- E(k, n) as the FH-2 plays it: every pattern measured on 2026-10-20, then
+  -- turned, and the ends
+  euclids = [ "== euclid (the FH-2's rule)" ] <> map euclidRow
+    [ { k: 3, n: 8, r: 0 }, { k: 5, n: 8, r: 0 }, { k: 4, n: 6, r: 0 }, { k: 3, n: 7, r: 0 }
+    , { k: 4, n: 9, r: 0 }, { k: 6, n: 8, r: 0 }, { k: 6, n: 10, r: 0 }, { k: 7, n: 10, r: 0 }
+    , { k: 3, n: 16, r: 0 }, { k: 5, n: 16, r: 0 }, { k: 7, n: 16, r: 0 }, { k: 9, n: 16, r: 0 }
+    , { k: 12, n: 20, r: 0 }, { k: 17, n: 29, r: 0 }, { k: 5, n: 32, r: 0 }, { k: 7, n: 32, r: 0 }
+    , { k: 11, n: 32, r: 0 }, { k: 13, n: 32, r: 0 }
+    , { k: 3, n: 8, r: 1 }, { k: 5, n: 32, r: 3 }, { k: 13, n: 32, r: 9 }, { k: 3, n: 8, r: -1 }
+    , { k: 0, n: 8, r: 0 }, { k: 8, n: 8, r: 0 }, { k: 9, n: 8, r: 2 }
+    ]
+  euclidRow e = "E(" <> show e.k <> "," <> show e.n <> ") r" <> show e.r <> " "
+    <> String.joinWith "" (map (\b -> if b then "x" else ".") (Euclid.turned e.k e.n e.r))
   rateNotes = [ "== rate notes" ] <> map rateNote
     [ "lfo fh2cv0 # rate 0.05", "lfo fh2cv0 # rate 20", "drift fh2cv1", "lfo es9main # rate 0.05", "lfo fh2cv0 # rate 2" ]
   rateNote src = src <> " | " <> case SL.rigLine src (SR.printRack final) of

@@ -96,6 +96,7 @@ import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as Str
+import Reef.Euclid as Euclid
 import Reef.Numeric (ln, sin) as N
 
 -- ---------------------------------------------------------------------------
@@ -909,16 +910,11 @@ freshBankOn j k = takeSlots j.count (freshBank k)
 -- Derived
 -- ---------------------------------------------------------------------------
 
--- | The Euclidean step pattern (Bresenham), turned: step k is a pulse iff
--- | `((k - rotation) * beats) mod steps < beats`. The rule both daemons are
--- | given, and `Triggerfish.Ui.Euclid.hit`'s.
+-- | The Euclidean step pattern, turned: `Reef.Euclid`'s E(beats, steps), the
+-- | FH-2's own rule, started `rotation` steps later. es9-daemon plays the same
+-- | (its `euclidean_bits`), and `Triggerfish.Ui.Euclid` draws it.
 euclidBits :: EuclidSlot -> Array Boolean
-euclidBits sl =
-  map (\k -> (wrapStep (k - sl.rotation) * sl.beats) `mod` n < sl.beats) (range 0 (n - 1))
-  where
-  n = max 1 sl.steps
-  -- non-negative before `mod`: purerl's Int `mod` truncates
-  wrapStep a = ((a `mod` n) + n) `mod` n
+euclidBits sl = Euclid.turned sl.beats (max 1 sl.steps) sl.rotation
 
 -- | A MIDI note as pitch-class + octave (middle C = 60 = "C4").
 noteName :: Int -> String
