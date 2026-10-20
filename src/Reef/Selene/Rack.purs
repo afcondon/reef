@@ -98,6 +98,7 @@ printDest d =
     _ -> 1
   bankSlots = case _ of
     M.GLfo slots -> map lfoLine slots
+    M.GLfoT slots -> map lfoTLine slots
     M.GEuclid slots -> map euclidLine slots
     M.GClock slots -> map clockLine slots
     M.GNote slots -> map noteLine slots
@@ -107,6 +108,7 @@ printDest d =
 kindKeyword :: M.GenBank -> String
 kindKeyword = case _ of
   M.GLfo _ -> "lfo"
+  M.GLfoT _ -> "lfot"
   M.GEuclid _ -> "euclid"
   M.GClock _ -> "clock"
   M.GNote _ -> "note"
@@ -157,8 +159,16 @@ parseVoice def s = case words s of
     _, _ -> def { env = parseEnv s }
 
 lfoLine :: M.ModSlot -> String
-lfoLine sl =
-  fmt sl.rate <> " @" <> fmt sl.phase
+lfoLine sl = fmt sl.rate <> lfoShape sl
+
+-- | A POLYLFOT slot: its period as a ratio to the beat (`÷16`), then the
+-- | phase and shape as a POLYLFO's.
+lfoTLine :: M.ModSlot -> String
+lfoTLine sl = M.lfoRatio sl <> lfoShape sl
+
+lfoShape :: M.ModSlot -> String
+lfoShape sl =
+  " @" <> fmt sl.phase
     <> amp "lvl" sl.level
     <> amp "sin" sl.sin
     <> amp "sqr" sl.sqr
@@ -280,6 +290,7 @@ buildVoices layout rows =
 buildBank :: M.GenKind -> Array (Maybe String) -> M.GenBank
 buildBank kind rows = case kind of
   M.KLfo -> M.GLfo (map (maybe silentLfo parseLfo) rows)
+  M.KLfoT -> M.GLfoT (map (maybe silentLfo parseLfoT) rows)
   M.KEuclid -> M.GEuclid (map (maybe silentEuclid parseEuclid) rows)
   M.KClock -> M.GClock (map (maybe silentClock parseClock) rows)
   M.KNote -> M.GNote (map (maybe silentNote parseNote) rows)
@@ -331,6 +342,7 @@ headerOf t0 = case words t of
 kindOf :: String -> Maybe M.GenKind
 kindOf = case _ of
   "lfo" -> Just M.KLfo
+  "lfot" -> Just M.KLfoT
   "euclid" -> Just M.KEuclid
   "clock" -> Just M.KClock
   "note" -> Just M.KNote
@@ -403,6 +415,7 @@ placeOf tok = case Str.stripPrefix (Str.Pattern "virtual:") tok, Str.lastIndexOf
 silence :: M.GenBank -> M.GenBank
 silence = case _ of
   M.GLfo s -> M.GLfo (map (const silentLfo) s)
+  M.GLfoT s -> M.GLfoT (map (const silentLfo) s)
   M.GEuclid s -> M.GEuclid (map (const silentEuclid) s)
   M.GClock s -> M.GClock (map (const silentClock) s)
   M.GNote s -> M.GNote (map (const silentNote) s)
@@ -423,6 +436,7 @@ silenced d = d { bank = silence d.bank, range = rangeFor d.bank }
   where
   rangeFor = case _ of
     M.GLfo _ -> Just M.Bipolar5V
+    M.GLfoT _ -> Just M.Bipolar5V
     M.GEnv _ -> Just M.Bipolar5V
     M.GEuclid _ -> Just M.Unipolar5V
     M.GClock _ -> Just M.Unipolar5V
@@ -447,6 +461,7 @@ slotsSilenced d
     Nothing -> false
   quiet = case _ of
     M.GLfo s -> M.GLfo (over (silentLfo { level = if unipolar then -1.0 else 0.0 }) s)
+    M.GLfoT s -> M.GLfoT (over (silentLfo { level = if unipolar then -1.0 else 0.0 }) s)
     M.GEuclid s -> M.GEuclid (over silentEuclid s)
     M.GClock s -> M.GClock (over silentClock s)
     M.GNote s -> M.GNote (over silentNote s)
@@ -481,10 +496,17 @@ silentEnv =
 
 -- lfo  <rate> @<phase> [lvl v] [sin a] [sqr a] [tri a] [saw a] [rnd a] [nse a]
 parseLfo :: String -> M.ModSlot
-parseLfo s = foldl apply (silentLfo { rate = rate0 }) (pairs rest)
+parseLfo s = lfoShaped (num (fromMaybe "0" (words s !! 0))) s
+
+-- lfot <ratio> @<phase> [shapes as lfo]: `÷16` a cycle every 16 beats; a
+-- ratio that isn't whole ticks doesn't move
+parseLfoT :: String -> M.ModSlot
+parseLfoT s = lfoShaped (maybe 0.0 M.rateOfTicks (words s !! 0 >>= M.ticksOfRatio)) s
+
+lfoShaped :: Number -> String -> M.ModSlot
+lfoShaped rate0 s = foldl apply (silentLfo { rate = rate0 }) (pairs rest)
   where
   toks = words s
-  rate0 = num (fromMaybe "0" (toks !! 0))
   rest = drop 1 toks
   -- consume `@x` as phase; consume `key val` shape pairs
   pairs = collectPairs

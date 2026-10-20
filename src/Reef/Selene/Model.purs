@@ -68,6 +68,16 @@ module Reef.Selene.Model
   , clockRatio
   , clockOfTicks
   , clockOfRatio
+  , ratioOfTicks
+  , ticksOfRatio
+  , lfoTicks
+  , lfoRatio
+  , rateOfTicks
+  , lfoTempoFactors
+  , lfoTOn
+  , lfoTLadder
+  , lfoTRung
+  , onLfoTRung
   , clockOn
   , euclidOn
   , ModSlot
@@ -109,16 +119,17 @@ import Reef.Numeric (ln, sin) as N
 -- |
 -- | `KEnv` (polyenv) was deferred until 2026-08-08. Both daemons had supported
 -- | the family all along; only this UI was missing.
-data GenKind = KLfo | KEuclid | KClock | KNote | KEnv | KVoice
+data GenKind = KLfo | KLfoT | KEuclid | KClock | KNote | KEnv | KVoice
 
 derive instance Eq GenKind
 
 allKinds :: Array GenKind
-allKinds = [ KLfo, KEuclid, KClock, KNote, KEnv, KVoice ]
+allKinds = [ KLfo, KLfoT, KEuclid, KClock, KNote, KEnv, KVoice ]
 
 kindLabel :: GenKind -> String
 kindLabel = case _ of
   KLfo -> "POLYLFO"
+  KLfoT -> "POLYLFOT"
   KEuclid -> "POLYEUCLID"
   KClock -> "POLYCLOCK"
   KNote -> "POLYNOTE"
@@ -129,6 +140,10 @@ kindLabel = case _ of
 -- | constructor (mirrors `Tidal.Selene`'s `Selene s` sum).
 data GenBank
   = GLfo (Array ModSlot)
+  -- | LFOs on the beat: a ModSlot whose `rate` is cycles a beat (`lfoRatio`),
+  -- | not Hz. The FH-2 plays them in its tempo mode, which reaches ÷651 where
+  -- | its Hz mode stops at 0.1 Hz; the ES-9 places them on the Link beat.
+  | GLfoT (Array ModSlot)
   | GEuclid (Array EuclidSlot)
   | GClock (Array ClockSlot)
   | GNote (Array PresetNoteSlot)
@@ -141,6 +156,7 @@ bankKind :: GenBank -> GenKind
 bankKind = case _ of
   GVoice _ -> KVoice
   GLfo _ -> KLfo
+  GLfoT _ -> KLfoT
   GEuclid _ -> KEuclid
   GClock _ -> KClock
   GNote _ -> KNote
@@ -438,6 +454,8 @@ cycleTarget t =
 defaultTargetFor :: GenKind -> Target
 defaultTargetFor = case _ of
   KLfo -> ES9Main
+  -- the slow LFOs the FH-2's Hz mode can't reach
+  KLfoT -> FH2Cv 0
   KNote -> ES9Cv 0
   KEuclid -> ES9Gt 0
   -- The FHX-8GT, so a new clock and a new rhythm don't meet on the ES-5. There
@@ -570,9 +588,15 @@ clockTicks sl = clockBaseTicks sl.base * max 1 sl.multiplier
 -- | A clock as its ratio to the beat, exact: `×4` four pulses a beat, `÷4`
 -- | one every four beats, `×3/2` for the rest (a quarter triplet).
 clockRatio :: ClockSlot -> String
-clockRatio sl =
+clockRatio = ratioOfTicks <<< clockTicks
+
+-- | A period in ticks of 24 a beat as its ratio to the beat, the notation
+-- | clocks and POLYLFOT share: `×4` four a beat, `÷4` one every four beats,
+-- | `×3/2` for the rest.
+ratioOfTicks :: Int -> String
+ratioOfTicks t0 =
   let
-    t = clockTicks sl
+    t = max 1 t0
     g = gcd 24 t
     perBeat = 24 / g
     beats = t / g
@@ -600,8 +624,13 @@ clockOfTicks t
 -- | ratio that isn't a whole number of ticks (`×5`: 24/5), which no rig
 -- | plays.
 clockOfRatio :: String -> Maybe { base :: ClockBase, multiplier :: Int }
-clockOfRatio tok = case slower of
-  Just n -> positive n >>= \k -> clockOfTicks (24 * k)
+clockOfRatio tok = ticksOfRatio tok >>= clockOfTicks
+
+-- | A ratio as written (`clockOfRatio`'s forms) as its period in ticks of 24
+-- | a beat, when that is a whole number.
+ticksOfRatio :: String -> Maybe Int
+ticksOfRatio tok = case slower of
+  Just n -> positive n <#> (24 * _)
   Nothing -> case Str.split (Str.Pattern "/") faster of
     [ p ] -> Int.fromString p >>= positive >>= \k -> ticksOf k 1
     [ p, q ] -> do
@@ -615,7 +644,70 @@ clockOfRatio tok = case slower of
   firstOf = Array.findMap (\pre -> Str.stripPrefix (Str.Pattern pre) tok)
   positive n = if n >= 1 then Just n else Nothing
   -- k pulses every d beats: a period of 24d/k ticks, when that is whole
-  ticksOf k d = if (24 * d) `mod` k == 0 then clockOfTicks (24 * d / k) else Nothing
+  ticksOf k d = if (24 * d) `mod` k == 0 then Just (24 * d / k) else Nothing
+
+-- | A POLYLFOT slot's period in ticks of 24 a beat (its `rate` is cycles a
+-- | beat); 0 for a slot that doesn't move.
+lfoTicks :: ModSlot -> Int
+lfoTicks sl = if sl.rate <= 0.0 then 0 else max 1 (Int.round (24.0 / sl.rate))
+
+-- | A POLYLFOT slot's period as a ratio to the beat: `÷16` a cycle every 16
+-- | beats.
+lfoRatio :: ModSlot -> String
+lfoRatio sl = if sl.rate <= 0.0 then "0" else ratioOfTicks (lfoTicks sl)
+
+-- | Cycles a beat, from a period in ticks.
+rateOfTicks :: Int -> Number
+rateOfTicks t = if t <= 0 then 0.0 else 24.0 / Int.toNumber t
+
+-- | The FH-2's tempo-mode LFO period as its two bytes, base × multiplier
+-- | ticks, each 1..127 (fh2-config's `tempoFactors` is the same rule):
+-- | every whole number of beats to ÷128, the powers of two to ÷256, ÷651 at
+-- | most. Measured 2026-10-20.
+lfoTempoFactors :: Int -> Maybe { base :: Int, multiplier :: Int }
+lfoTempoFactors t =
+  Array.find (\b -> t `mod` b == 0 && t / b <= 127) (range 1 127)
+    <#> \b -> { base: b, multiplier: t / b }
+
+-- | The rungs a POLYLFOT slot's speed steps through (the page's ←/→, the
+-- | Twister), slowest first, as periods in ticks: ÷256 up to ×4. Every rung
+-- | plays on the FH-2 too.
+lfoTLadder :: Array Int
+lfoTLadder = map (24 * _) [ 256, 192, 128, 96, 64, 48, 32, 24, 16, 12, 8, 6, 4, 3, 2, 1 ] <> [ 12, 6 ]
+
+-- | The rung nearest a slot's period, compared as logs (the ladder is
+-- | geometric), so an off-ladder period still steps to a neighbour.
+lfoTRung :: ModSlot -> Int
+lfoTRung sl =
+  let
+    t = N.ln (Int.toNumber (max 1 (lfoTicks sl)))
+    dist i = case lfoTLadder !! i of
+      Just r -> let d = N.ln (Int.toNumber r) - t in if d < 0.0 then -d else d
+      Nothing -> 1.0e9
+  in
+    Array.foldl (\best i -> if dist i < dist best then i else best) 0 (range 0 (length lfoTLadder - 1))
+
+-- | A slot moved onto a rung of the ladder.
+onLfoTRung :: Int -> ModSlot -> ModSlot
+onLfoTRung i sl = case lfoTLadder !! clamp 0 (length lfoTLadder - 1) i of
+  Just t -> sl { rate = rateOfTicks t }
+  Nothing -> sl
+
+-- | Why a POLYLFOT slot cannot be played as asked on a target, when it
+-- | cannot: on the FH-2 its period must be base × multiplier ticks, each up to
+-- | 127. The ES-9 places its LFOs on the beat and plays any of them.
+lfoTOn :: Target -> ModSlot -> Maybe String
+lfoTOn target sl = case target of
+  FH2 _ -> fh2
+  FH2Cv _ -> fh2
+  _ -> Nothing
+  where
+  t = lfoTicks sl
+  fh2
+    | t == 0 = Nothing
+    | otherwise = case lfoTempoFactors t of
+        Just _ -> Nothing
+        Nothing -> Just ("the FH-2's tempo LFOs are two factors of up to 127 ticks each, which " <> lfoRatio sl <> " isn't")
 
 -- | Why a Euclid slot cannot be played as asked on a target, when it cannot:
 -- | the FH-2 then plays it silent, and the page marks it. The FH-2's step is a
@@ -726,6 +818,8 @@ defaultSelene =
 freshBank :: GenKind -> GenBank
 freshBank = case _ of
   KLfo -> GLfo (map lfoSlot ixs)
+  -- eight sines, each twice as slow: a beat, then 2, 4 … 128 beats a cycle
+  KLfoT -> GLfoT (map (\i -> (lfoSlot i) { rate = 1.0 / Int.toNumber (pow2 i), phase = 0.0 }) ixs)
   KEuclid -> GEuclid (map euclidSlot ixs)
   KClock -> GClock (map clockSlot ixs)
   KNote -> GNote (map noteSlot ixs)
@@ -735,6 +829,7 @@ freshBank = case _ of
   KVoice -> GVoice { outputs: [], gates: Nothing, voices: map (\k -> { channel: voiceChannel slotCount k, env: envSlot 4 }) ixs }
   where
   ixs = range 0 (slotCount - 1)
+  pow2 i = if i <= 0 then 1 else 2 * pow2 (i - 1)
   -- eight sines, phase-spread over the cycle (a travelling wave)
   lfoSlot i =
     { rate: 0.5, phase: Int.toNumber i / Int.toNumber slotCount
@@ -852,6 +947,7 @@ placesOf d = [ { target: d.target, jacks: d.jacks } ] <> case d.bank of
 takeSlots :: Int -> GenBank -> GenBank
 takeSlots n = case _ of
   GLfo xs -> GLfo (Array.take n xs)
+  GLfoT xs -> GLfoT (Array.take n xs)
   GEuclid xs -> GEuclid (Array.take n xs)
   GClock xs -> GClock (Array.take n xs)
   GNote xs -> GNote (Array.take n xs)
@@ -865,6 +961,7 @@ takeSlots n = case _ of
 bankSize :: GenBank -> Int
 bankSize = case _ of
   GLfo xs -> length xs
+  GLfoT xs -> length xs
   GEuclid xs -> length xs
   GClock xs -> length xs
   GNote xs -> length xs
@@ -882,6 +979,7 @@ bankJacks = case _ of
 widenBank :: Jacks -> GenBank -> GenBank
 widenBank j bank = case freshBank (bankKind bank), bank of
   GLfo f, GLfo xs -> GLfo (spread f xs)
+  GLfoT f, GLfoT xs -> GLfoT (spread f xs)
   GEuclid f, GEuclid xs -> GEuclid (spread f xs)
   GClock f, GClock xs -> GClock (spread f xs)
   GNote f, GNote xs -> GNote (spread f xs)
@@ -949,9 +1047,12 @@ lfoValue sl u =
     t = u * cycles + sl.phase   -- phase in cycles
     frac = t - Int.toNumber (Int.floor t)
     twoPi = 2.0 * 3.141592653589793
-    sinW = N.sin (twoPi * t)
+    -- the shapes as both rigs play them (the FH-2 measured 2026-10-20, and
+    -- es9-daemon to match): sine and triangle at their peak at the start of
+    -- a cycle, square high for its first half, saw rising from the bottom
+    sinW = N.sin (twoPi * t + twoPi / 4.0)
     sqrW = if frac < 0.5 then 1.0 else -1.0
-    triW = if frac < 0.5 then 4.0 * frac - 1.0 else 3.0 - 4.0 * frac
+    triW = if frac < 0.5 then 1.0 - 4.0 * frac else 4.0 * frac - 3.0
     sawW = 2.0 * frac - 1.0
   in
     sl.level + sl.sin * sinW + sl.sqr * sqrW + sl.tri * triW + sl.saw * sawW

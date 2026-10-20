@@ -58,6 +58,10 @@ rack round-trip true
   clock es9gt1 # ratio "×2 ×1 ×2/3 ÷2 ×2/5 ÷3 ×2/7 ÷4" # pw 25
 > clock es9gt1 # ratio "1 ÷2 ×2 ×3/2 ÷64 ×24 x4 /3"
   clock es9gt1 # ratio "×1 ÷2 ×2 ×3/2 ÷64 ×24 ×4 ÷3" # pw 25
+> lfot fh2cv3
+  lfot fh2cv3 # ratio "×1 ÷2 ÷4 ÷8 ÷16 ÷32 ÷64 ÷128" # phase 0
+> lfot fh2cv3 # ratio "÷16 ÷32 ÷651 ÷700 ×2 ×3/2 1 ÷256" # tri 0.5 # phase 0.25
+  lfot fh2cv3 # ratio "÷16 ÷32 ÷651 ÷700 ×2 ×3/2 ×1 ÷256" # phase 0.25 # tri 0.5
 > clock es9gt1 # ratio ×5
   refused: ratio wants ×n (n a beat), ÷n (one every n beats) or ×p/q, whole 24ppqn ticks; not ×5
 > note es98cv0 # note "C3 E3 G3 B3"
@@ -102,6 +106,8 @@ rack round-trip true
   lfo fh2cv0 # rate 2 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # tri 1 # retrig "1 ~ [3 5] ~"
 == refusals
 squiggle es9main # rate 1 | refused: not a kind of polysignal or a recipe: squiggle (lfo, euclid, clock, note, env, voices; or a recipe: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, pitches, pitch-env, full-voice, chord)
+lfot fh2cv3 # ratio ×5 | refused: ratio wants ÷n (a cycle every n beats), ×n (n a beat) or ×p/q, whole 24ppqn ticks; not ×5
+lfot fh2cv3 # hits 3 | refused: lfot has no hits (it has ratio phase level sin sqr tri saw rnd nse)
 lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
 euclid es9gt0 # hits many | refused: hits wants a whole number, not many
 lfo | refused: a line starts with a kind and a bank, as in lfo es9main: lfo
@@ -117,7 +123,7 @@ off es9gt1 | es9 gt1 | release-claim polysignal selene:es9:gt1 | kept: false | s
 off es9gt1 | refused: es9gt1 is already free
 off fh2_1 | fh2 gt0 | release-claim polysignal selene:fh2:gt0 | kept: false | still in the rack: false
 off fh2gt0 | refused: no bank fh2gt0: es9main, es9gt<n> or es98cv<n> (the ES-9 and its expanders), fh2_0 (the FH-2), fh2_<n> (its FHX-8GT expanders, from 1), midi<n>, or virtual:<name>
-banks: es9 main as selene:es9:main, es9 gt0 as selene:es9:gt0, fh2 gt0 as selene:fh2:gt0, es9 gt1 as selene:es9:gt1, es9 cv0 as selene:es9:cv0, fh2 main as selene:fh2:main, fh2 cv0 as selene:fh2:cv0, fh2 cv1 as selene:fh2:cv1
+banks: es9 main as selene:es9:main, es9 gt0 as selene:es9:gt0, fh2 gt0 as selene:fh2:gt0, es9 gt1 as selene:es9:gt1, fh2 cv3 as selene:fh2:cv3, es9 cv0 as selene:es9:cv0, fh2 main as selene:fh2:main, fh2 cv0 as selene:fh2:cv0, fh2 cv1 as selene:fh2:cv1
 == reset
 reset fh2cv0 | reset fh2cv0 -> reset-lfos cv0 | rack unchanged: true
 reset fh2cv0 "3 6" | reset fh2cv0 "3 6" -> reset-lfos cv0 3,6 | rack unchanged: true
@@ -135,26 +141,28 @@ lfo fh2cv0 # rate 20 | 20 Hz runs at 10.36 Hz (the FH-2's LFOs span 0.1 to 10.36
 drift fh2cv1 | 0.05 Hz runs at 0.1 Hz, 0.069 Hz runs at 0.1 Hz, 0.086 Hz runs at 0.1 Hz (the FH-2's LFOs span 0.1 to 10.36 Hz)
 lfo es9main # rate 0.05 | (no note)
 lfo fh2cv0 # rate 2 | (no note)
+lfot fh2cv3 # ratio ÷700 | still where the FH-2's tempo LFOs are two factors of up to 127 ticks each, which ÷700 isn't
+lfot es9main # ratio ÷700 | (no note)
 == mute
 mute fh2cv0 | sends lfo fh2cv0 bipolar5v muted retrig "1 ~ [3 5] ~" /  0 @0   -- 1
-  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / lfot fh2cv3 / note es98cv0 / env fh2_0 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 
   round-trips: true
 lfo fh2cv0 # rate 3 | sends lfo fh2cv0 bipolar5v muted retrig "1 ~ [3 5] ~" /  0 @0   -- 1 | muted: the jacks stay silent until unmute fh2cv0
-  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / lfot fh2cv3 / note es98cv0 / env fh2_0 / lfo fh2cv0 muted retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 
   round-trips: true
 unmute fh2cv0 | sends lfo fh2cv0 retrig "1 ~ [3 5] ~" /  3 @0 sin 0.8 tri 1   -- 1
-  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / lfot fh2cv3 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 8 1 ~ [3 5] ~
   round-trips: true
 mute es9gt0 | sends euclid es9gt0 unipolar5v muted /  0 8 @4   -- 1
-  headers: lfo es9main / euclid es9gt0 muted / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 muted / euclid fh2_1 / note midi1 / euclid es9gt1 / lfot fh2cv3 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 8 1 ~ [3 5] ~
   round-trips: true
 mute fh2cv2 | refused: fh2cv2 has nothing on it to mute
 unmute es9gt0 | sends euclid es9gt0 /  4 5 @4   -- 1
-  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
+  headers: lfo es9main / euclid es9gt0 / euclid fh2_1 / note midi1 / euclid es9gt1 / lfot fh2cv3 / note es98cv0 / env fh2_0 / lfo fh2cv0 retrig "1 ~ [3 5] ~" / lfo fh2cv1
   retrigs: 8 1 ~ [3 5] ~
   round-trips: true
 == slot mutes
@@ -368,6 +376,16 @@ euclid es9gt1
   6 16 @4   -- 6
   4 11 @4   -- 7
   6 13 @4   -- 8
+
+lfot fh2cv3
+  ÷16 @0.25 sin 0.8 tri 0.5   -- 1
+  ÷32 @0.25 sin 0.8 tri 0.5   -- 2
+  ÷651 @0.25 sin 0.8 tri 0.5   -- 3
+  ÷700 @0.25 sin 0.8 tri 0.5   -- 4
+  ×2 @0.25 sin 0.8 tri 0.5   -- 5
+  ×3/2 @0.25 sin 0.8 tri 0.5   -- 6
+  ×1 @0.25 sin 0.8 tri 0.5   -- 7
+  ÷256 @0.25 sin 0.8 tri 0.5   -- 8
 
 note es98cv0
   D3   -- 1

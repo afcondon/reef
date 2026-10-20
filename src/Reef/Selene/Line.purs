@@ -160,15 +160,13 @@ applyTerm :: M.GenBank -> { param :: String, values :: Array String } -> Either 
 applyTerm bank t = case bank of
   M.GLfo slots -> M.GLfo <$> each slots \sl v -> case t.param of
     p | p == "rate" -> (\x -> sl { rate = x }) <$> number v
-      | p == "phase" || p == "ph" -> (\x -> sl { phase = x }) <$> number v
-      | p == "level" || p == "lvl" -> (\x -> sl { level = x }) <$> number v
-      | p == "sin" -> (\x -> sl { sin = x }) <$> number v
-      | p == "sqr" -> (\x -> sl { sqr = x }) <$> number v
-      | p == "tri" -> (\x -> sl { tri = x }) <$> number v
-      | p == "saw" -> (\x -> sl { saw = x }) <$> number v
-      | p == "rnd" -> (\x -> sl { rnd = x }) <$> number v
-      | p == "nse" -> (\x -> sl { nse = x }) <$> number v
-    _ -> unknown "lfo" "rate phase level sin sqr tri saw rnd nse"
+    _ -> shaped "lfo" "rate" sl v
+  -- the same shapes, on the beat: the period as a ratio, as a clock's
+  M.GLfoT slots -> M.GLfoT <$> each slots \sl v -> case t.param of
+    p | p == "ratio" || p == "rate" ->
+          note ("ratio wants ÷n (a cycle every n beats), ×n (n a beat) or ×p/q, whole 24ppqn ticks; not " <> v)
+            ((\ticks -> sl { rate = M.rateOfTicks ticks }) <$> M.ticksOfRatio v)
+    _ -> shaped "lfot" "ratio" sl v
   M.GEuclid slots -> M.GEuclid <$> each slots \sl v -> case t.param of
     p | p == "beats" || p == "hits" -> (\x -> sl { beats = x }) <$> integer v
       | p == "steps" -> (\x -> let n = clamp 1 M.maxEuclidSteps x in sl { steps = n, beats = min sl.beats n, rotation = sl.rotation `mod` n }) <$> integer v
@@ -210,6 +208,18 @@ applyTerm bank t = case bank of
         Right _ -> Right bank
         Left _ -> unknown "voices" "ch, and a d s r depth vel time rnd ashape dshape rshape for its envelopes"
   where
+  -- an LFO slot's phase, level and shape: what POLYLFO and POLYLFOT share
+  shaped :: String -> String -> M.ModSlot -> String -> Either String M.ModSlot
+  shaped kind period sl v = case t.param of
+    p | p == "phase" || p == "ph" -> (\x -> sl { phase = x }) <$> number v
+      | p == "level" || p == "lvl" -> (\x -> sl { level = x }) <$> number v
+      | p == "sin" -> (\x -> sl { sin = x }) <$> number v
+      | p == "sqr" -> (\x -> sl { sqr = x }) <$> number v
+      | p == "tri" -> (\x -> sl { tri = x }) <$> number v
+      | p == "saw" -> (\x -> sl { saw = x }) <$> number v
+      | p == "rnd" -> (\x -> sl { rnd = x }) <$> number v
+      | p == "nse" -> (\x -> sl { nse = x }) <$> number v
+    _ -> unknown kind (period <> " phase level sin sqr tri saw rnd nse")
   each :: forall s. Array s -> (s -> String -> Either String s) -> Either String (Array s)
   each slots f = foldM (\acc x -> snoc acc <$> x) [] (mapWithIndex (\i sl -> f sl (valueAt i)) slots)
   valueAt i = fromMaybe "" (t.values !! (i `mod` length t.values))
@@ -222,6 +232,7 @@ applyTerm bank t = case bank of
 paramsOf :: M.GenKind -> Array String
 paramsOf = case _ of
   M.KLfo -> [ "rate", "phase", "level", "sin", "sqr", "tri", "saw", "rnd", "nse" ]
+  M.KLfoT -> [ "ratio", "phase", "level", "sin", "sqr", "tri", "saw", "rnd", "nse" ]
   M.KEuclid -> [ "hits", "steps", "rot", "rate", "acc" ]
   M.KClock -> [ "ratio", "pw", "phase" ]
   M.KNote -> [ "note" ]
@@ -319,6 +330,7 @@ printLine d =
 mainOf :: M.GenKind -> Array String
 mainOf = case _ of
   M.KLfo -> [ "rate", "phase" ]
+  M.KLfoT -> [ "ratio", "phase" ]
   M.KEuclid -> [ "hits", "steps" ]
   M.KClock -> [ "ratio" ]
   M.KNote -> [ "note" ]
@@ -327,6 +339,9 @@ mainOf = case _ of
 
 valuesOf :: String -> M.GenBank -> Array String
 valuesOf p = case _ of
+  M.GLfoT s
+    | p == "ratio" -> map M.lfoRatio s
+    | otherwise -> valuesOf p (M.GLfo s)
   M.GLfo s -> map (\sl -> Rack.fmt case p of
     "rate" -> sl.rate
     "phase" -> sl.phase
@@ -585,6 +600,12 @@ rateNote d = case d.bank of
     in
       if Array.null clamps then ""
       else joinWith ", " clamps <> " (the FH-2's LFOs span 0.1 to 10.36 Hz)"
+  M.GLfoT slots ->
+    let
+      silent = Array.nub (Array.mapMaybe (M.lfoTOn d.target) slots)
+    in
+      if Array.null silent then ""
+      else "still where " <> joinWith ", and " silent
   M.GClock slots ->
     let
       silent = Array.nub (Array.mapMaybe (M.clockOn d.target) slots)

@@ -60,6 +60,7 @@ targetSocketBank = case _ of
 familyOf :: M.GenBank -> String
 familyOf = case _ of
   M.GLfo _ -> "polylfo"
+  M.GLfoT _ -> "polylfot"
   M.GClock _ -> "polyclock"
   M.GEuclid _ -> "polyeuclid"
   M.GNote _ -> "polypresetnote"
@@ -119,6 +120,9 @@ destinationEnvelope d0 = do
       -- only the mix.
       M.GLfo slots ->
         Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots: map lfoWire slots }
+      -- the period in ticks of 24 a beat, where a POLYLFO sends Hz
+      M.GLfoT slots ->
+        Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots: map lfoTWire slots }
       M.GEuclid slots ->
         Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots }
       M.GNote slots ->
@@ -145,6 +149,10 @@ destinationEnvelope d0 = do
     }
   lfoWire s =
     { rate: s.rate, phase: s.phase, level: s.level
+    , sin: s.sin, sqr: s.sqr, tri: s.tri, saw: s.saw, rnd: s.rnd, nse: s.nse
+    }
+  lfoTWire s =
+    { ticks: M.lfoTicks s, phase: s.phase, level: s.level
     , sin: s.sin, sqr: s.sqr, tri: s.tri, saw: s.saw, rnd: s.rnd, nse: s.nse
     }
   clockWire s =

@@ -2103,6 +2103,8 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
     , "clock es9gt1 # div 1/8 # mult \"1 2 3 4 5 6 7 8\" # pw 25"
     -- a clock as its ratio to the beat: ×n a beat, ÷n one every n beats
     , "clock es9gt1 # ratio \"1 ÷2 ×2 ×3/2 ÷64 ×24 x4 /3\""
+    , "lfot fh2cv3"
+    , "lfot fh2cv3 # ratio \"÷16 ÷32 ÷651 ÷700 ×2 ×3/2 1 ÷256\" # tri 0.5 # phase 0.25"
     , "clock es9gt1 # ratio ×5"
     , "note es98cv0 # note \"C3 E3 G3 B3\""
     , "env fh2_0 # a 10 # d 200 # s 64 # r 400"
@@ -2138,6 +2140,8 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
   final = ran.sel
   refusals = [ "== refusals" ] <> map refuse
     [ "squiggle es9main # rate 1"
+    , "lfot fh2cv3 # ratio ×5"
+    , "lfot fh2cv3 # hits 3"
     , "lfo es9main # hits 3"
     , "euclid es9gt0 # hits many"
     , "lfo"
@@ -2317,7 +2321,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
   euclidRow e = "E(" <> show e.k <> "," <> show e.n <> ") r" <> show e.r <> " "
     <> String.joinWith "" (map (\b -> if b then "x" else ".") (Euclid.turned e.k e.n e.r))
   rateNotes = [ "== rate notes" ] <> map rateNote
-    [ "lfo fh2cv0 # rate 0.05", "lfo fh2cv0 # rate 20", "drift fh2cv1", "lfo es9main # rate 0.05", "lfo fh2cv0 # rate 2" ]
+    [ "lfo fh2cv0 # rate 0.05", "lfo fh2cv0 # rate 20", "drift fh2cv1", "lfo es9main # rate 0.05", "lfo fh2cv0 # rate 2", "lfot fh2cv3 # ratio ÷700", "lfot es9main # ratio ÷700" ]
   rateNote src = src <> " | " <> case SL.rigLine src (SR.printRack final) of
     Left e -> "refused: " <> e
     Right r -> if r.note == "" then "(no note)" else r.note
