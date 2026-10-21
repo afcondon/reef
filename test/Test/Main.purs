@@ -18,7 +18,7 @@ import Reef.Balistes.Kit (laneOfName)
 import Reef.Balistes.Kit as Kit
 import Reef.Balistes.Pattern as BP
 import Reef.Routing as Routing
-import Reef.Conformance (voicingRun, seleneRun, durRun, pendulumRun, invertRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun, fillRun)
+import Reef.Conformance (floorRun, voicingRun, seleneRun, durRun, pendulumRun, invertRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun, fillRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
@@ -223,6 +223,10 @@ main = do
   assertEqual' "Odonus octave-pattern golden (followOctave, 80 steps)"
     { actual: octaveRun, expected: octaveGolden }
   log "Reef Odonus octave-pattern golden: OK"
+  -- Floor division the same on both runtimes, negatives included.
+  assertEqual' "floor division golden (floorDivI, -30..30)"
+    { actual: floorRun, expected: floorGolden }
+  log "Reef floor division golden: OK"
   -- How a voice's notes are played down every kind of leg (Reef.Articulation).
   assertEqual' "Articulation golden (legato, slides, ES-9 lines, triggers, Rample)"
     { actual: articulationRun, expected: articulationGolden }
@@ -2978,3 +2982,67 @@ invertGolden = """  1 | h0 p50 d1 r1 v100  h1 p82 d1 r1 v100 | up/0 inv/0
  94 | h0 p51 d1 r1 v100  h1 p72 d1 r1 v100 | inv/0 inv/0
  95 | h0 p50 d1 r1 v100  h1 p70 d1 r1 v100 | inv/0 inv/0
  96 | h0 p84 d1 r1 v100  h1 p68 d1 r1 v100 | inv/0 inv/0"""
+
+-- | The frozen golden for `floorRun` (conformance/floor-golden.txt).
+floorGolden :: String
+floorGolden = """-30 | -30 -15 -5 -3 -3
+-29 | -29 -15 -5 -3 -3
+-28 | -28 -14 -4 -3 -2
+-27 | -27 -14 -4 -3 -2
+-26 | -26 -13 -4 -3 -2
+-25 | -25 -13 -4 -3 -2
+-24 | -24 -12 -4 -2 -2
+-23 | -23 -12 -4 -2 -2
+-22 | -22 -11 -4 -2 -2
+-21 | -21 -11 -3 -2 -2
+-20 | -20 -10 -3 -2 -2
+-19 | -19 -10 -3 -2 -2
+-18 | -18 -9 -3 -2 -2
+-17 | -17 -9 -3 -2 -2
+-16 | -16 -8 -3 -2 -2
+-15 | -15 -8 -3 -2 -2
+-14 | -14 -7 -2 -2 -1
+-13 | -13 -7 -2 -2 -1
+-12 | -12 -6 -2 -1 -1
+-11 | -11 -6 -2 -1 -1
+-10 | -10 -5 -2 -1 -1
+-9 | -9 -5 -2 -1 -1
+-8 | -8 -4 -2 -1 -1
+-7 | -7 -4 -1 -1 -1
+-6 | -6 -3 -1 -1 -1
+-5 | -5 -3 -1 -1 -1
+-4 | -4 -2 -1 -1 -1
+-3 | -3 -2 -1 -1 -1
+-2 | -2 -1 -1 -1 -1
+-1 | -1 -1 -1 -1 -1
+0 | 0 0 0 0 0
+1 | 1 0 0 0 0
+2 | 2 1 0 0 0
+3 | 3 1 0 0 0
+4 | 4 2 0 0 0
+5 | 5 2 0 0 0
+6 | 6 3 0 0 0
+7 | 7 3 1 0 0
+8 | 8 4 1 0 0
+9 | 9 4 1 0 0
+10 | 10 5 1 0 0
+11 | 11 5 1 0 0
+12 | 12 6 1 1 0
+13 | 13 6 1 1 0
+14 | 14 7 2 1 1
+15 | 15 7 2 1 1
+16 | 16 8 2 1 1
+17 | 17 8 2 1 1
+18 | 18 9 2 1 1
+19 | 19 9 2 1 1
+20 | 20 10 2 1 1
+21 | 21 10 3 1 1
+22 | 22 11 3 1 1
+23 | 23 11 3 1 1
+24 | 24 12 3 2 1
+25 | 25 12 3 2 1
+26 | 26 13 3 2 1
+27 | 27 13 3 2 1
+28 | 28 14 4 2 2
+29 | 29 14 4 2 2
+30 | 30 15 4 2 2"""

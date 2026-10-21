@@ -101,6 +101,8 @@ module Reef.Selene.Model
 
 import Prelude
 
+import Control.Alt ((<|>))
+
 import Data.Array as Array
 import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
 import Data.Int as Int
@@ -610,11 +612,16 @@ ratioOfTicks t0 =
 clockOfTicks :: Int -> Maybe { base :: ClockBase, multiplier :: Int }
 clockOfTicks t
   | t < 1 = Nothing
-  | t `mod` 24 == 0 = Just { base: ClockQuarter, multiplier: t / 24 }
+  | t `mod` 24 == 0 && t / 24 <= 127 = Just { base: ClockQuarter, multiplier: t / 24 }
   | otherwise =
-      Array.find (\b -> t `mod` clockBaseTicks b == 0) longestFirst
+      -- the FH-2's multiplier stops at 127, so past ÷127 a longer base
+      -- (÷256 is Whole ×64): the longest that divides and fits, else the
+      -- longest that divides, which clockOn reports as unplayable there
+      (Array.find (\b -> divides b && t / clockBaseTicks b <= 127) longestFirst <|> Array.find divides preferred)
         <#> \b -> { base: b, multiplier: t / clockBaseTicks b }
   where
+  divides b = t `mod` clockBaseTicks b == 0
+  preferred = if t `mod` 24 == 0 then [ ClockQuarter ] else longestFirst
   longestFirst =
     [ ClockWhole, ClockHalf, ClockQuarter, ClockQuarterT, ClockEighth, ClockEighthT
     , ClockSixteenth, ClockSixteenthT, ClockThirtySecond, ClockThirtySecondT, ClockSixtyFourthT ]
@@ -633,7 +640,9 @@ ticksOfRatio tok = case slower of
   Just n -> positive n <#> (24 * _)
   Nothing -> case Str.split (Str.Pattern "/") faster of
     [ p ] -> Int.fromString p >>= positive >>= \k -> ticksOf k 1
-    [ p, q ] -> do
+    -- a fraction only with its sign: a bare `1/4` reads as "a quarter" (the
+    -- old base, one a beat) as readily as a quarter of a pulse a beat
+    [ p, q ] | faster /= tok -> do
       k <- Int.fromString p >>= positive
       d <- Int.fromString q >>= positive
       ticksOf k d
@@ -743,7 +752,8 @@ clockOn target sl = case target of
     | shiftTicks > 127 = Just ("the FH-2 shifts a clock by at most 127 ticks of 24 a beat, not " <> show shiftTicks)
     | otherwise = Nothing
   period = clockBaseTicks sl.base * max 1 sl.multiplier
-  -- non-negative before `mod`: purerl's Int `mod` truncates
+  -- wrapped by hand, though `mod` is Euclidean on both runtimes (it is Int `/` that
+  -- truncates in purerl)
   degrees = ((sl.phase `mod` 360) + 360) `mod` 360
   shiftTicks = ((degrees * period + 180) / 360) `mod` period
 

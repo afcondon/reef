@@ -52,7 +52,8 @@ hit k n rotation i = hitIn (pattern k n) n (i - rotation)
 hitIn :: Array Boolean -> Int -> Int -> Boolean
 hitIn bits n i = n > 0 && fromMaybe false (bits !! wrap i n)
 
--- non-negative before `mod`: purerl's Int `mod` truncates
+-- wrapped by hand, though `mod` is Euclidean on both runtimes (it is Int `/` that
+-- truncates in purerl)
 wrap :: Int -> Int -> Int
 wrap i n = ((i `mod` n) + n) `mod` n
 

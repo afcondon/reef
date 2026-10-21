@@ -56,6 +56,7 @@ module Reef.Odonus
   , setCellRatchet
   , setCellVel
   , euclidHit
+  , floorDivI
   , maxEsteps
   , harmonyPCs
   , toggleHeadMute
@@ -475,8 +476,14 @@ indexNear set@(PitchSet s) note =
   where
   range' a b = if a > b then [] else a : range' (a + 1) b
 
+-- | Floor division for a positive `b`, the same on both runtimes. Int `/`
+-- | floors in JS but compiles to Erlang's truncating `div` in purerl, while
+-- | `mod` is Euclidean on both; taking the remainder off first leaves a
+-- | division with nothing to round. (The version this replaced corrected a
+-- | truncating `/` and so was a period low in the browser: an INV line an
+-- | octave down in Triggerfish and right on the rig.)
 floorDivI :: Int -> Int -> Int
-floorDivI a b = let q = a / b in if (a `mod` b /= 0) && ((a < 0) /= (b < 0)) then q - 1 else q
+floorDivI a b = (a - a `mod` b) / b
 
 -- | The top cell INDEX for this voice: `span` periods of the effective set, minus
 -- | one. The UI uses it as the NOTE knob's range — cells are indices now, not

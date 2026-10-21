@@ -90,6 +90,20 @@ echo "== octaveRun (80-step octave-pattern render): node vs erl =="
 diff /tmp/reef-octave-node.txt /tmp/reef-octave-erl.txt && echo "  ✅ octaveRun node == erl"
 diff "$OCTAVE_GOLDEN" /tmp/reef-octave-node.txt && echo "  ✅ octaveRun matches frozen golden"
 
+# --- floor division (Reef.Conformance.floorRun) ------------------------------
+# Int `/` floors in JS and truncates in purerl; floorDivI must agree on both,
+# negatives included (an INV register was an octave apart before 2026-10-21).
+FLOOR_GOLDEN="$REEF/conformance/floor-golden.txt"
+echo "== floorRun (floorDivI over -30..30): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { floorRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(floorRun);' \
+  ) > /tmp/reef-floor-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':floorRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-floor-erl.txt
+diff /tmp/reef-floor-node.txt /tmp/reef-floor-erl.txt && echo "  ✅ floorRun node == erl"
+diff "$FLOOR_GOLDEN" /tmp/reef-floor-node.txt && echo "  ✅ floorRun matches frozen golden"
+
 # --- harmony as a Tidal pattern (Reef.Conformance.harmonyRun) ----------------
 # The chord overlay following a host-sampled harmony (a stub sampler stands in
 # for Littorina), SetHarmony through the wire codec, 40 steps of sounding pitch.

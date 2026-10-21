@@ -44,6 +44,7 @@ module Reef.Conformance
   , harmonyRun
   , headsRun
   , octaveRun
+  , floorRun
   , scaleRun
   , outScaleRun
   , voicingRun
@@ -93,7 +94,7 @@ import Reef.Balistes.Lepidoptera (parsePattern, printPattern, rhythmSlug) as BL
 import Reef.Balistes.Pattern (toWire) as BP
 import Reef.Routing (DrumRouting, Send(..), VoiceRouting, decodeDrumRouting, decodeVoiceRouting, drumSends, encodeDrumRouting, encodeVoiceRouting) as RR
 import Reef.Articulation as Art
-import Reef.Odonus (Cell, Fired, Head, Odonus, defaultOdonus, renderHead, setHeadClock, setVoices, stepEmit)
+import Reef.Odonus (floorDivI, Cell, Fired, Head, Odonus, defaultOdonus, renderHead, setHeadClock, setVoices, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
@@ -248,6 +249,15 @@ headsRun =
 -- | for a bar (16 steps), then -1, then 1, then a rest, which keeps 1. From
 -- | step 64 the pattern is cleared and OCT stays where it last put it. `SetOctavePattern` and the
 -- | sample both cross the wire codec.
+-- | Floor division on both runtimes. Int `/` floors in JS and truncates in
+-- | purerl, so a register worked out from a negative difference (INV, the
+-- | nearest index below the root) was a period apart between Triggerfish and
+-- | the rig, and no golden reached a negative dividend.
+floorRun :: String
+floorRun = intercalate "\n" (map line (range (-30) 30))
+  where
+  line a = show a <> " | " <> intercalate " " (map (\b -> show (floorDivI a b)) [ 1, 2, 7, 12, 14 ])
+
 octaveRun :: String
 octaveRun =
   let

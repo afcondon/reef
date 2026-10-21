@@ -565,9 +565,11 @@ parseClock s =
   where
   toks = words s
   idx i = fromMaybe "" (toks !! i)
-  period = case baseMaybe (idx 0) of
-    Just base -> { base, multiplier: fromMaybe 1 mult }
-    Nothing -> fromMaybe { base: M.ClockQuarter, multiplier: 1 } (M.clockOfRatio (idx 0))
+  -- the old notation is a base with its multiplier (`1/4 x3`); alone, `1/4`
+  -- is ambiguous and reads as no period at all
+  period = case baseMaybe (idx 0), mult of
+    Just base, Just m -> { base, multiplier: m }
+    _, _ -> fromMaybe { base: M.ClockQuarter, multiplier: 1 } (M.clockOfRatio (idx 0))
   mult = firstJust (map (\tk -> intMaybe =<< Str.stripPrefix (Str.Pattern "x") tk) toks)
   pw = firstJust (map (\tk -> intMaybe =<< Str.stripSuffix (Str.Pattern "%") tk) toks)
   ph = firstJust (map (\tk -> intMaybe =<< Str.stripPrefix (Str.Pattern "ph") tk) toks)
