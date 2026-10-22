@@ -2290,10 +2290,17 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         [ "euclid fh2_1:1-4", "pitches fh2cv0:1-4", "swap fh2_1", "lfo fh2cv0:5-8", "swap fh2cv0"
         , "lfo fh2_0:3-6", "swap fh2_0", "swap fh2_1" ]
       swapBody = filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") swaps.rack)
+      -- 2026-10-22 on the rig: an empty Euclid over the whole GT made the
+      -- voices' gates unplaceable while `off` said the voices' jacks were free
+      held = foldl step { rack: "", out: [] }
+        [ "euclid fh2_1 # hits 0", "voices fh2_0:1-3 # outputs pitch", "off fh2_0:1-3", "off fh2_1:3"
+        , "off fh2_1", "voices fh2_0:1-2 # outputs pitch", "off fh2_1:1-2", "euclid fh2_1:1"
+        , "voices fh2cv0:1-2 # outputs pitch # gates fh2_1:2-3", "euclid fh2_1:3 # hits 4 # steps 16" ]
     in
       [ "== voice layouts" ] <> run.out <> map ("  " <> _) body
         <> [ "  round-trips " <> show (SR.printRack (SR.parseRack run.rack) == run.rack) ]
         <> [ "== swaps" ] <> swaps.out <> map ("  " <> _) swapBody
+        <> [ "== held jacks: a refusal names what holds them (CR-9)" ] <> held.out
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is
   commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)

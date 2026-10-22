@@ -2235,7 +2235,7 @@ round-trips true
   holds fh2 cv0:3 as selene:fh2:cv0:3
 lfo fh2_0:1-4 # rate 2 | main:1-4 | apply-polysignal polylfo on main offset 0, 4 slots, as selene:fh2:main:1-4 | lfo fh2_0:1-4 # rate 2 # phase 0 # sin "0.8 0 0 0" # tri "0 0.5 0 0"
 note fh2_0:5-8 # note "D3 F3" | main:5-8 | apply-polysignal polypresetnote on main offset 4, 4 slots, as selene:fh2:main:5-8 | note fh2_0:5-8 # note "D3 F3 D3 F3"
-note fh2_0:3-6 # note C4 | refused: fh2_0:3-6 shares jacks with the lfo on fh2_0:1-4; free it first (off fh2_0:1-4)
+note fh2_0:3-6 # note C4 | refused: fh2_0:3-6 shares jacks: fh2_0:1-4 holds the lfo (off fh2_0:1-4); fh2_0:5-8 holds the note (off fh2_0:5-8)
 lfo fh2_0:9-10 # rate 1 | refused: a run of jacks is a-b or one jack, inside 1-8, not 9-10
 lfo midi1:1-4 # rate 1 | refused: a MIDI channel has no jacks to take a run of
 lfo fh2cv0:5-8 # rate 1 | cv0:5-8 | apply-polysignal polylfo on cv0 offset 4, 4 slots, as selene:fh2:cv0:5-8 | lfo fh2cv0:5-8 # rate 1 # phase "0 0.125 0.25 0.375"
@@ -2243,7 +2243,7 @@ reset fh2_0:1-4 "2" | main:1-4 | reset-lfos main 2 | reset fh2_0:1-4 "2"
 reset fh2_0:1-4 | main:1-4 | reset-lfos main 1,2,3,4 | reset fh2_0:1-4
 reset fh2_0:1-4 "5" | refused: a slot is 1 to 4, not 5
 off fh2_0:5-8 | main:5-8 | release-claim polysignal selene:fh2:main:5-8 | off fh2_0:5-8
-off fh2_0 | refused: fh2_0 is already free
+off fh2_0 | refused: fh2_0 is not a bank on the rack: fh2_0:1-4 holds the lfo (off fh2_0:1-4); fh2_0:5-8 holds the note (off fh2_0:5-8)
 join fh2_0:1-4 | refused: fh2_0:5-8 is on the same bank; free it first (off fh2_0:5-8)
 join fh2cv0:3 | cv0 | release-claim polysignal selene:fh2:cv0:3 then apply-polysignal polylfo on cv0 offset -, 8 slots, as selene:fh2:cv0 | join fh2cv0:3
 split fh2_0:1-4 | refused: fh2_0:1-4 is already a run of its bank; split takes a whole bank
@@ -2258,8 +2258,8 @@ full-voice fh2cv0 | cv0 | voices fh2cv0 # outputs pitch+vel+env+pres # gates fh2
   sent polyvoice on cv0, gates on gt0 from 5, outputs ["velocity","envelope","pressure"], channels [15,16], as selene:fh2:cv0
 voices fh2_0 # a "5 10" | main | voices fh2_0 # outputs pitch+env # gates fh2_1:1-4 # ch "11 12 13 14" # a "5 10 5 10"
   sent polyvoice on main, gates on gt0 from 1, outputs ["envelope"], channels [11,12,13,14], as selene:fh2:main
-voices fh2_0 # outputs pitch | refused: no 8 free jacks on fh2_1 for these voices' gates
-pitches fh2cv0:5-8 | refused: fh2cv0:5-8 shares jacks with the voices on fh2cv0; free it first (off fh2cv0)
+voices fh2_0 # outputs pitch | refused: no 8 free jacks on fh2_1 for these voices' gates: fh2_1:5-6 holds the gates of the voices on fh2cv0 (off fh2cv0)
+pitches fh2cv0:5-8 | refused: fh2cv0:5-8 shares jacks: fh2cv0 holds the voices (off fh2cv0)
 pitch-env es9main | refused: voices need a gate bank beside es9main for their gates
 off fh2cv0 | cv0 | off fh2cv0
   sent release-claim polysignal selene:fh2:cv0
@@ -2320,6 +2320,21 @@ swap fh2_1 | gt0:1-4 | swap fh2_1
     0.5 @0.125 sin 0.8   -- 4
     0.5 @0.25 sin 0.8   -- 5
     0.5 @0.375 sin 0.8   -- 6
+== held jacks: a refusal names what holds them (CR-9)
+euclid fh2_1 # hits 0 | gt0 | euclid fh2_1 # hits 0 # steps "8 8 8 8 16 16 16 16"
+  sent polyeuclid as selene:fh2:gt0
+voices fh2_0:1-3 # outputs pitch | refused: no 3 free jacks on fh2_1 for these voices' gates: fh2_1 holds an empty euclid (off fh2_1)
+off fh2_0:1-3 | refused: fh2_0:1-3 is already free
+off fh2_1:3 | refused: fh2_1:3 is not a bank on the rack: fh2_1 holds an empty euclid (off fh2_1)
+off fh2_1 | gt0 | off fh2_1
+  sent release-claim polysignal selene:fh2:gt0
+voices fh2_0:1-2 # outputs pitch | main:1-2 | voices fh2_0:1-2 # outputs pitch # gates fh2_1:1-2 # ch "11 12"
+  sent polyvoice on main, gates on gt0 from 1, outputs [], channels [11,12], as selene:fh2:main:1-2
+off fh2_1:1-2 | refused: fh2_1:1-2 is not a bank on the rack: fh2_1:1-2 holds the gates of the voices on fh2_0:1-2 (off fh2_0:1-2)
+euclid fh2_1:1 | refused: fh2_1:1 shares jacks: fh2_1:1-2 holds the gates of the voices on fh2_0:1-2 (off fh2_0:1-2)
+voices fh2cv0:1-2 # outputs pitch # gates fh2_1:2-3 | refused: the voices' gates on fh2_1:2-3 share jacks: fh2_1:1-2 holds the gates of the voices on fh2_0:1-2 (off fh2_0:1-2)
+euclid fh2_1:3 # hits 4 # steps 16 | gt0:3 | euclid fh2_1:3 # hits 4 # steps 16
+  sent polyeuclid as selene:fh2:gt0:3
 == euclid (the FH-2's rule)
 E(3,8) r0 x..x..x.
 E(5,8) r0 x.xx.xx.

@@ -107,12 +107,13 @@ applyLine line sel = do
       Just d | M.bankKind d.bank == kindOfLine -> d.bank
       _ -> M.freshBankOn line.jacks kindOfLine
     kindOfLine = line.kind
-    -- another destination on jacks this line's run shares: refused, as two
-    -- generators on one jack would sum in the daemon
-    clash = Array.find (\d -> d.target == line.target && not (M.samePlace line d) && M.jacksOverlap d.jacks line.jacks) sel.destinations
+    -- another destination on jacks this line's run shares, a voice layout's
+    -- gates included: refused, as two generators on one jack would sum in
+    -- the daemon (a line once landed a Euclid on a voice's gate: CR-9)
+    clash = holders sel (M.samePlace line) line.target line.jacks
   when (kindOfLine == M.KEnv && not (M.isWholeBank line.jacks)) $
     Left (M.placeWire line.target line.jacks <> ": " <> envelopeWhole)
-  for_ clash \d -> Left (M.placeWire line.target line.jacks <> " shares jacks with the " <> Rack.kindKeyword d.bank <> " on " <> M.placeWire d.target d.jacks <> "; free it first (off " <> M.placeWire d.target d.jacks <> ")")
+  unless (Array.null clash) $ Left (M.placeWire line.target line.jacks <> " shares jacks" <> heldBy clash)
   -- a recipe sets the whole bank from its own parameters; the line's other
   -- terms then apply to that, as plain parameters
   -- `# fresh` starts the bank fresh first: a module dropped on a bank
@@ -277,15 +278,45 @@ layoutOf line sel vb0 outputsTerm gatesTerm = do
       Just g | g.jacks.first + n - 1 <= M.slotCount && free gateBank (g.jacks { count = n }) -> Right (g { jacks = g.jacks { count = n } })
       -- the same jack numbers as the layout's own run first (pitches on 5-8,
       -- gates on 5-8: easy to patch and to remember), else the first free run
-      _ -> note ("no " <> show n <> " free jacks on " <> M.targetWire gateBank <> " for these voices' gates")
+      _ -> note ("no " <> show n <> " free jacks on " <> M.targetWire gateBank <> " for these voices' gates" <> heldBy (holders sel (M.samePlace line) gateBank { first: 1, count: M.slotCount }))
              (Array.find (free gateBank) (map (\f -> { first: f, count: n }) (Array.nub ([ line.jacks.first ] <> Array.range 1 (M.slotCount - n + 1)) # filter (\f -> f + n - 1 <= M.slotCount))))
                <#> \j -> { target: gateBank, jacks: j }
   for_ (Array.find (\o -> not (M.samePlace o line) && Array.any (\p -> p.target == gates.target && M.jacksOverlap p.jacks gates.jacks) (M.placesOf o)) sel.destinations) \o ->
-    Left ("the voices' gates on " <> M.placeWire gates.target gates.jacks <> " share jacks with " <> M.placeWire o.target o.jacks)
+    Left ("the voices' gates on " <> M.placeWire gates.target gates.jacks <> " share jacks" <> heldBy (holders sel (\d -> not (M.samePlace d o)) gates.target gates.jacks))
   pure { outputs, gates: Just gates, voices }
   where
   -- jacks nothing else on the rack holds (this layout's own place aside)
   free target j = not (Array.any (\o -> not (M.samePlace o line) && Array.any (\p -> p.target == target && M.jacksOverlap p.jacks j) (M.placesOf o)) sel.destinations)
+
+-- | What on the rack holds any of these jacks, each said with how to free
+-- | it: "fh2_1 holds an empty euclid (off fh2_1)", or "fh2_1:1-2
+-- | holds the gates of the voices on fh2_0:1-2 (off fh2_0:1-2)". A refusal
+-- | over a taken jack names its holder, never just the fact (CR-9 in
+-- | docs/kb/plans/atlantis-crs.md: an empty Euclid on the whole GT looked
+-- | like a rig stuck with jacks both free and taken).
+-- | `skip` leaves out the destination the line is about.
+holders :: M.Selene -> (M.Destination -> Boolean) -> M.Target -> M.Jacks -> Array String
+holders sel skip target jacks = Array.concatMap one (filter (not <<< skip) sel.destinations)
+  where
+  one d = Array.mapMaybe (\p ->
+      if p.target == target && M.jacksOverlap p.jacks jacks then Just (describe d p) else Nothing) (M.placesOf d)
+  describe d p =
+    let
+      off = " (off " <> M.placeWire d.target d.jacks <> ")"
+      what
+        | M.samePlace p d = article d <> Rack.kindKeyword d.bank
+        | otherwise = "the gates of the " <> Rack.kindKeyword d.bank <> " on " <> M.placeWire d.target d.jacks
+    in M.placeWire p.target p.jacks <> " holds " <> what <> off
+  -- an empty Euclid still holds its jacks, and is the easiest holder to miss
+  article d = case d.bank of
+    M.GEuclid xs | all (\x -> x.beats == 0) xs -> "an empty "
+    _ -> "the "
+
+-- | The holders as the tail of a refusal.
+heldBy :: Array String -> String
+heldBy = case _ of
+  [] -> ""
+  hs -> ": " <> joinWith "; " hs
 
 -- | The gate bank a layout on a CV bank gathers its gates on: the FHX-8GT for
 -- | the FH-2 and its FHX-8CVs. (The ES-9's, the ES-5, when it has layouts.)
@@ -436,7 +467,11 @@ rigCommand src rack = case words src of
     let
       sel = Rack.parseRack rack
       sb = Wire.targetSocketBank place.target
-    _ <- note (t <> " is already free") (Array.find (M.samePlace place) sel.destinations)
+    -- not a bank on the rack: free, or part of what another bank holds,
+    -- which the refusal names so the right one can be taken off
+    _ <- note (case holders sel (const false) place.target place.jacks of
+        [] -> t <> " is already free"
+        hs -> t <> " is not a bank on the rack" <> heldBy hs) (Array.find (M.samePlace place) sel.destinations)
     pure
       { rack: Rack.printRack (sel { destinations = filter (not <<< M.samePlace place) sel.destinations })
       , line: "off " <> t
