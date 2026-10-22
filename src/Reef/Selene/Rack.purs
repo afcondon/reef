@@ -85,7 +85,13 @@ printDest d =
   -- byte-identically and a plain header stays a plain header.
   rangeTok = maybe "" (\r -> " " <> M.rangeToWire r) d.range
     <> (if d.muted then " muted" else "")
+    <> midiTok
     <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
+  -- a MIDI row's channel and CC for each signal, always said: they are what
+  -- the receiving instrument learns, so the text must never leave them implied
+  midiTok = case M.midiOutsOf d of
+    [] -> ""
+    outs -> " ch \"" <> joinWith " " (map (show <<< _.channel) outs) <> "\" cc \"" <> joinWith " " (map (show <<< _.cc) outs) <> "\""
   -- tagged with its jack, so a run on 5-8 reads 5, 6, 7, 8
   -- a voice layout's outputs and where its gates are gathered
   layoutTok = case d.bank of
@@ -216,6 +222,7 @@ type PState =
       , retrig :: Maybe String
       , muted :: Boolean
       , layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }
+      , midi :: { ch :: Array Int, cc :: Array Int }
       , rows :: Array { text :: Maybe String, muted :: Boolean }
       }
   }
@@ -233,7 +240,7 @@ parseRack doc =
     in
       if t == "" then closeBlock st
       else case headerOf t of
-        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, jacks: hdr.jacks, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, layout: hdr.layout, rows: [] } }
+        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, jacks: hdr.jacks, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, layout: hdr.layout, midi: hdr.midi, rows: [] } }
         Nothing -> case st.open of
           Just blk -> st { open = Just (addLine blk t) }
           Nothing -> st   -- a stray line outside any block: ignore
@@ -273,7 +280,14 @@ closeBlock st = case st.open of
           M.KVoice -> buildVoices blk.layout (map _.text rows)
           k -> buildBank k (map _.text rows)
         mutedSlots = Array.catMaybes (mapWithIndex (\i r -> if r.muted && isJust r.text then Just i else Nothing) rows)
-    in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots }, open: Nothing }
+        -- a MIDI row's channel and CC per signal, the defaults where unsaid
+        midi = case blk.target of
+          M.Midi n -> mapWithIndex (\k _ -> { channel: fromMaybe (M.defaultMidiOut n k).channel (blk.midi.ch !! k >>= inChannels)
+                                            , cc: fromMaybe (M.defaultMidiOut n k).cc (blk.midi.cc !! k >>= inCCs) }) rows
+          _ -> []
+        inChannels c = if c >= 1 && c <= 16 then Just c else Nothing
+        inCCs c = if c >= 0 && c <= 127 then Just c else Nothing
+    in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots, midi }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are silent).
 fitTo :: Int -> Array { text :: Maybe String, muted :: Boolean } -> Array { text :: Maybe String, muted :: Boolean }
@@ -309,7 +323,7 @@ buildBank kind rows = case kind of
 -- | A `retrig "<pattern>"` may close the header (the pattern is quoted and may
 -- | hold spaces, so it is taken off before the words are counted). Before it,
 -- | the word `muted` marks a muted destination.
-headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean, layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } } }
+headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean, layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }, midi :: { ch :: Array Int, cc :: Array Int } }
 headerOf t0 = case words t of
   [] -> Nothing
   toks0 -> case toks0 !! 0 >>= kindOf of
@@ -324,7 +338,7 @@ headerOf t0 = case words t of
         outputs = if k == M.KVoice then toks2 !! 2 >>= M.voiceOutsOfWord else Nothing
         toks = if isJust outputs then Array.take 2 toks2 <> Array.drop 3 toks2 else toks2
         layout = { outputs: fromMaybe [] outputs, gates }
-        at tgt r = { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: r, retrig, muted, layout }
+        at tgt r = { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: r, retrig, muted, layout, midi }
       in
         case toks of
           [ _, tgt ] -> Just (at tgt Nothing)
@@ -335,9 +349,26 @@ headerOf t0 = case words t of
   split = case Str.indexOf (Str.Pattern " retrig \"") t0 of
     Just i -> { t: Str.take i t0, retrig: unquote (Str.trim (Str.drop (i + 8) t0)) }
     Nothing -> { t: t0, retrig: Nothing }
-  t = split.t
+  -- a MIDI row's `ch "…"` and `cc "…"`, each quoted, taken off before the
+  -- words are counted as `retrig` is
+  chTaken = takeQuoted "ch" split.t
+  ccTaken = takeQuoted "cc" chTaken.rest
+  t = ccTaken.rest
   retrig = split.retrig
+  midi = { ch: ints chTaken.value, cc: ints ccTaken.value }
+  ints = maybe [] (Array.mapMaybe Int.fromString <<< words)
   unquote s = Str.stripPrefix (Str.Pattern "\"") s >>= Str.stripSuffix (Str.Pattern "\"")
+
+-- | ` <key> "<value>"` taken out of a header: what is left, and the value.
+takeQuoted :: String -> String -> { rest :: String, value :: Maybe String }
+takeQuoted key s = case Str.indexOf (Str.Pattern (" " <> key <> " \"")) s of
+  Nothing -> { rest: s, value: Nothing }
+  Just i ->
+    let
+      after = Str.drop (i + Str.length key + 3) s
+    in case Str.indexOf (Str.Pattern "\"") after of
+      Nothing -> { rest: s, value: Nothing }
+      Just j -> { rest: Str.take i s <> Str.drop (j + 1) after, value: Just (Str.take j after) }
 
 kindOf :: String -> Maybe M.GenKind
 kindOf = case _ of

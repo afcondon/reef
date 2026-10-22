@@ -117,7 +117,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Euclid as Euclid
-import Reef.Selene.Model (defaultSelene, overlaps) as SM
+import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, LfoWave(..)) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
@@ -2290,6 +2290,22 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         [ "euclid fh2_1:1-4", "pitches fh2cv0:1-4", "swap fh2_1", "lfo fh2cv0:5-8", "swap fh2cv0"
         , "lfo fh2_0:3-6", "swap fh2_0", "swap fh2_1" ]
       swapBody = filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") swaps.rack)
+      midiRows = foldl step { rack: "", out: [] }
+        [ "lfot midi1 # ratio ÷4 # tri 1 # phase 0", "lfot midi1 # cc \"74 71\" # ch 2", "lfo midi2 # rate 0.5"
+        , "euclid midi1", "lfot midi1 # cc 128", "lfot midi1 # ch 0", "note midi3 # note C4" ]
+      -- an LFO's value and its CC through four cycles, each shape and the
+      -- random two, so node and the BEAM are held to the same maths
+      lfoSamples =
+        let
+          base = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0, wave: SM.WaveSin }
+          slots =
+            [ Tuple "sin" (base { sin = 1.0 }), Tuple "tri" (base { tri = 1.0 }), Tuple "saw" (base { saw = 1.0 })
+            , Tuple "sqr" (base { sqr = 1.0 }), Tuple "rnd" (base { rnd = 1.0 }), Tuple "nse" (base { nse = 1.0 })
+            , Tuple "mix" (base { level = 0.2, sin = 0.5, saw = 0.3, phase = 0.25 }) ]
+          at sl = map (\i -> let c = toNumber i / 8.0 in show (SM.ccOfValue (SM.lfoAt sl c i))) (Array.range 0 31)
+        in
+          [ "== LFO at a time, as CCs (32 points over four cycles)" ]
+            <> map (\(Tuple name sl) -> "  " <> name <> ": " <> String.joinWith " " (at sl)) slots
       -- 2026-10-22 on the rig: an empty Euclid over the whole GT made the
       -- voices' gates unplaceable while `off` said the voices' jacks were free
       held = foldl step { rack: "", out: [] }
@@ -2301,6 +2317,10 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         <> [ "  round-trips " <> show (SR.printRack (SR.parseRack run.rack) == run.rack) ]
         <> [ "== swaps" ] <> swaps.out <> map ("  " <> _) swapBody
         <> [ "== held jacks: a refusal names what holds them (CR-9)" ] <> held.out
+        <> [ "== MIDI rows: LFOs sent as CCs (docs/kb/plans/selene-midi-signals.md)" ] <> midiRows.out
+        <> map ("  " <> _) (filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") midiRows.rack))
+        <> [ "  round-trips " <> show (SR.printRack (SR.parseRack midiRows.rack) == midiRows.rack) ]
+        <> lfoSamples
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is
   commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)

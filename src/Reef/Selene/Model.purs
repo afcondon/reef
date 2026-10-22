@@ -95,6 +95,12 @@ module Reef.Selene.Model
   , maxEuclidSteps
   , noteName
   , lfoValue
+  , lfoAt
+  , ccOfValue
+  , MidiOut
+  , midiOutsOf
+  , defaultMidiOut
+  , midiPort
   , lfoCyclesShown
   , clampNum
   ) where
@@ -108,6 +114,7 @@ import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as Str
+import Reef.Bits (xorshift32)
 import Reef.Euclid as Euclid
 import Reef.Numeric (ln, sin) as N
 
@@ -401,7 +408,7 @@ targetLabel = case _ of
   FH2 0 -> "FH-2"
   FH2 n -> "FHX-8GT" <> numbered n
   FH2Cv n -> "FHX-8CV" <> numbered (n + 1)
-  Midi n -> "MIDI · CH " <> show n
+  Midi n -> "MIDI " <> show n
   Virtual s -> "VIRTUAL · " <> s
   where
   numbered k = if k <= 1 then "" else " " <> show k
@@ -806,7 +813,36 @@ type Destination =
   , retrig :: Maybe String
   , muted :: Boolean
   , mutedSlots :: Array Int
+  -- On a MIDI row, the channel and CC each signal is sent on, slot by slot
+  -- (`midiOutsOf` fills the defaults); empty elsewhere
+  -- (docs/kb/plans/selene-midi-signals.md).
+  , midi :: Array MidiOut
   }
+
+-- | Where one signal of a MIDI row goes: a channel (1-16) and a controller.
+type MidiOut = { channel :: Int, cc :: Int }
+
+-- | The port every MIDI row sends on, for now (AC, 2026-10-22: Ableton
+-- | listens on every port and learns by channel and CC).
+midiPort :: String
+midiPort = "IAC Driver Tidal"
+
+-- | Slot `k` of MIDI row `n` when nothing is set: the row's own channel, and
+-- | CCs 20-27, which the MIDI spec leaves undefined.
+defaultMidiOut :: Int -> Int -> MidiOut
+defaultMidiOut n k = { channel: max 1 (min 16 n), cc: 20 + k }
+
+-- | Each signal's channel and CC on a MIDI row, one a slot, the defaults
+-- | where none is set; nothing on any other target, or for a kind not sent
+-- | as CCs (a row's notes have no CC to say).
+midiOutsOf :: Destination -> Array MidiOut
+midiOutsOf d = case d.target of
+  Midi n | sentAsCC (bankKind d.bank) -> Array.mapWithIndex (\k _ -> fromMaybe (defaultMidiOut n k) (d.midi Array.!! k)) (Array.range 1 (bankSize d.bank))
+  _ -> []
+
+-- | The kinds a MIDI row sends as control changes.
+sentAsCC :: GenKind -> Boolean
+sentAsCC k = k == KLfo || k == KLfoT
 
 -- | The whole rack — an ordered list of destinations.
 type Selene = { destinations :: Array Destination }
@@ -816,10 +852,10 @@ type Selene = { destinations :: Array Destination }
 defaultSelene :: Selene
 defaultSelene =
   { destinations:
-      [ { target: ES9Main, jacks: allJacks, range: Nothing, bank: freshBank KLfo, retrig: Nothing, muted: false, mutedSlots: [] }
-      , { target: ES9Gt 0, jacks: allJacks, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, muted: false, mutedSlots: [] }
-      , { target: FH2 1, jacks: allJacks, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false, mutedSlots: [] }
-      , { target: Midi 1, jacks: allJacks, range: Nothing, bank: freshBank KNote, retrig: Nothing, muted: false, mutedSlots: [] }
+      [ { target: ES9Main, jacks: allJacks, range: Nothing, bank: freshBank KLfo, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
+      , { target: ES9Gt 0, jacks: allJacks, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
+      , { target: FH2 1, jacks: allJacks, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
+      , { target: Midi 1, jacks: allJacks, range: Nothing, bank: freshBank KNote, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
       ]
   }
 
@@ -877,7 +913,7 @@ freshBank = case _ of
 
 addDestination :: GenKind -> Selene -> Selene
 addDestination kind s =
-  s { destinations = snoc s.destinations { target: defaultTargetFor kind, jacks: allJacks, range: Nothing, bank: freshBank kind, retrig: Nothing, muted: false, mutedSlots: [] } }
+  s { destinations = snoc s.destinations { target: defaultTargetFor kind, jacks: allJacks, range: Nothing, bank: freshBank kind, retrig: Nothing, muted: false, mutedSlots: [], midi: [] } }
 
 removeDestination :: Int -> Selene -> Selene
 removeDestination i s = s { destinations = fromMaybe s.destinations (deleteAt i s.destinations) }
@@ -1066,6 +1102,37 @@ lfoValue sl u =
     sawW = 2.0 * frac - 1.0
   in
     sl.level + sl.sin * sinW + sl.sqr * sqrW + sl.tri * triW + sl.saw * sawW
+
+-- | An LFO slot's value `cycles` into its run (whole cycles and the fraction;
+-- | its `phase` added here), as es9-daemon makes it: the level plus each
+-- | shape at its amplitude (`lfoValue`'s shapes), with `rnd` held for a
+-- | cycle and `nse` new at each `tick`. The random sources come from reef's
+-- | xorshift, keyed by the cycle and the tick, so both runtimes agree to the
+-- | bit (Reef.Conformance). Not clamped: the sum can pass ±1, as on a jack.
+lfoAt :: ModSlot -> Number -> Int -> Number
+lfoAt sl cycles tick =
+  let
+    t = cycles + sl.phase
+    whole = Int.floor t
+    frac = t - Int.toNumber whole
+    twoPi = 2.0 * 3.141592653589793
+    -- a cosine, as es9-daemon's: reef's Numeric has the sine alone
+    sinW = N.sin (twoPi * frac + twoPi / 4.0)
+    sqrW = if frac < 0.5 then 1.0 else -1.0
+    triW = 4.0 * (if frac < 0.5 then 0.5 - frac else frac - 0.5) - 1.0
+    sawW = 2.0 * frac - 1.0
+    -- a bipolar value from a key: xorshift's low sixteen bits, which read
+    -- the same whatever sign each runtime gives the whole word
+    noise key = Int.toNumber (mod16 (xorshift32 (mixKey key))) / 32767.5 - 1.0
+    mod16 x = let r = x `mod` 65536 in if r < 0 then r + 65536 else r
+    mixKey key = (key `mod` 1000003) * 7919 + 104729
+  in
+    sl.level + sl.sin * sinW + sl.sqr * sqrW + sl.tri * triW + sl.saw * sawW
+      + sl.rnd * noise whole + sl.nse * noise (tick * 31 + 17)
+
+-- | A value as a 7-bit CC: -1 is 0, +1 is 127, clamped.
+ccOfValue :: Number -> Int
+ccOfValue v = max 0 (min 127 (Int.round ((clampNum (-1.0) 1.0 v + 1.0) * 63.5)))
 
 clampNum :: Number -> Number -> Number -> Number
 clampNum lo hi v = if v < lo then lo else if v > hi then hi else v

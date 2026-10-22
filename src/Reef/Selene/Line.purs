@@ -111,6 +111,11 @@ applyLine line sel = do
     -- gates included: refused, as two generators on one jack would sum in
     -- the daemon (a line once landed a Euclid on a voice's gate: CR-9)
     clash = holders sel (M.samePlace line) line.target line.jacks
+  -- a MIDI row takes only what the rig can send as MIDI. (Other targets'
+  -- refusals are the page's alone for now: a typed `lfo es9gt0` still
+  -- passes where a dropped one is refused; raised with AC 2026-10-22.)
+  when (isMidiTarget line.target && not (accepts line.target kindOfLine)) $
+    Left (M.placeWire line.target line.jacks <> ": " <> refusal line.target kindOfLine)
   when (kindOfLine == M.KEnv && not (M.isWholeBank line.jacks)) $
     Left (M.placeWire line.target line.jacks <> ": " <> envelopeWhole)
   unless (Array.null clash) $ Left (M.placeWire line.target line.jacks <> " shares jacks" <> heldBy clash)
@@ -122,7 +127,14 @@ applyLine line sel = do
       -- a voice layout's `outputs` and `gates` are about the whole layout,
       -- not each voice, so they are taken aside like `retrig`
       layoutTerm k = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == k) line.terms))
-      named = filter (\t -> not (Array.elem t.param [ "fresh", "retrig", "outputs", "gates" ])) line.terms
+      -- a MIDI row's `ch` and `cc` are where each signal goes, not the
+      -- signal, so they are taken aside too (only there: a voice's `ch` is
+      -- its own)
+      midiRow = case line.target of
+        M.Midi _ -> true
+        _ -> false
+      midiTerm k = if midiRow then Array.last (filter (\t -> t.param == k) line.terms) else Nothing
+      named = filter (\t -> not (Array.elem t.param ([ "fresh", "retrig", "outputs", "gates" ] <> if midiRow then [ "ch", "cc" ] else []))) line.terms
       -- `# retrig "<pattern>"` sets the bank's reset pattern, `# retrig off`
       -- clears it; the last one named wins
       retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
@@ -148,12 +160,31 @@ applyLine line sel = do
   let was = existing >>= (sel.destinations !! _)
       muted = maybe false _.muted was
       mutedSlots = maybe [] _.mutedSlots was
-      dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, muted, mutedSlots }
+      before = maybe [] M.midiOutsOf was
+      fallback k = fromMaybe (M.defaultMidiOut (midiNumber line.target) k) (before !! k)
+  chs <- traverse (traverse (\v -> inRange "ch" 1 16 v)) (map _.values (midiTerm "ch"))
+  ccs <- traverse (traverse (\v -> inRange "cc" 0 127 v)) (map _.values (midiTerm "cc"))
+  let
+      -- each named value in turn and wrapping, as every term is; the rest kept
+      pick xs k def = maybe def (\vs -> fromMaybe def (vs !! (k `mod` max 1 (length vs)))) xs
+      midi = if midiRow
+        then mapWithIndex (\k _ -> { channel: pick chs k (fallback k).channel, cc: pick ccs k (fallback k).cc }) (Array.range 1 (M.bankSize bank))
+        else []
+      dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, muted, mutedSlots, midi }
   pure case existing of
     Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
     Nothing -> sel { destinations = snoc sel.destinations dest }
   where
   keepRange i d = d { range = (sel.destinations !! i) >>= _.range }
+  isMidiTarget = case _ of
+    M.Midi _ -> true
+    _ -> false
+  midiNumber = case _ of
+    M.Midi n -> n
+    _ -> 1
+  inRange k lo hi v = case Int.fromString v of
+    Just n | n >= lo && n <= hi -> Right n
+    _ -> Left (k <> " is a whole number from " <> show lo <> " to " <> show hi <> ", not " <> v)
 
 -- | One term over a bank: the parameter set on every slot from the values,
 -- | in turn and wrapping.
@@ -333,8 +364,12 @@ gateBankFor = case _ of
 -- | whole of it.
 printLine :: M.Destination -> String
 printLine d =
-  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks ] <> terms <> retrigTerm)
+  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks ] <> terms <> midiTerms <> retrigTerm)
   where
+  -- a MIDI row's channel and CC per signal, always said (Rack's rule)
+  midiTerms = case M.midiOutsOf d of
+    [] -> []
+    outs -> [ "ch " <> value (map (show <<< _.channel) outs), "cc " <> value (map (show <<< _.cc) outs) ]
   fresh = case d.bank of
     -- a layout's voices against fresh voices like them (their envelopes)
     M.GVoice vb -> case M.freshBank M.KVoice of
@@ -742,7 +777,7 @@ accepts :: M.Target -> M.GenKind -> Boolean
 accepts target kind = case target of
   M.ES9Gt _ -> gates
   M.FH2 n | n > 0 -> gates
-  M.Midi _ -> kind == M.KNote
+  M.Midi _ -> kind == M.KNote || kind == M.KLfo || kind == M.KLfoT
   _ | kind == M.KVoice -> isJust (gateBankFor target)
   _ -> true
   where
@@ -766,7 +801,7 @@ envelopeWhole = "an envelope bank takes a whole bank: its envelopes answer MIDI 
 -- | Why a bank cannot take a kind, for the page to say.
 refusal :: M.Target -> M.GenKind -> String
 refusal target kind = case target of
-  M.Midi _ -> "a MIDI channel takes notes, not " <> M.kindLabel kind
+  M.Midi _ -> "a MIDI row takes LFOs (sent as CCs) and notes, not " <> M.kindLabel kind
   M.ES9Gt _ -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
   M.FH2 n | n > 0 -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
   _ | kind == M.KVoice -> "voices need the FH-2's converters: its own jacks or an FHX-8CV, with the FHX-8GT for their gates"
