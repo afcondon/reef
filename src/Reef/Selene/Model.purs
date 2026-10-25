@@ -105,6 +105,10 @@ module Reef.Selene.Model
   , midiSends
   , midiClash
   , midiLearn
+  , midiMap
+  , midiUnmap
+  , midiBindings
+  , MidiBinding
   , midiValueAt
   , MidiSignal(..)
   , MidiMoment
@@ -130,7 +134,7 @@ import Control.Alt ((<|>))
 
 import Data.Array as Array
 import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
-import Data.Either (Either, note)
+import Data.Either (Either(..), note)
 import Data.Int as Int
 import Data.Number as Number
 import Reef.Conspicillum.Decimal (trimmed)
@@ -954,8 +958,11 @@ type Destination =
 -- | none, and the span of CC values its swing covers. A signal with no CC
 -- | sends nothing (AC, 2026-10-25: a MIDI slot has no jack of its own, so an
 -- | idle one must not take a controller). `lo` above `hi` turns it upside
--- | down: Ableton's mapping has no attenuverter, so this is it.
-type MidiOut = { channel :: Int, cc :: Maybe Int, lo :: Int, hi :: Int }
+-- | down: Ableton's mapping has no attenuverter, so this is it. `to` is the
+-- | parameter it is bound to in Live, by Live's own names
+-- | (`Track/Device/Parameter`), when it has been mapped
+-- | (docs/kb/plans/selene-ableton-destinations.md).
+type MidiOut = { channel :: Int, cc :: Maybe Int, lo :: Int, hi :: Int, to :: Maybe String }
 
 -- | The port every MIDI row sends on, for now (AC, 2026-10-22: Ableton
 -- | listens on every port and learns by channel and CC).
@@ -965,7 +972,7 @@ midiPort = "IAC Driver Tidal"
 -- | A signal of MIDI row `n` when nothing is set: the row's own channel, no
 -- | controller, the whole span.
 defaultMidiOut :: Int -> MidiOut
-defaultMidiOut n = { channel: max 1 (min 16 n), cc: Nothing, lo: 0, hi: 127 }
+defaultMidiOut n = { channel: max 1 (min 16 n), cc: Nothing, lo: 0, hi: 127, to: Nothing }
 
 -- | Each signal's channel and CC on a MIDI row, one a slot, the defaults
 -- | where none is set; nothing on any other target, or for a kind not sent
@@ -1035,6 +1042,82 @@ midiLearn n k sel = do
   out <- note ("MIDI " <> show n <> " has no signal " <> show k) (midiOutsOf d Array.!! (k - 1))
   cc <- note ("MIDI " <> show n <> " signal " <> show k <> " has no CC, so it sends nothing: give it one first") out.cc
   pure { channel: out.channel, cc, sending: not d.muted && not (Array.elem (k - 1) d.mutedSlots) }
+
+-- | MIDI row `n`'s signal `k` (from 1) bound to `path`, a parameter as Live
+-- | names it: the rack with the signal's `to` set, its channel and CC, and
+-- | whether the CC was given here. A signal with no CC is given the first
+-- | undefined CC (`freeCCs`) no signal on its channel holds, so mapping one
+-- | never asks for a number. A parameter takes one signal, and a name the
+-- | rack text could not hold (a `"`, or `--`, which starts a comment) is
+-- | refused.
+midiMap :: Int -> Int -> String -> Selene -> Either String { rack :: Selene, channel :: Int, cc :: Int, given :: Boolean }
+midiMap n k path sel = do
+  when (path == "" || Str.contains (Str.Pattern "\"") path || Str.contains (Str.Pattern "--") path)
+    (Left ("Live's parameter " <> path <> " has a name the rack can't hold (no \" or --): rename its track or device"))
+  { i, d, out } <- midiSignalAt n k sel
+  case Array.find (\b -> b.to == Just path && not (b.row == n && b.slot == k)) (midiHeld sel) of
+    Just b -> Left (path <> " is MIDI " <> show b.row <> " signal " <> show b.slot <> "'s already: a parameter takes one signal")
+    Nothing -> pure unit
+  cc <- case out.cc of
+    Just c -> pure c
+    Nothing -> note ("channel " <> show out.channel <> " has no undefined CC free to give MIDI " <> show n <> " signal " <> show k)
+      (Array.find (\c -> not (Array.any (\b -> b.channel == out.channel && b.cc == Just c) (midiHeld sel))) freeCCs)
+  let outs = fromMaybe (midiOutsOf d) (Array.modifyAt (k - 1) (_ { cc = Just cc, to = Just path }) (midiOutsOf d))
+  pure { rack: sel { destinations = fromMaybe sel.destinations (Array.updateAt i (d { midi = outs }) sel.destinations) }
+       , channel: out.channel, cc, given: out.cc == Nothing }
+
+-- | MIDI row `n`'s signal `k` unbound: its `to` taken off, its CC kept (it
+-- | may be mapped by hand, or in another instrument).
+midiUnmap :: Int -> Int -> Selene -> Either String Selene
+midiUnmap n k sel = do
+  { i, d, out } <- midiSignalAt n k sel
+  when (out.to == Nothing) (Left ("MIDI " <> show n <> " signal " <> show k <> " is not mapped"))
+  let outs = fromMaybe (midiOutsOf d) (Array.modifyAt (k - 1) (_ { to = Nothing }) (midiOutsOf d))
+  pure sel { destinations = fromMaybe sel.destinations (Array.updateAt i (d { midi = outs }) sel.destinations) }
+
+-- | A signal bound to a parameter in Live, for the rig to tell Live: its
+-- | row and signal, channel, CC and the parameter's name. `refused` says why
+-- | it is not to be bound, when another signal holds its CC or its
+-- | parameter (the first holds it, as in `midiSends`).
+type MidiBinding = { row :: Int, slot :: Int, channel :: Int, cc :: Int, to :: String, refused :: Maybe String }
+
+-- | Every signal with a CC and a `to`, muted ones too: a muted signal keeps
+-- | its binding and sends nothing, so the hand can take its parameter back.
+midiBindings :: Selene -> Array MidiBinding
+midiBindings sel = Array.reverse (Array.foldl bind [] (midiHeld sel))
+  where
+  bind acc h = case h.cc, h.to of
+    Just cc, Just to ->
+      let
+        firsts = Array.filter (\b -> b.refused == Nothing) acc
+        who b = "MIDI " <> show b.row <> " signal " <> show b.slot
+        refused = case Array.find (\b -> b.to == to) firsts, Array.find (\b -> b.channel == h.channel && b.cc == cc) firsts of
+          Just b, _ -> Just (to <> " is " <> who b <> "'s")
+          _, Just b -> Just ("channel " <> show h.channel <> " CC " <> show cc <> " is " <> who b <> "'s")
+          _, _ -> Nothing
+      in Array.cons { row: h.row, slot: h.slot, channel: h.channel, cc, to, refused } acc
+    _, _ -> acc
+
+-- | The CCs a mapping gives, in order: those the MIDI spec leaves undefined.
+freeCCs :: Array Int
+freeCCs = range 20 31 <> range 85 90 <> range 102 119
+
+-- | Every signal of every MIDI row sent as CCs, with what it holds.
+midiHeld :: Selene -> Array { row :: Int, slot :: Int, channel :: Int, cc :: Maybe Int, to :: Maybe String }
+midiHeld sel = Array.concatMap held sel.destinations
+  where
+  held d = case d.target of
+    Midi n -> Array.mapWithIndex (\k out -> { row: n, slot: k + 1, channel: out.channel, cc: out.cc, to: out.to }) (midiOutsOf d)
+    _ -> []
+
+-- | MIDI row `n`'s signal `k` (from 1): the row's place in the rack, the row,
+-- | and the signal's out; or why there is none.
+midiSignalAt :: Int -> Int -> Selene -> Either String { i :: Int, d :: Destination, out :: MidiOut }
+midiSignalAt n k sel = do
+  i <- note ("MIDI " <> show n <> " is not a row of LFOs or throws on the rack") (Array.findIndex (\d -> d.target == Midi n && sentAsCC (bankKind d.bank)) sel.destinations)
+  d <- note ("MIDI " <> show n <> " is not on the rack") (sel.destinations !! i)
+  out <- note ("MIDI " <> show n <> " has no signal " <> show k) (midiOutsOf d !! (k - 1))
+  pure { i, d, out }
 
 -- | The kinds a MIDI row sends as control changes.
 sentAsCC :: GenKind -> Boolean

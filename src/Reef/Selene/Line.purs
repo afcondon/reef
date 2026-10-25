@@ -176,7 +176,7 @@ applyLine line sel = do
       pickOnce xs k def = maybe def (\vs -> fromMaybe def (vs !! k)) xs
       midi = if midiRow
         then mapWithIndex (\k _ -> { channel: pick chs k (fallback k).channel, cc: pickOnce ccs k (fallback k).cc
-                                   , lo: pick los k (fallback k).lo, hi: pick his k (fallback k).hi }) (Array.range 1 (M.bankSize bank))
+                                   , lo: pick los k (fallback k).lo, hi: pick his k (fallback k).hi, to: (fallback k).to }) (Array.range 1 (M.bankSize bank))
         else []
       dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, muted, mutedSlots, midi }
       next = case existing of

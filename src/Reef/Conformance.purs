@@ -117,7 +117,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Euclid as Euclid
-import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..)) as SM
+import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiMap, midiUnmap, midiBindings, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..)) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
@@ -2339,6 +2339,36 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
             <> map (\m -> "  midi4 " <> show m.slot <> ": " <> String.joinWith " " (at m)) sends
             <> [ "  unfired: " <> String.joinWith " " (map (\m -> show (SM.midiValueAt m { beat: 9.0, seconds: 0.0, tick: 0, bpm: 120.0, fired: Nothing })) sends) ]
             <> [ "  lengths: " <> String.joinWith " " (map (\w -> maybe ("(" <> w <> ")") SM.lengthWord (SM.lengthOf w)) [ "0", "250ms", "1.5s", "1/2b", "2b", "8bar", "3bars", "5", "b", "-1b", "1/0b", "2.5.1b" ]) ]
+      -- signals mapped to parameters in Live by name, and unmapped: a CC
+      -- given where there was none, a parameter taking one signal, a name
+      -- the text can't hold refused (docs/kb/plans/selene-ableton-destinations.md)
+      mapped =
+        let
+          ops =
+            [ Tuple "map 1 1" (mapped' (SM.midiMap 1 1 "Bass/Auto Filter/Frequency")), Tuple "map 1 2 same" (mapped' (SM.midiMap 1 2 "Bass/Auto Filter/Frequency"))
+            , Tuple "map 1 2" (mapped' (SM.midiMap 1 2 "1-E-Piano/Mixer/B-Send")), Tuple "map 4 2" (mapped' (SM.midiMap 4 2 "A-Reverb/Mixer/Volume"))
+            , Tuple "map 2 1" (mapped' (SM.midiMap 2 1 "Keys/Rack/Chain 1/Operator/Filter Freq")), Tuple "map 1 3 quote" (mapped' (SM.midiMap 1 3 "Pad \"x\"/Mixer/Pan"))
+            , Tuple "map 1 3 dashes" (mapped' (SM.midiMap 1 3 "a--b/Mixer/Pan")), Tuple "map 3 1" (mapped' (SM.midiMap 3 1 "Bass/Mixer/Pan"))
+            , Tuple "map 1 9" (mapped' (SM.midiMap 1 9 "Bass/Mixer/Pan")), Tuple "map 1 1 again" (mapped' (SM.midiMap 1 1 "Bass/Mixer/Pan"))
+            , Tuple "unmap 1 2" (unmapped 1 2), Tuple "unmap 1 2 again" (unmapped 1 2) ]
+          mapped' f sel = map (\r -> { rack: r.rack, said: "ch" <> show r.channel <> " cc" <> show r.cc <> (if r.given then " given" else "") }) (f sel)
+          unmapped n k sel = map (\r -> { rack: r, said: "unmapped" }) (SM.midiUnmap n k sel)
+          go acc (Tuple name f) = case f acc.sel of
+            Left e -> acc { out = acc.out <> [ "  " <> name <> " | refused: " <> e ] }
+            Right r -> acc { sel = r.rack, out = acc.out <> [ "  " <> name <> " | " <> r.said ] }
+          done = foldl go { sel: SR.parseRack midiRows.rack, out: [] } ops
+          text = SR.printRack done.sel
+          -- by hand: a muted signal keeps its binding; two on one parameter
+          byHand = "lfot midi5 ch \"5 5 5\" cc \"30 31 32\"\n  -- ÷1 @0 sin 1  to \"Keys/Mixer/Pan\"   -- 1\n  ÷2 @0 tri 1 to \"Keys/Mixer/Pan\"\n  ÷4 @0 saw 1  to \"Keys/Mixer/Volume\"   -- 3"
+          bindings sel = String.joinWith ", " (map (\b -> "midi" <> show b.row <> " " <> show b.slot <> " ch" <> show b.channel <> " cc" <> show b.cc <> " " <> b.to
+                           <> maybe "" (\w -> " (refused: " <> w <> ")") b.refused) (SM.midiBindings sel))
+        in
+          [ "== MIDI signals mapped in Live, by name" ] <> done.out
+            <> map ("  " <> _) (filter (\l -> String.contains (String.Pattern " to \"") l) (String.split (String.Pattern "\n") text))
+            <> [ "  round-trips " <> show (SR.printRack (SR.parseRack text) == text) ]
+            <> [ "  bindings: " <> bindings done.sel ]
+            <> [ "  by hand: " <> bindings (SR.parseRack byHand) ]
+            <> map ("  " <> _) (filter (_ /= "") (String.split (String.Pattern "\n") (SR.printRack (SR.parseRack byHand))))
       -- 2026-10-22 on the rig: an empty Euclid over the whole GT made the
       -- voices' gates unplaceable while `off` said the voices' jacks were free
       held = foldl step { rack: "", out: [] }
@@ -2363,6 +2393,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
                [ Tuple 1 1, Tuple 1 2, Tuple 2 1, Tuple 3 1, Tuple 1 9, Tuple 4 1 ]) ]
         <> lfoSamples
         <> throwSamples
+        <> mapped
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is
   commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)

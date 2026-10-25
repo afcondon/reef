@@ -2421,6 +2421,37 @@ throw midi4 # d 1.5s # lo 10 # hi 90 |  | throw midi4 # a "0 8bar 0 8bar 0 8bar 
   midi4 2: 10 10 10 10 10 10 10 11 13 14 15 16 18 19 20 21 23 24 25 26 28 29 30 31 33 34 35 36 38 39 40 41 43 44 45 46 48 49 50 51 53 54 55 56 58 59 60 61 63 64 65 66 68 69 70 71 73 74 75 76 78 79 80 81 83 84 85 86 88 89 90 77 63
   unfired: 10 10
   lengths: 0 250ms 1500ms 0.5b 2b 8bar 3bar (5) (b) (-1b) (1/0b) (2.5.1b)
+== MIDI signals mapped in Live, by name
+  map 1 1 | ch2 cc20 given
+  map 1 2 same | refused: Bass/Auto Filter/Frequency is MIDI 1 signal 1's already: a parameter takes one signal
+  map 1 2 | ch2 cc71
+  map 4 2 | ch4 cc81
+  map 2 1 | ch2 cc21 given
+  map 1 3 quote | refused: Live's parameter Pad "x"/Mixer/Pan has a name the rack can't hold (no " or --): rename its track or device
+  map 1 3 dashes | refused: Live's parameter a--b/Mixer/Pan has a name the rack can't hold (no " or --): rename its track or device
+  map 3 1 | refused: MIDI 3 is not a row of LFOs or throws on the rack
+  map 1 9 | refused: MIDI 1 has no signal 9
+  map 1 1 again | ch2 cc20
+  unmap 1 2 | unmapped
+  unmap 1 2 again | refused: MIDI 1 signal 2 is not mapped
+    ÷4 @0 sin 0.8 tri 1  to "Bass/Mixer/Pan"   -- 1
+    0.5 @0 sin 0.8  to "Keys/Rack/Chain 1/Operator/Filter Freq"   -- 1
+    a 8bar h 0 d 1500ms on bar  to "A-Reverb/Mixer/Volume"   -- 2
+  round-trips true
+  bindings: midi1 1 ch2 cc20 Bass/Mixer/Pan, midi2 1 ch2 cc21 Keys/Rack/Chain 1/Operator/Filter Freq, midi4 2 ch4 cc81 A-Reverb/Mixer/Volume
+  by hand: midi5 1 ch5 cc30 Keys/Mixer/Pan, midi5 2 ch5 cc31 Keys/Mixer/Pan (refused: Keys/Mixer/Pan is MIDI 5 signal 1's), midi5 3 ch5 cc32 Keys/Mixer/Volume
+  -- SELENE · edit the numbers; the rack follows.
+  -- <kind> <target> [range] opens a group of 8 · <target>:5-8 takes jacks 5-8 · one slot per line · -- mutes a slot.
+  -- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind.
+  lfot midi5 ch "5 5 5 5 5 5 5 5" cc "30 31 32 - - - - -"
+    -- ×1 @0 sin 1  to "Keys/Mixer/Pan"   -- 1
+    ÷2 @0 tri 1  to "Keys/Mixer/Pan"   -- 2
+    ÷4 @0 saw 1  to "Keys/Mixer/Volume"   -- 3
+    0 @0   -- 4
+    0 @0   -- 5
+    0 @0   -- 6
+    0 @0   -- 7
+    0 @0   -- 8
 == euclid (the FH-2's rule)
 E(3,8) r0 x..x..x.
 E(5,8) r0 x.xx.xx.

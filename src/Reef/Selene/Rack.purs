@@ -101,7 +101,10 @@ printDest d =
     M.GVoice vb -> " " <> M.voiceOutsWord vb.outputs <> maybe "" (\g -> " gates " <> M.placeWire g.target g.jacks) vb.gates
     _ -> ""
   -- tagged with its jack (a voice, with its pitch's), so a run on 5-8 reads 5, 6, 7, 8
-  slotLine i row = (if Array.elem i d.mutedSlots then "  -- " else "  ") <> row <> "   -- " <> show (d.jacks.first + i * stride)
+  slotLine i row = (if Array.elem i d.mutedSlots then "  -- " else "  ") <> row <> boundTo i <> "   -- " <> show (d.jacks.first + i * stride)
+  -- the parameter in Live a MIDI signal is bound to, on its own line, since
+  -- a name holds spaces and eight would make the header unreadable
+  boundTo i = maybe "" (\p -> "  to \"" <> p <> "\"") (M.midiOutsOf d !! i >>= _.to)
   stride = case d.bank of
     M.GVoice vb -> M.voiceStride vb
     _ -> 1
@@ -246,7 +249,7 @@ type PState =
       , muted :: Boolean
       , layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }
       , midi :: MidiWords
-      , rows :: Array { text :: Maybe String, muted :: Boolean }
+      , rows :: Array Row
       }
   }
 
@@ -271,19 +274,33 @@ parseRack doc =
   -- A line inside an open block: every line is a slot row.
   addLine blk line = blk { rows = snoc blk.rows (slotText line) }
 
+-- | A slot line as read: its settings, whether it is muted, and on a MIDI
+-- | row the parameter it is bound to in Live (`to "…"`).
+type Row = { text :: Maybe String, muted :: Boolean, to :: Maybe String }
+
 -- A slot's text and whether it is muted (leading `--`), its settings kept.
 -- Trailing `-- n` tags are stripped either way; a bare `--` (no settings) is
--- a silent slot, as it always was.
-slotText :: String -> { text :: Maybe String, muted :: Boolean }
+-- a silent slot, as it always was. A `to "…"` after the settings is taken
+-- off before they are read.
+slotText :: String -> Row
 slotText t = case Str.stripPrefix (Str.Pattern "--") t of
   Just rest ->
-    let body = stripTrailingComment (Str.trim rest)
-    in { text: if body == "" || not (startsSlot body) then Nothing else Just body, muted: true }
-  Nothing -> { text: Just (stripTrailingComment t), muted: false }
+    let body = boundTo (stripTrailingComment (Str.trim rest))
+    in { text: if body.rest == "" || not (startsSlot body.rest) then Nothing else Just body.rest, muted: true, to: body.value }
+  Nothing -> let body = boundTo (stripTrailingComment t) in { text: Just body.rest, muted: false, to: body.value }
   where
-  -- a muted slot starts as a slot does (a number, a note or clock name, or an
-  -- envelope's `a`); anything else after `--` is a note, not settings
-  startsSlot b = case Str.charAt 0 b of
+  -- split, not indexed: a slot holds a `÷`, one code unit in JS and two
+  -- bytes on the BEAM, so an index found on one side is not the other's
+  boundTo b = case Str.split (Str.Pattern " to \"") (" " <> b) of
+    [ before, after ] -> case Str.split (Str.Pattern "\"") after of
+      [ name, rest ] -> { rest: Str.trim (before <> rest), value: Just name }
+      _ -> { rest: Str.trim b, value: Nothing }
+    _ -> { rest: Str.trim b, value: Nothing }
+  -- a muted slot starts as a slot does (a number, a note or clock name, a
+  -- tempo LFO's `÷` or `×`, or an envelope's or a throw's `a`); anything else
+  -- after `--` is a note, not settings
+  -- (`÷` and `×` by prefix: charAt gives a code unit in JS, a byte on the BEAM)
+  startsSlot b = isJust (Str.stripPrefix (Str.Pattern "÷") b) || isJust (Str.stripPrefix (Str.Pattern "×") b) || case Str.charAt 0 b of
     Just c -> c >= '0' && c <= '9' || c >= 'A' && c <= 'G' || c == 'a'
     Nothing -> false
 
@@ -311,14 +328,15 @@ closeBlock st = case st.open of
             in { channel: fromMaybe def.channel (blk.midi.ch !! k >>= within 1 16)
                , cc: blk.midi.cc !! k >>= within 0 127
                , lo: fromMaybe def.lo (blk.midi.lo !! k >>= within 0 127)
-               , hi: fromMaybe def.hi (blk.midi.hi !! k >>= within 0 127) }) rows
+               , hi: fromMaybe def.hi (blk.midi.hi !! k >>= within 0 127)
+               , to: (rows !! k) >>= _.to }) rows
           _ -> []
         within lo hi w = Int.fromString w >>= \c -> if c >= lo && c <= hi then Just c else Nothing
     in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots, midi }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are silent).
-fitTo :: Int -> Array { text :: Maybe String, muted :: Boolean } -> Array { text :: Maybe String, muted :: Boolean }
-fitTo n rows = take n (rows <> map (const { text: Nothing, muted: false }) (range 0 n))
+fitTo :: Int -> Array Row -> Array Row
+fitTo n rows = take n (rows <> map (const { text: Nothing, muted: false, to: Nothing }) (range 0 n))
 
 -- | A voice layout's voices, each read onto the fresh voice at its place.
 buildVoices :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } } -> Array (Maybe String) -> M.GenBank
