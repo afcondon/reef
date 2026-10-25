@@ -117,7 +117,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Euclid as Euclid
-import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiSends, LfoWave(..)) as SM
+import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiSends, LfoWave(..)) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
@@ -2331,6 +2331,11 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         <> [ "  sends: " <> String.joinWith ", " (map (\m -> (if m.tempo then "lfot" else "lfo") <> " ch" <> show m.channel <> " cc" <> show m.cc <> " " <> show m.lo <> "-" <> show m.hi)
                (SM.midiSends (SR.parseRack midiRows.rack))) ]
         <> [ "  spans: " <> String.joinWith " " (map (\(Tuple o v) -> show (SM.ccIn o v)) spanCases) ]
+        -- learn: one signal's channel and CC, or why it can't be learned
+        <> [ "  learn: " <> String.joinWith "; " (map (\(Tuple n k) -> "midi" <> show n <> " " <> show k <> " "
+               <> either ("refused: " <> _) (\l -> "ch" <> show l.channel <> " cc" <> show l.cc <> (if l.sending then "" else " muted"))
+                    (SM.midiLearn n k (SR.parseRack midiRows.rack)))
+               [ Tuple 1 1, Tuple 1 2, Tuple 2 1, Tuple 3 1, Tuple 1 9, Tuple 4 1 ]) ]
         <> lfoSamples
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is

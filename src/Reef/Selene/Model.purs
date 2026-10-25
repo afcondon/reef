@@ -104,6 +104,7 @@ module Reef.Selene.Model
   , defaultMidiOut
   , midiSends
   , midiClash
+  , midiLearn
   , midiPort
   , lfoCyclesShown
   , clampNum
@@ -115,6 +116,7 @@ import Control.Alt ((<|>))
 
 import Data.Array as Array
 import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
+import Data.Either (Either, note)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as Str
@@ -881,6 +883,18 @@ midiClash sel = go [] (Array.concat (Array.mapWithIndex held sel.destinations))
     Just { head: x, tail } -> case Array.find (\y -> y.channel == x.channel && y.cc == x.cc) seen of
       Just y -> Just ("channel " <> show x.channel <> " CC " <> show x.cc <> " is " <> y.who <> "'s; " <> x.who <> " can't have it too (a CC carries one signal)")
       Nothing -> go (Array.snoc seen x) tail
+
+-- | The channel and CC of MIDI row `n`'s signal `k` (from 1), for learn:
+-- | while one signal is learned the rig sends no other MIDI, so the
+-- | instrument hears that one alone. `sending` is false when the signal or
+-- | its row is muted, and so is silent too. A row of notes, a signal past the
+-- | row's end, or one with no CC can't be learned, and why is said.
+midiLearn :: Int -> Int -> Selene -> Either String { channel :: Int, cc :: Int, sending :: Boolean }
+midiLearn n k sel = do
+  d <- note ("MIDI " <> show n <> " is not a row of LFOs on the rack") (Array.find (\d -> d.target == Midi n && sentAsCC (bankKind d.bank)) sel.destinations)
+  out <- note ("MIDI " <> show n <> " has no signal " <> show k) (midiOutsOf d Array.!! (k - 1))
+  cc <- note ("MIDI " <> show n <> " signal " <> show k <> " has no CC: give it one to learn it") out.cc
+  pure { channel: out.channel, cc, sending: not d.muted && not (Array.elem (k - 1) d.mutedSlots) }
 
 -- | The kinds a MIDI row sends as control changes.
 sentAsCC :: GenKind -> Boolean

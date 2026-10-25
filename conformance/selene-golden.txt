@@ -362,6 +362,7 @@ lfo midi2 # lo 100 # hi 10 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375
   round-trips true
   sends: lfot ch2 cc71 20-60
   spans: 0 0 32 48 64 83 95 127 127 20 20 30 35 40 46 50 60 60 100 100 77 66 55 41 32 10 10 64 64 64 64 64 64 64 64 64
+  learn: midi1 1 refused: MIDI 1 signal 1 has no CC: give it one to learn it; midi1 2 ch2 cc71; midi2 1 refused: MIDI 2 signal 1 has no CC: give it one to learn it; midi3 1 refused: MIDI 3 is not a row of LFOs on the rack; midi1 9 refused: MIDI 1 has no signal 9; midi4 1 refused: MIDI 4 is not a row of LFOs on the rack
 == LFO at a time, as CCs (32 points over four cycles)
   sin: 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108
   tri: 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95
