@@ -66,6 +66,8 @@ familyOf = case _ of
   M.GNote _ -> "polypresetnote"
   M.GEnv _ -> "polyenv"
   M.GVoice _ -> "polyvoice"
+  -- the rig plays a throw itself, as a CC; no daemon has one
+  M.GThrow _ -> "throw"
 
 -- | The name a bank's claim is held under in its daemon: one per (socket,
 -- | bank), whatever is on it, so a re-push replaces the claim and an `off`
@@ -133,6 +135,7 @@ destinationEnvelope d0 = do
       -- clock `base` is an ADT; the daemon wants the wire token string.
       M.GClock slots ->
         Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots: map clockWire slots }
+      M.GThrow _ -> Nothing
   json' <- json
   pure { socket: sb.socket, bank: placeOn sb d.jacks, json: json' }
   where

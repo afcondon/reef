@@ -113,6 +113,7 @@ printDest d =
     M.GNote slots -> map noteLine slots
     M.GEnv slots -> map envLine slots
     M.GVoice vb -> map (voiceLine vb) vb.voices
+    M.GThrow slots -> map throwLine slots
 
 kindKeyword :: M.GenBank -> String
 kindKeyword = case _ of
@@ -123,6 +124,7 @@ kindKeyword = case _ of
   M.GNote _ -> "note"
   M.GEnv _ -> "env"
   M.GVoice _ -> "voices"
+  M.GThrow _ -> "throw"
 
 -- ADSR always; the rest only when moved off its default, so a plain envelope
 -- reads as four numbers and a shaped one shows exactly what was changed.
@@ -154,6 +156,24 @@ envLine sl =
   -- Elided against the SAME base `parseEnv` folds onto (`M.defaultEnvSlot`).
   -- These were literals, and drifted from the parser's — see that definition.
   opt k v def = if v == def then "" else " " <> k <> " " <> show v
+
+-- | A throw: its attack, hold and decay, and when a fire starts unless at once.
+throwLine :: M.ThrowSlot -> String
+throwLine sl =
+  "a " <> M.lengthWord sl.attack <> " h " <> M.lengthWord sl.hold <> " d " <> M.lengthWord sl.decay
+    <> (if sl.start == M.StartNow then "" else " on " <> M.startWord sl.start)
+
+-- | A throw read from `a <length> h <length> d <length> [on now|beat|bar]`;
+-- | a field missing or unreadable keeps the default throw's.
+parseThrow :: String -> M.ThrowSlot
+parseThrow str = foldl apply M.defaultThrow (keyVals (words str))
+  where
+  apply sl kv = case kv.key of
+    "a" -> maybe sl (\l -> sl { attack = l }) (M.lengthOf kv.val)
+    "h" -> maybe sl (\l -> sl { hold = l }) (M.lengthOf kv.val)
+    "d" -> maybe sl (\l -> sl { decay = l }) (M.lengthOf kv.val)
+    "on" -> maybe sl (\o -> sl { start = o }) (M.startOf kv.val)
+    _ -> sl
 
 -- | A voice: its channel, and its envelope when the layout has one.
 voiceLine :: M.VoiceBank -> M.VoiceSlot -> String
@@ -317,6 +337,7 @@ buildBank kind rows = case kind of
   M.KNote -> M.GNote (map (maybe silentNote parseNote) rows)
   M.KEnv -> M.GEnv (map (maybe silentEnv parseEnv) rows)
   M.KVoice -> buildVoices { outputs: [], gates: Nothing } rows
+  M.KThrow -> M.GThrow (map (maybe M.defaultThrow parseThrow) rows)
 
 -- ---------------------------------------------------------------------------
 -- Header
@@ -391,6 +412,7 @@ kindOf = case _ of
   "note" -> Just M.KNote
   "env" -> Just M.KEnv
   "voices" -> Just M.KVoice
+  "throw" -> Just M.KThrow
   _ -> Nothing
 
 parseTarget :: String -> M.Target
@@ -466,6 +488,8 @@ silence = case _ of
   -- a voice is silenced where its notes come from (the playhead, the
   -- routing), not by the jacks: its converter only follows notes
   M.GVoice vb -> M.GVoice vb
+  -- a MIDI row sends nothing to a daemon: muted, it is left out of midiSends
+  M.GThrow s -> M.GThrow s
 
 -- | A destination as it plays while muted: every slot silent, on a range that
 -- | puts silence at 0 V. A slot's level is a position in its range (both
@@ -485,6 +509,7 @@ silenced d = d { bank = silence d.bank, range = rangeFor d.bank }
     M.GClock _ -> Just M.Unipolar5V
     M.GNote _ -> d.range
     M.GVoice _ -> d.range
+    M.GThrow _ -> d.range
 
 -- | A destination as it plays with its muted slots (`mutedSlots`) silent and
 -- | the rest as they are. An LFO slot's level is a position in its range, so on
@@ -510,6 +535,7 @@ slotsSilenced d
     M.GNote s -> M.GNote (over silentNote s)
     M.GEnv s -> M.GEnv (over silentEnv s)
     M.GVoice vb -> M.GVoice vb
+    M.GThrow s -> M.GThrow s
 
 silentLfo :: M.ModSlot
 silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0, wave: M.WaveSin }

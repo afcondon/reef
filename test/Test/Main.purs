@@ -2342,7 +2342,7 @@ lfot midi1 # cc "74 71" # ch 2 |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # c
   sent (nothing)
 lfo midi2 # rate 0.5 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # ch 2 # cc "- - - - - - - -"
   sent (nothing)
-euclid midi1 | refused: midi1: a MIDI row takes LFOs (sent as CCs) and notes, not POLYEUCLID
+euclid midi1 | refused: midi1: a MIDI row takes LFOs and throws (sent as CCs) and notes, not POLYEUCLID
 lfot midi1 # cc 128 | refused: cc is a whole number from 0 to 127, not 128
 lfot midi1 # ch 0 | refused: ch is a whole number from 1 to 16, not 0
 note midi3 # note C4 |  | note midi3 # note C4
@@ -2355,6 +2355,17 @@ lfot midi1 # cc "- 71" |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 2 # cc
 lfot midi1 # lo 20 # hi 60 |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 2 # cc "- 71 - - - - - -" # lo 20 # hi 60
   sent (nothing)
 lfo midi2 # lo 100 # hi 10 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # ch 2 # cc "- - - - - - - -" # lo 100 # hi 10
+  sent (nothing)
+throw midi4 |  | throw midi4 # a "0 8bar 0 0 0 0 0 0" # h "0.5b 0 0.5b 0.5b 0.5b 0.5b 0.5b 0.5b" # d "2b 0 2b 2b 2b 2b 2b 2b" # ch 4 # cc "- - - - - - - -"
+  sent (nothing)
+throw midi4 # cc "80 81" # ch 4 |  | throw midi4 # a "0 8bar 0 0 0 0 0 0" # h "0.5b 0 0.5b 0.5b 0.5b 0.5b 0.5b 0.5b" # d "2b 0 2b 2b 2b 2b 2b 2b" # ch 4 # cc "80 81 - - - - - -"
+  sent (nothing)
+throw midi4 # a "0 8bar" # h "1/2b 0" # d "2b 0" # on "now bar" |  | throw midi4 # a "0 8bar 0 8bar 0 8bar 0 8bar" # h "0.5b 0 0.5b 0 0.5b 0 0.5b 0" # d "2b 0 2b 0 2b 0 2b 0" # on "now bar now bar now bar now bar" # ch 4 # cc "80 81 - - - - - -"
+  sent (nothing)
+throw midi4 # a 5 | refused: a is a length, as 250ms, 1/2b (beats) or 8bar, or 0; not 5
+throw midi4 # on soon | refused: on is now, beat or bar, not soon
+throw es9main | refused: es9main: a throw is played by the rig as a CC, so it goes on a MIDI row (midi1 to midi16)
+throw midi4 # d 1.5s # lo 10 # hi 90 |  | throw midi4 # a "0 8bar 0 8bar 0 8bar 0 8bar" # h "0.5b 0 0.5b 0 0.5b 0 0.5b 0" # d 1500ms # on "now bar now bar now bar now bar" # ch 4 # cc "80 81 - - - - - -" # lo 10 # hi 90
   sent (nothing)
   lfot midi1 ch "2 2 2 2 2 2 2 2" cc "- 71 - - - - - -" lo "20 20 20 20 20 20 20 20" hi "60 60 60 60 60 60 60 60"
     ÷4 @0 sin 0.8 tri 1   -- 1
@@ -2383,10 +2394,19 @@ lfo midi2 # lo 100 # hi 10 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375
     C4   -- 6
     C4   -- 7
     C4   -- 8
+  throw midi4 ch "4 4 4 4 4 4 4 4" cc "80 81 - - - - - -" lo "10 10 10 10 10 10 10 10" hi "90 90 90 90 90 90 90 90"
+    a 0 h 0.5b d 1500ms   -- 1
+    a 8bar h 0 d 1500ms on bar   -- 2
+    a 0 h 0.5b d 1500ms   -- 3
+    a 8bar h 0 d 1500ms on bar   -- 4
+    a 0 h 0.5b d 1500ms   -- 5
+    a 8bar h 0 d 1500ms on bar   -- 6
+    a 0 h 0.5b d 1500ms   -- 7
+    a 8bar h 0 d 1500ms on bar   -- 8
   round-trips true
-  sends: lfot ch2 cc71 20-60
+  sends: lfot ch2 cc71 20-60, throw ch4 cc80 10-90, throw ch4 cc81 10-90
   spans: 0 0 32 48 64 83 95 127 127 20 20 30 35 40 46 50 60 60 100 100 77 66 55 41 32 10 10 64 64 64 64 64 64 64 64 64
-  learn: midi1 1 refused: MIDI 1 signal 1 has no CC: give it one to learn it; midi1 2 ch2 cc71; midi2 1 refused: MIDI 2 signal 1 has no CC: give it one to learn it; midi3 1 refused: MIDI 3 is not a row of LFOs on the rack; midi1 9 refused: MIDI 1 has no signal 9; midi4 1 refused: MIDI 4 is not a row of LFOs on the rack
+  learn: midi1 1 refused: MIDI 1 signal 1 has no CC, so it sends nothing: give it one first; midi1 2 ch2 cc71; midi2 1 refused: MIDI 2 signal 1 has no CC, so it sends nothing: give it one first; midi3 1 refused: MIDI 3 is not a row of LFOs or throws on the rack; midi1 9 refused: MIDI 1 has no signal 9; midi4 1 ch4 cc80
 == LFO at a time, as CCs (32 points over four cycles)
   sin: 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108
   tri: 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95
@@ -2395,6 +2415,12 @@ lfo midi2 # lo 100 # hi 10 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375
   rnd: 88 88 88 88 88 88 88 88 104 104 104 104 104 104 104 104 44 44 44 44 44 44 44 44 62 62 62 62 62 62 62 62
   nse: 7 34 66 42 14 40 72 22 52 31 125 20 54 21 118 34 1 57 62 50 51 51 32 60 60 59 50 60 63 57 52 11
   mix: 67 49 44 59 86 113 89 84 67 49 44 59 86 113 89 84 67 49 44 59 86 113 89 84 67 49 44 59 86 113 89 84
+== throws: a fire's start (on 5.5 and 8.0), and CCs every half beat from beat 5
+  starts: 5.5 8 6 8 8 8
+  midi4 1: 10 90 90 77 63 50 37 23 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10
+  midi4 2: 10 10 10 10 10 10 10 11 13 14 15 16 18 19 20 21 23 24 25 26 28 29 30 31 33 34 35 36 38 39 40 41 43 44 45 46 48 49 50 51 53 54 55 56 58 59 60 61 63 64 65 66 68 69 70 71 73 74 75 76 78 79 80 81 83 84 85 86 88 89 90 77 63
+  unfired: 10 10
+  lengths: 0 250ms 1500ms 0.5b 2b 8bar 3bar (5) (b) (-1b) (1/0b) (2.5.1b)
 == euclid (the FH-2's rule)
 E(3,8) r0 x..x..x.
 E(5,8) r0 x.xx.xx.

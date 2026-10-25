@@ -105,6 +105,20 @@ module Reef.Selene.Model
   , midiSends
   , midiClash
   , midiLearn
+  , midiValueAt
+  , MidiSignal(..)
+  , MidiMoment
+  , ThrowSlot
+  , Length(..)
+  , ThrowStart(..)
+  , defaultThrow
+  , lengthWord
+  , lengthOf
+  , startWord
+  , startOf
+  , lengthBeats
+  , throwStartAt
+  , throwAt
   , midiPort
   , lfoCyclesShown
   , clampNum
@@ -118,7 +132,10 @@ import Data.Array as Array
 import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
 import Data.Either (Either, note)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Number as Number
+import Reef.Conspicillum.Decimal (trimmed)
+import Data.String.CodeUnits as CU
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.String as Str
 import Data.Tuple (Tuple(..))
 import Reef.Bits (xorshift32)
@@ -135,12 +152,15 @@ import Reef.Numeric (ln, sin) as N
 -- |
 -- | `KEnv` (polyenv) was deferred until 2026-08-08. Both daemons had supported
 -- | the family all along; only this UI was missing.
-data GenKind = KLfo | KLfoT | KEuclid | KClock | KNote | KEnv | KVoice
+-- |
+-- | `KThrow` is a MIDI row's alone: a one-shot the rig plays as a CC when it is
+-- | fired (a dub throw, a riser; docs/kb/plans/selene-midi-signals.md).
+data GenKind = KLfo | KLfoT | KEuclid | KClock | KNote | KEnv | KVoice | KThrow
 
 derive instance Eq GenKind
 
 allKinds :: Array GenKind
-allKinds = [ KLfo, KLfoT, KEuclid, KClock, KNote, KEnv, KVoice ]
+allKinds = [ KLfo, KLfoT, KEuclid, KClock, KNote, KEnv, KVoice, KThrow ]
 
 kindLabel :: GenKind -> String
 kindLabel = case _ of
@@ -151,6 +171,7 @@ kindLabel = case _ of
   KNote -> "POLYNOTE"
   KEnv -> "POLYENV"
   KVoice -> "POLYVOICE"
+  KThrow -> "THROW"
 
 -- | An eight-slot bank, typed by its generator. The kind is implied by the
 -- | constructor (mirrors `Tidal.Selene`'s `Selene s` sum).
@@ -167,6 +188,8 @@ data GenBank
   -- | a voice layout (docs/kb/plans/selene-voice-layouts.md): MIDI voices,
   -- | not free-running signals, laid out as Yarns lays out its parts
   | GVoice VoiceBank
+  -- | one-shots on a MIDI row, each played as a CC when fired
+  | GThrow (Array ThrowSlot)
 
 bankKind :: GenBank -> GenKind
 bankKind = case _ of
@@ -177,6 +200,7 @@ bankKind = case _ of
   GClock _ -> KClock
   GNote _ -> KNote
   GEnv _ -> KEnv
+  GThrow _ -> KThrow
 
 -- | The eight slots of an octo bank.
 slotCount :: Int
@@ -308,6 +332,101 @@ type EnvSlot =
   , releaseShape :: Int
   }
 
+-- | A throw: a one-shot on a MIDI row, which rests at the bottom of its span
+-- | and, fired, rises to the top over `attack`, stays for `hold` and falls
+-- | back over `decay`. A dub throw is a short attack and hold and a longer
+-- | decay; a riser is a long attack and no decay, so it drops as it lands.
+-- | `start` is when a fire begins: at once, or on the next beat or bar, so a
+-- | riser timed in bars lands on a downbeat.
+type ThrowSlot =
+  { attack :: Length
+  , hold :: Length
+  , decay :: Length
+  , start :: ThrowStart
+  }
+
+-- | How long one part of a throw lasts: in milliseconds, on the wall clock,
+-- | or in beats or bars (four beats), on the Link clock.
+data Length = Ms Number | Beats Number | Bars Number
+
+derive instance Eq Length
+
+data ThrowStart = StartNow | StartBeat | StartBar
+
+derive instance Eq ThrowStart
+
+-- | A length as written: `250ms`, `2b`, `8bar`; 0 alone is no time.
+lengthWord :: Length -> String
+lengthWord = case _ of
+  Ms 0.0 -> "0"
+  Ms n -> trimmed 3 n <> "ms"
+  Beats n -> trimmed 3 n <> "b"
+  Bars n -> trimmed 3 n <> "bar"
+
+-- | A length read: a number with `ms`, `s`, `b` or `bar` (or `bars`); a
+-- | fraction is allowed (`1/2b`). A bare 0 is no time; any other bare number
+-- | has no unit to say what it is, so it is not a length.
+lengthOf :: String -> Maybe Length
+lengthOf w
+  | w == "0" = Just (Ms 0.0)
+  | otherwise = unit "ms" Ms <|> unit "bars" Bars <|> unit "bar" Bars <|> unit "b" Beats <|> (map (\n -> Ms (n * 1000.0)) (amount =<< Str.stripSuffix (Str.Pattern "s") w))
+  where
+  unit suffix f = map f (amount =<< Str.stripSuffix (Str.Pattern suffix) w)
+  amount a = case Str.split (Str.Pattern "/") a of
+    [ p, q ] -> do
+      n <- decimal p
+      d <- decimal q
+      if d > 0.0 then Just (n / d) else Nothing
+    _ -> decimal a
+  decimal a = case Number.fromString a of
+    Just n | n >= 0.0 && Array.length (Array.filter (_ == '.') (CU.toCharArray a)) <= 1 && Array.all (\c -> c == '.' || (c >= '0' && c <= '9')) (CU.toCharArray a) -> Just n
+    _ -> Nothing
+
+startWord :: ThrowStart -> String
+startWord = case _ of
+  StartNow -> "now"
+  StartBeat -> "beat"
+  StartBar -> "bar"
+
+startOf :: String -> Maybe ThrowStart
+startOf = case _ of
+  "now" -> Just StartNow
+  "beat" -> Just StartBeat
+  "bar" -> Just StartBar
+  _ -> Nothing
+
+-- | A length in beats at a tempo.
+lengthBeats :: Number -> Length -> Number
+lengthBeats bpm = case _ of
+  Ms n -> n / 1000.0 * bpm / 60.0
+  Beats n -> n
+  Bars n -> 4.0 * n
+
+-- | The beat a throw fired at `beat` begins on: then, or the next whole beat
+-- | or bar (four beats; a fire on one begins there).
+throwStartAt :: ThrowStart -> Number -> Number
+throwStartAt start beat = case start of
+  StartNow -> beat
+  StartBeat -> ceil beat
+  StartBar -> 4.0 * ceil (beat / 4.0)
+  where
+  ceil x = let f = Int.toNumber (Int.floor x) in if f == x then x else f + 1.0
+
+-- | A throw's level, 0 at rest to 1 at the top, `beats` after it began (at
+-- | `bpm`, for a part timed in ms); 0 before it begins and after it ends.
+throwAt :: ThrowSlot -> Number -> Number -> Number
+throwAt sl bpm t =
+  let
+    a = lengthBeats bpm sl.attack
+    h = lengthBeats bpm sl.hold
+    d = lengthBeats bpm sl.decay
+  in
+    if t < 0.0 then 0.0
+    else if t < a then t / a
+    else if t < a + h then 1.0
+    else if t < a + h + d then 1.0 - (t - a - h) / d
+    else 0.0
+
 -- | A voice layout: N independent MIDI voices, each a converter on its own
 -- | channel. Each voice's CV outputs (pitch, then `outputs` in the FH-2's
 -- | order) take consecutive jacks of the destination's run, so a voice is
@@ -376,6 +495,10 @@ voiceChannel n k = min 11 (17 - n) + k
 -- | Distinct from `silentEnv` in Source.purs, which is what a MUTED row means:
 -- | there, depth 0 is the point. An envelope has no true "off" (depth is not on
 -- | the wire), so "muted" has to be spelled as "moves nothing".
+-- | A dub throw: straight up, held half a beat, gone over two beats.
+defaultThrow :: ThrowSlot
+defaultThrow = { attack: Ms 0.0, hold: Beats 0.5, decay: Beats 2.0, start: StartNow }
+
 defaultEnvSlot :: EnvSlot
 defaultEnvSlot =
   { attack: 0, decay: 0, sustain: 0, release: 0
@@ -483,6 +606,7 @@ defaultTargetFor = case _ of
   KEnv -> FH2 0
   -- MIDI voices: the FH-2 is where the converters are
   KVoice -> FH2 0
+  KThrow -> Midi 1
 
 -- ---------------------------------------------------------------------------
 -- Output range + clock bases
@@ -851,9 +975,24 @@ midiOutsOf d = case d.target of
   Midi n | sentAsCC (bankKind d.bank) -> Array.mapWithIndex (\k _ -> fromMaybe (defaultMidiOut n) (d.midi Array.!! k)) (Array.range 1 (bankSize d.bank))
   _ -> []
 
--- | One signal a rack sends as CCs: on the beat (`lfot`) or in Hz, its LFO,
--- | and where it goes.
-type MidiSend = { tempo :: Boolean, lfo :: ModSlot, channel :: Int, cc :: Int, lo :: Int, hi :: Int }
+-- | One signal a rack sends as CCs: what it plays, which row and signal it is
+-- | (from 1, as a fire names it), and where it goes.
+type MidiSend = { signal :: MidiSignal, row :: Int, slot :: Int, channel :: Int, cc :: Int, lo :: Int, hi :: Int }
+
+-- | An LFO, on the beat (`lfot`, true) or in Hz; or a throw.
+data MidiSignal = LfoSignal Boolean ModSlot | ThrowSignal ThrowSlot
+
+-- | When a signal's value is asked for: the Link beat and the wall clock's
+-- | seconds at that moment, the tick (a random shape's key), the tempo, and
+-- | for a throw, the beat its last fire began on, if it has been fired.
+type MidiMoment = { beat :: Number, seconds :: Number, tick :: Int, bpm :: Number, fired :: Maybe Number }
+
+-- | A signal's CC at a moment, within its span: an LFO's swing, or a throw's
+-- | rise and fall from the bottom of the span to the top.
+midiValueAt :: MidiSend -> MidiMoment -> Int
+midiValueAt send m = case send.signal of
+  LfoSignal tempo sl -> ccIn send (lfoAt sl ((if tempo then m.beat else m.seconds) * sl.rate) m.tick)
+  ThrowSignal sl -> ccIn send (2.0 * maybe 0.0 (\start -> throwAt sl m.bpm (m.beat - start)) m.fired - 1.0)
 
 -- | What a rack's MIDI rows send: every signal with a controller, its row
 -- | and itself not muted. Two signals on one channel and CC are a clash
@@ -863,11 +1002,12 @@ midiSends :: Selene -> Array MidiSend
 midiSends sel = Array.nubByEq (\a b -> a.channel == b.channel && a.cc == b.cc) (Array.concat (map row sel.destinations))
   where
   row d = case d.target, d.bank of
-    Midi _, GLfo slots | not d.muted -> signals false d slots
-    Midi _, GLfoT slots | not d.muted -> signals true d slots
+    Midi n, GLfo slots | not d.muted -> signals n d (map (LfoSignal false) slots)
+    Midi n, GLfoT slots | not d.muted -> signals n d (map (LfoSignal true) slots)
+    Midi n, GThrow slots | not d.muted -> signals n d (map ThrowSignal slots)
     _, _ -> []
-  signals tempo d slots = Array.catMaybes (Array.zipWith (\k (Tuple lfo out) -> if Array.elem k d.mutedSlots then Nothing else map (\cc -> { tempo, lfo, channel: out.channel, cc, lo: out.lo, hi: out.hi }) out.cc)
-    (Array.range 0 (length slots - 1)) (Array.zip slots (midiOutsOf d)))
+  signals n d sigs = Array.catMaybes (Array.zipWith (\k (Tuple signal out) -> if Array.elem k d.mutedSlots then Nothing else map (\cc -> { signal, row: n, slot: k + 1, channel: out.channel, cc, lo: out.lo, hi: out.hi }) out.cc)
+    (Array.range 0 (length sigs - 1)) (Array.zip sigs (midiOutsOf d)))
 
 -- | Two signals given one channel and CC, said: a controller carries one
 -- | signal, as a jack does. A muted signal still holds its CC, as a muted
@@ -891,14 +1031,14 @@ midiClash sel = go [] (Array.concat (Array.mapWithIndex held sel.destinations))
 -- | row's end, or one with no CC can't be learned, and why is said.
 midiLearn :: Int -> Int -> Selene -> Either String { channel :: Int, cc :: Int, sending :: Boolean }
 midiLearn n k sel = do
-  d <- note ("MIDI " <> show n <> " is not a row of LFOs on the rack") (Array.find (\d -> d.target == Midi n && sentAsCC (bankKind d.bank)) sel.destinations)
+  d <- note ("MIDI " <> show n <> " is not a row of LFOs or throws on the rack") (Array.find (\d -> d.target == Midi n && sentAsCC (bankKind d.bank)) sel.destinations)
   out <- note ("MIDI " <> show n <> " has no signal " <> show k) (midiOutsOf d Array.!! (k - 1))
-  cc <- note ("MIDI " <> show n <> " signal " <> show k <> " has no CC: give it one to learn it") out.cc
+  cc <- note ("MIDI " <> show n <> " signal " <> show k <> " has no CC, so it sends nothing: give it one first") out.cc
   pure { channel: out.channel, cc, sending: not d.muted && not (Array.elem (k - 1) d.mutedSlots) }
 
 -- | The kinds a MIDI row sends as control changes.
 sentAsCC :: GenKind -> Boolean
-sentAsCC k = k == KLfo || k == KLfoT
+sentAsCC k = k == KLfo || k == KLfoT || k == KThrow
 
 -- | The whole rack — an ordered list of destinations.
 type Selene = { destinations :: Array Destination }
@@ -929,8 +1069,13 @@ freshBank = case _ of
   -- eight pitches, the simplest layout; their gates found a place when the
   -- bank is put on the rack (Reef.Selene.Line)
   KVoice -> GVoice { outputs: [], gates: Nothing, voices: map (\k -> { channel: voiceChannel slotCount k, env: envSlot 4 }) ixs }
+  -- eight throws, the first a dub throw, the second an eight-bar riser
+  KThrow -> GThrow (map throwSlot ixs)
   where
   ixs = range 0 (slotCount - 1)
+  throwSlot = case _ of
+    1 -> { attack: Bars 8.0, hold: Ms 0.0, decay: Ms 0.0, start: StartBar }
+    _ -> defaultThrow
   pow2 i = if i <= 0 then 1 else 2 * pow2 (i - 1)
   -- eight sines, phase-spread over the cycle (a travelling wave)
   lfoSlot i =
@@ -1054,6 +1199,7 @@ takeSlots n = case _ of
   GClock xs -> GClock (Array.take n xs)
   GNote xs -> GNote (Array.take n xs)
   GEnv xs -> GEnv (Array.take n xs)
+  GThrow xs -> GThrow (Array.take n xs)
   -- `n` jacks hold n / stride whole voices, and that many gates
   GVoice vb ->
     let m = n / voiceStride vb
@@ -1068,6 +1214,7 @@ bankSize = case _ of
   GClock xs -> length xs
   GNote xs -> length xs
   GEnv xs -> length xs
+  GThrow xs -> length xs
   GVoice vb -> length vb.voices
 
 -- | How many jacks a bank drives: a slot each, or a voice's stride each.
@@ -1086,6 +1233,7 @@ widenBank j bank = case freshBank (bankKind bank), bank of
   GClock f, GClock xs -> GClock (spread f xs)
   GNote f, GNote xs -> GNote (spread f xs)
   GEnv f, GEnv xs -> GEnv (spread f xs)
+  GThrow f, GThrow xs -> GThrow (spread f xs)
   -- a layout grows by whole voices, before and after its run
   _, GVoice vb ->
     let

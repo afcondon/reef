@@ -117,7 +117,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Euclid as Euclid
-import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiSends, LfoWave(..)) as SM
+import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..)) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
@@ -2296,7 +2296,10 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         -- a CC carries one signal: given twice, refused, across rows too
         , "lfot midi1 # cc \"74 74\"", "lfo midi2 # ch 2 # cc 71", "lfo midi2 # cc 71"
         -- `-` takes a signal's CC away; a span, and one turned over
-        , "lfot midi1 # cc \"- 71\"", "lfot midi1 # lo 20 # hi 60", "lfo midi2 # lo 100 # hi 10" ]
+        , "lfot midi1 # cc \"- 71\"", "lfot midi1 # lo 20 # hi 60", "lfo midi2 # lo 100 # hi 10"
+        -- throws: a MIDI row's alone, their lengths in ms, beats or bars
+        , "throw midi4", "throw midi4 # cc \"80 81\" # ch 4", "throw midi4 # a \"0 8bar\" # h \"1/2b 0\" # d \"2b 0\" # on \"now bar\""
+        , "throw midi4 # a 5", "throw midi4 # on soon", "throw es9main", "throw midi4 # d 1.5s # lo 10 # hi 90" ]
       spanCases = do
         o <- [ { lo: 0, hi: 127 }, { lo: 20, hi: 60 }, { lo: 100, hi: 10 }, { lo: 64, hi: 64 } ]
         v <- [ -1.5, -1.0, -0.5, -0.25, 0.0, 0.3, 0.5, 1.0, 2.0 ]
@@ -2314,6 +2317,28 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         in
           [ "== LFO at a time, as CCs (32 points over four cycles)" ]
             <> map (\(Tuple name sl) -> "  " <> name <> ": " <> String.joinWith " " (at sl)) slots
+      sendKind = case _ of
+        SM.LfoSignal true _ -> "lfot"
+        SM.LfoSignal false _ -> "lfo"
+        SM.ThrowSignal _ -> "throw"
+      -- a throw's start and its CCs over time: fired on beat 5.5 at 120 BPM,
+      -- sampled every half beat; the riser waits for bar 3 (beat 8)
+      throwSamples =
+        let
+          sends = Array.filter (\m -> m.row == 4) (SM.midiSends (SR.parseRack midiRows.rack))
+          at m = map (\i -> let beat = 5.0 + toNumber i / 2.0 in show (SM.midiValueAt m { beat, seconds: 0.0, tick: 0, bpm: 120.0, fired: Just (SM.throwStartAt (startOf m.signal) 5.5) })) (Array.range 0 72)
+          startOf = case _ of
+            SM.ThrowSignal sl -> sl.start
+            _ -> SM.StartNow
+        in
+          [ "== throws: a fire's start (on 5.5 and 8.0), and CCs every half beat from beat 5" ]
+            <> [ "  starts: " <> String.joinWith " " (map (\(Tuple st b) -> Decimal.trimmed 3 (SM.throwStartAt st b)) (do
+                   st <- [ SM.StartNow, SM.StartBeat, SM.StartBar ]
+                   b <- [ 5.5, 8.0 ]
+                   pure (Tuple st b))) ]
+            <> map (\m -> "  midi4 " <> show m.slot <> ": " <> String.joinWith " " (at m)) sends
+            <> [ "  unfired: " <> String.joinWith " " (map (\m -> show (SM.midiValueAt m { beat: 9.0, seconds: 0.0, tick: 0, bpm: 120.0, fired: Nothing })) sends) ]
+            <> [ "  lengths: " <> String.joinWith " " (map (\w -> maybe ("(" <> w <> ")") SM.lengthWord (SM.lengthOf w)) [ "0", "250ms", "1.5s", "1/2b", "2b", "8bar", "3bars", "5", "b", "-1b", "1/0b", "2.5.1b" ]) ]
       -- 2026-10-22 on the rig: an empty Euclid over the whole GT made the
       -- voices' gates unplaceable while `off` said the voices' jacks were free
       held = foldl step { rack: "", out: [] }
@@ -2328,7 +2353,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         <> [ "== MIDI rows: LFOs sent as CCs (docs/kb/plans/selene-midi-signals.md)" ] <> midiRows.out
         <> map ("  " <> _) (filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") midiRows.rack))
         <> [ "  round-trips " <> show (SR.printRack (SR.parseRack midiRows.rack) == midiRows.rack) ]
-        <> [ "  sends: " <> String.joinWith ", " (map (\m -> (if m.tempo then "lfot" else "lfo") <> " ch" <> show m.channel <> " cc" <> show m.cc <> " " <> show m.lo <> "-" <> show m.hi)
+        <> [ "  sends: " <> String.joinWith ", " (map (\m -> sendKind m.signal <> " ch" <> show m.channel <> " cc" <> show m.cc <> " " <> show m.lo <> "-" <> show m.hi)
                (SM.midiSends (SR.parseRack midiRows.rack))) ]
         <> [ "  spans: " <> String.joinWith " " (map (\(Tuple o v) -> show (SM.ccIn o v)) spanCases) ]
         -- learn: one signal's channel and CC, or why it can't be learned
@@ -2337,6 +2362,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
                     (SM.midiLearn n k (SR.parseRack midiRows.rack)))
                [ Tuple 1 1, Tuple 1 2, Tuple 2 1, Tuple 3 1, Tuple 1 9, Tuple 4 1 ]) ]
         <> lfoSamples
+        <> throwSamples
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is
   commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)

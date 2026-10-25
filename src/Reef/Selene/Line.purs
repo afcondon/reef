@@ -111,10 +111,11 @@ applyLine line sel = do
     -- gates included: refused, as two generators on one jack would sum in
     -- the daemon (a line once landed a Euclid on a voice's gate: CR-9)
     clash = holders sel (M.samePlace line) line.target line.jacks
-  -- a MIDI row takes only what the rig can send as MIDI. (Other targets'
-  -- refusals are the page's alone for now: a typed `lfo es9gt0` still
-  -- passes where a dropped one is refused; raised with AC 2026-10-22.)
-  when (isMidiTarget line.target && not (accepts line.target kindOfLine)) $
+  -- a MIDI row takes only what the rig can send as MIDI, and a throw goes
+  -- nowhere else. (Other targets' refusals are the page's alone for now: a
+  -- typed `lfo es9gt0` still passes where a dropped one is refused; raised
+  -- with AC 2026-10-22.)
+  when ((isMidiTarget line.target || kindOfLine == M.KThrow) && not (accepts line.target kindOfLine)) $
     Left (M.placeWire line.target line.jacks <> ": " <> refusal line.target kindOfLine)
   when (kindOfLine == M.KEnv && not (M.isWholeBank line.jacks)) $
     Left (M.placeWire line.target line.jacks <> ": " <> envelopeWhole)
@@ -249,6 +250,13 @@ applyTerm bank t = case bank of
         Right (M.GEnv envs) -> Right (M.GVoice vb { voices = Array.zipWith (\v e -> v { env = e }) vb.voices envs })
         Right _ -> Right bank
         Left _ -> unknown "voices" "ch, and a d s r depth vel time rnd ashape dshape rshape for its envelopes"
+  M.GThrow slots -> M.GThrow <$> each slots \sl v -> case t.param of
+    p | p == "a" || p == "attack" -> (\l -> sl { attack = l }) <$> lengthIn v
+      | p == "h" || p == "hold" -> (\l -> sl { hold = l }) <$> lengthIn v
+      | p == "d" || p == "decay" -> (\l -> sl { decay = l }) <$> lengthIn v
+      | p == "on" -> note ("on is now, beat or bar, not " <> v) (M.startOf v)
+          <#> \o -> sl { start = o }
+    _ -> unknown "throw" "a h d on"
   where
   -- an LFO slot's phase, level and shape: what POLYLFO and POLYLFOT share
   shaped :: String -> String -> M.ModSlot -> String -> Either String M.ModSlot
@@ -269,6 +277,7 @@ applyTerm bank t = case bank of
   unknown kind known = Left (kind <> " has no " <> t.param <> " (it has " <> known <> ")")
   number v = note (t.param <> " wants a number, not " <> v) (Number.fromString v)
   integer v = note (t.param <> " wants a whole number, not " <> v) (Int.fromString v)
+  lengthIn v = note (t.param <> " is a length, as 250ms, 1/2b (beats) or 8bar, or 0; not " <> v) (M.lengthOf v)
 
 -- | The parameters a bank's kind takes, as `printLine` names them.
 paramsOf :: M.GenKind -> Array String
@@ -280,6 +289,7 @@ paramsOf = case _ of
   M.KNote -> [ "note" ]
   M.KEnv -> [ "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
   M.KVoice -> [ "ch", "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
+  M.KThrow -> [ "a", "h", "d", "on" ]
 
 -- | A voice layout's outputs and gates for a line: set from its terms, the
 -- | voices sized to the run (as many whole voices as fit), and the gates on
@@ -415,6 +425,7 @@ mainOf = case _ of
   M.KNote -> [ "note" ]
   M.KEnv -> [ "a", "d", "s", "r" ]
   M.KVoice -> [ "ch" ]
+  M.KThrow -> [ "a", "h", "d" ]
 
 valuesOf :: String -> M.GenBank -> Array String
 valuesOf p = case _ of
@@ -459,6 +470,11 @@ valuesOf p = case _ of
   M.GVoice vb
     | p == "ch" -> map (\v -> show v.channel) vb.voices
     | otherwise -> valuesOf p (M.GEnv (map _.env vb.voices))
+  M.GThrow s -> map (\sl -> case p of
+    "a" -> M.lengthWord sl.attack
+    "h" -> M.lengthWord sl.hold
+    "d" -> M.lengthWord sl.decay
+    _ -> M.startWord sl.start) s
 
 words :: String -> Array String
 words = filter (_ /= "") <<< Str.split (Str.Pattern " ") <<< trim
@@ -790,7 +806,9 @@ accepts :: M.Target -> M.GenKind -> Boolean
 accepts target kind = case target of
   M.ES9Gt _ -> gates
   M.FH2 n | n > 0 -> gates
-  M.Midi _ -> kind == M.KNote || kind == M.KLfo || kind == M.KLfoT
+  M.Midi _ -> kind == M.KNote || kind == M.KLfo || kind == M.KLfoT || kind == M.KThrow
+  -- a throw is played by the rig as a CC, so a MIDI row is its only home
+  _ | kind == M.KThrow -> false
   _ | kind == M.KVoice -> isJust (gateBankFor target)
   _ -> true
   where
@@ -814,7 +832,8 @@ envelopeWhole = "an envelope bank takes a whole bank: its envelopes answer MIDI 
 -- | Why a bank cannot take a kind, for the page to say.
 refusal :: M.Target -> M.GenKind -> String
 refusal target kind = case target of
-  M.Midi _ -> "a MIDI row takes LFOs (sent as CCs) and notes, not " <> M.kindLabel kind
+  M.Midi _ -> "a MIDI row takes LFOs and throws (sent as CCs) and notes, not " <> M.kindLabel kind
+  _ | kind == M.KThrow -> "a throw is played by the rig as a CC, so it goes on a MIDI row (midi1 to midi16)"
   M.ES9Gt _ -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
   M.FH2 n | n > 0 -> "a gate bank takes rhythms and clocks, not " <> M.kindLabel kind
   _ | kind == M.KVoice -> "voices need the FH-2's converters: its own jacks or an FHX-8CV, with the FHX-8GT for their gates"
