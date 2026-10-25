@@ -2336,18 +2336,27 @@ voices fh2cv0:1-2 # outputs pitch # gates fh2_1:2-3 | refused: the voices' gates
 euclid fh2_1:3 # hits 4 # steps 16 | gt0:3 | euclid fh2_1:3 # hits 4 # steps 16
   sent polyeuclid as selene:fh2:gt0:3
 == MIDI rows: LFOs sent as CCs (docs/kb/plans/selene-midi-signals.md)
-lfot midi1 # ratio ÷4 # tri 1 # phase 0 |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 1 # cc "20 21 22 23 24 25 26 27"
+lfot midi1 # ratio ÷4 # tri 1 # phase 0 |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 1 # cc "- - - - - - - -"
   sent (nothing)
-lfot midi1 # cc "74 71" # ch 2 |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 2 # cc "74 71 74 71 74 71 74 71"
+lfot midi1 # cc "74 71" # ch 2 |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 2 # cc "74 71 - - - - - -"
   sent (nothing)
-lfo midi2 # rate 0.5 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # ch 2 # cc "20 21 22 23 24 25 26 27"
+lfo midi2 # rate 0.5 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # ch 2 # cc "- - - - - - - -"
   sent (nothing)
 euclid midi1 | refused: midi1: a MIDI row takes LFOs (sent as CCs) and notes, not POLYEUCLID
 lfot midi1 # cc 128 | refused: cc is a whole number from 0 to 127, not 128
 lfot midi1 # ch 0 | refused: ch is a whole number from 1 to 16, not 0
 note midi3 # note C4 |  | note midi3 # note C4
   sent (nothing)
-  lfot midi1 ch "2 2 2 2 2 2 2 2" cc "74 71 74 71 74 71 74 71"
+lfot midi1 # cc "74 74" | refused: channel 2 CC 74 is MIDI 1 signal 1's; MIDI 1 signal 2 can't have it too (a CC carries one signal)
+lfo midi2 # ch 2 # cc 71 | refused: channel 2 CC 71 is MIDI 1 signal 2's; MIDI 2 signal 1 can't have it too (a CC carries one signal)
+lfo midi2 # cc 71 | refused: channel 2 CC 71 is MIDI 1 signal 2's; MIDI 2 signal 1 can't have it too (a CC carries one signal)
+lfot midi1 # cc "- 71" |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 2 # cc "- 71 - - - - - -"
+  sent (nothing)
+lfot midi1 # lo 20 # hi 60 |  | lfot midi1 # ratio ÷4 # phase 0 # tri 1 # ch 2 # cc "- 71 - - - - - -" # lo 20 # hi 60
+  sent (nothing)
+lfo midi2 # lo 100 # hi 10 |  | lfo midi2 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # ch 2 # cc "- - - - - - - -" # lo 100 # hi 10
+  sent (nothing)
+  lfot midi1 ch "2 2 2 2 2 2 2 2" cc "- 71 - - - - - -" lo "20 20 20 20 20 20 20 20" hi "60 60 60 60 60 60 60 60"
     ÷4 @0 sin 0.8 tri 1   -- 1
     ÷4 @0 sin 0.8 tri 1   -- 2
     ÷4 @0 sin 0.8 tri 1   -- 3
@@ -2356,7 +2365,7 @@ note midi3 # note C4 |  | note midi3 # note C4
     ÷4 @0 sin 0.8 tri 1   -- 6
     ÷4 @0 sin 0.8 tri 1   -- 7
     ÷4 @0 sin 0.8 tri 1   -- 8
-  lfo midi2 ch "2 2 2 2 2 2 2 2" cc "20 21 22 23 24 25 26 27"
+  lfo midi2 ch "2 2 2 2 2 2 2 2" cc "- - - - - - - -" lo "100 100 100 100 100 100 100 100" hi "10 10 10 10 10 10 10 10"
     0.5 @0 sin 0.8   -- 1
     0.5 @0.125 sin 0.8   -- 2
     0.5 @0.25 sin 0.8   -- 3
@@ -2375,6 +2384,8 @@ note midi3 # note C4 |  | note midi3 # note C4
     C4   -- 7
     C4   -- 8
   round-trips true
+  sends: lfot ch2 cc71 20-60
+  spans: 0 0 32 48 64 83 95 127 127 20 20 30 35 40 46 50 60 60 100 100 77 66 55 41 32 10 10 64 64 64 64 64 64 64 64 64
 == LFO at a time, as CCs (32 points over four cycles)
   sin: 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108 127 108 64 19 0 19 63 108
   tri: 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95 127 95 64 32 0 32 64 95

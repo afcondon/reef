@@ -97,9 +97,13 @@ module Reef.Selene.Model
   , lfoValue
   , lfoAt
   , ccOfValue
+  , ccIn
   , MidiOut
+  , MidiSend
   , midiOutsOf
   , defaultMidiOut
+  , midiSends
+  , midiClash
   , midiPort
   , lfoCyclesShown
   , clampNum
@@ -114,6 +118,7 @@ import Data.Array (deleteAt, elemIndex, length, mapWithIndex, range, snoc, (!!))
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as Str
+import Data.Tuple (Tuple(..))
 import Reef.Bits (xorshift32)
 import Reef.Euclid as Euclid
 import Reef.Numeric (ln, sin) as N
@@ -813,32 +818,69 @@ type Destination =
   , retrig :: Maybe String
   , muted :: Boolean
   , mutedSlots :: Array Int
-  -- On a MIDI row, the channel and CC each signal is sent on, slot by slot
-  -- (`midiOutsOf` fills the defaults); empty elsewhere
+  -- On a MIDI row, where each signal is sent, slot by slot (`midiOutsOf`
+  -- fills the defaults); empty elsewhere
   -- (docs/kb/plans/selene-midi-signals.md).
   , midi :: Array MidiOut
   }
 
--- | Where one signal of a MIDI row goes: a channel (1-16) and a controller.
-type MidiOut = { channel :: Int, cc :: Int }
+-- | Where one signal of a MIDI row goes: a channel (1-16), a controller or
+-- | none, and the span of CC values its swing covers. A signal with no CC
+-- | sends nothing (AC, 2026-10-25: a MIDI slot has no jack of its own, so an
+-- | idle one must not take a controller). `lo` above `hi` turns it upside
+-- | down: Ableton's mapping has no attenuverter, so this is it.
+type MidiOut = { channel :: Int, cc :: Maybe Int, lo :: Int, hi :: Int }
 
 -- | The port every MIDI row sends on, for now (AC, 2026-10-22: Ableton
 -- | listens on every port and learns by channel and CC).
 midiPort :: String
 midiPort = "IAC Driver Tidal"
 
--- | Slot `k` of MIDI row `n` when nothing is set: the row's own channel, and
--- | CCs 20-27, which the MIDI spec leaves undefined.
-defaultMidiOut :: Int -> Int -> MidiOut
-defaultMidiOut n k = { channel: max 1 (min 16 n), cc: 20 + k }
+-- | A signal of MIDI row `n` when nothing is set: the row's own channel, no
+-- | controller, the whole span.
+defaultMidiOut :: Int -> MidiOut
+defaultMidiOut n = { channel: max 1 (min 16 n), cc: Nothing, lo: 0, hi: 127 }
 
 -- | Each signal's channel and CC on a MIDI row, one a slot, the defaults
 -- | where none is set; nothing on any other target, or for a kind not sent
 -- | as CCs (a row's notes have no CC to say).
 midiOutsOf :: Destination -> Array MidiOut
 midiOutsOf d = case d.target of
-  Midi n | sentAsCC (bankKind d.bank) -> Array.mapWithIndex (\k _ -> fromMaybe (defaultMidiOut n k) (d.midi Array.!! k)) (Array.range 1 (bankSize d.bank))
+  Midi n | sentAsCC (bankKind d.bank) -> Array.mapWithIndex (\k _ -> fromMaybe (defaultMidiOut n) (d.midi Array.!! k)) (Array.range 1 (bankSize d.bank))
   _ -> []
+
+-- | One signal a rack sends as CCs: on the beat (`lfot`) or in Hz, its LFO,
+-- | and where it goes.
+type MidiSend = { tempo :: Boolean, lfo :: ModSlot, channel :: Int, cc :: Int, lo :: Int, hi :: Int }
+
+-- | What a rack's MIDI rows send: every signal with a controller, its row
+-- | and itself not muted. Two signals on one channel and CC are a clash
+-- | (`midiClash`); should a rack hold one anyway, the first sends and the
+-- | other does not, so a controller is never fought over.
+midiSends :: Selene -> Array MidiSend
+midiSends sel = Array.nubByEq (\a b -> a.channel == b.channel && a.cc == b.cc) (Array.concat (map row sel.destinations))
+  where
+  row d = case d.target, d.bank of
+    Midi _, GLfo slots | not d.muted -> signals false d slots
+    Midi _, GLfoT slots | not d.muted -> signals true d slots
+    _, _ -> []
+  signals tempo d slots = Array.catMaybes (Array.zipWith (\k (Tuple lfo out) -> if Array.elem k d.mutedSlots then Nothing else map (\cc -> { tempo, lfo, channel: out.channel, cc, lo: out.lo, hi: out.hi }) out.cc)
+    (Array.range 0 (length slots - 1)) (Array.zip slots (midiOutsOf d)))
+
+-- | Two signals given one channel and CC, said: a controller carries one
+-- | signal, as a jack does. A muted signal still holds its CC, as a muted
+-- | bank holds its jacks, so unmuting it never makes a clash.
+midiClash :: Selene -> Maybe String
+midiClash sel = go [] (Array.concat (Array.mapWithIndex held sel.destinations))
+  where
+  held _ d = case d.target of
+    Midi n -> Array.catMaybes (Array.mapWithIndex (\k out -> map (\cc -> { channel: out.channel, cc, who: "MIDI " <> show n <> " signal " <> show (k + 1) }) out.cc) (midiOutsOf d))
+    _ -> []
+  go seen xs = case Array.uncons xs of
+    Nothing -> Nothing
+    Just { head: x, tail } -> case Array.find (\y -> y.channel == x.channel && y.cc == x.cc) seen of
+      Just y -> Just ("channel " <> show x.channel <> " CC " <> show x.cc <> " is " <> y.who <> "'s; " <> x.who <> " can't have it too (a CC carries one signal)")
+      Nothing -> go (Array.snoc seen x) tail
 
 -- | The kinds a MIDI row sends as control changes.
 sentAsCC :: GenKind -> Boolean
@@ -1132,7 +1174,20 @@ lfoAt sl cycles tick =
 
 -- | A value as a 7-bit CC: -1 is 0, +1 is 127, clamped.
 ccOfValue :: Number -> Int
-ccOfValue v = max 0 (min 127 (Int.round ((clampNum (-1.0) 1.0 v + 1.0) * 63.5)))
+ccOfValue = ccIn { lo: 0, hi: 127 }
+
+-- | A value as a CC within a signal's span: -1 is `lo`, +1 is `hi`, clamped;
+-- | `lo` above `hi` turns it over. Rounded on a span counted upward, so the
+-- | BEAM and JS, which round a negative half differently, agree.
+ccIn :: forall r. { lo :: Int, hi :: Int | r } -> Number -> Int
+ccIn o v =
+  let
+    t = (clampNum (-1.0) 1.0 v + 1.0) / 2.0
+    steps = Int.round (t * Int.toNumber (abs (o.hi - o.lo)))
+  in
+    max 0 (min 127 (if o.hi >= o.lo then o.lo + steps else o.lo - steps))
+  where
+  abs x = if x < 0 then negate x else x
 
 clampNum :: Number -> Number -> Number -> Number
 clampNum lo hi v = if v < lo then lo else if v > hi then hi else v

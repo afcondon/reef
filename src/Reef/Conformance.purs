@@ -117,7 +117,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Euclid as Euclid
-import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, LfoWave(..)) as SM
+import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiSends, LfoWave(..)) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
@@ -2292,7 +2292,15 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
       swapBody = filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") swaps.rack)
       midiRows = foldl step { rack: "", out: [] }
         [ "lfot midi1 # ratio ÷4 # tri 1 # phase 0", "lfot midi1 # cc \"74 71\" # ch 2", "lfo midi2 # rate 0.5"
-        , "euclid midi1", "lfot midi1 # cc 128", "lfot midi1 # ch 0", "note midi3 # note C4" ]
+        , "euclid midi1", "lfot midi1 # cc 128", "lfot midi1 # ch 0", "note midi3 # note C4"
+        -- a CC carries one signal: given twice, refused, across rows too
+        , "lfot midi1 # cc \"74 74\"", "lfo midi2 # ch 2 # cc 71", "lfo midi2 # cc 71"
+        -- `-` takes a signal's CC away; a span, and one turned over
+        , "lfot midi1 # cc \"- 71\"", "lfot midi1 # lo 20 # hi 60", "lfo midi2 # lo 100 # hi 10" ]
+      spanCases = do
+        o <- [ { lo: 0, hi: 127 }, { lo: 20, hi: 60 }, { lo: 100, hi: 10 }, { lo: 64, hi: 64 } ]
+        v <- [ -1.5, -1.0, -0.5, -0.25, 0.0, 0.3, 0.5, 1.0, 2.0 ]
+        pure (Tuple o v)
       -- an LFO's value and its CC through four cycles, each shape and the
       -- random two, so node and the BEAM are held to the same maths
       lfoSamples =
@@ -2320,6 +2328,9 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         <> [ "== MIDI rows: LFOs sent as CCs (docs/kb/plans/selene-midi-signals.md)" ] <> midiRows.out
         <> map ("  " <> _) (filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") midiRows.rack))
         <> [ "  round-trips " <> show (SR.printRack (SR.parseRack midiRows.rack) == midiRows.rack) ]
+        <> [ "  sends: " <> String.joinWith ", " (map (\m -> (if m.tempo then "lfot" else "lfo") <> " ch" <> show m.channel <> " cc" <> show m.cc <> " " <> show m.lo <> "-" <> show m.hi)
+               (SM.midiSends (SR.parseRack midiRows.rack))) ]
+        <> [ "  spans: " <> String.joinWith " " (map (\(Tuple o v) -> show (SM.ccIn o v)) spanCases) ]
         <> lfoSamples
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is

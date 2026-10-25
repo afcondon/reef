@@ -88,10 +88,13 @@ printDest d =
     <> midiTok
     <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
   -- a MIDI row's channel and CC for each signal, always said: they are what
-  -- the receiving instrument learns, so the text must never leave them implied
+  -- the receiving instrument learns, so the text must never leave them
+  -- implied (`-`: no CC, so nothing sent); the span only when one is set
   midiTok = case M.midiOutsOf d of
     [] -> ""
-    outs -> " ch \"" <> joinWith " " (map (show <<< _.channel) outs) <> "\" cc \"" <> joinWith " " (map (show <<< _.cc) outs) <> "\""
+    outs -> " ch " <> quoted (map (show <<< _.channel) outs) <> " cc " <> quoted (map (maybe "-" show <<< _.cc) outs)
+      <> (if Array.all (\o -> o.lo == 0 && o.hi == 127) outs then "" else " lo " <> quoted (map (show <<< _.lo) outs) <> " hi " <> quoted (map (show <<< _.hi) outs))
+  quoted vs = "\"" <> joinWith " " vs <> "\""
   -- tagged with its jack, so a run on 5-8 reads 5, 6, 7, 8
   -- a voice layout's outputs and where its gates are gathered
   layoutTok = case d.bank of
@@ -222,7 +225,7 @@ type PState =
       , retrig :: Maybe String
       , muted :: Boolean
       , layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }
-      , midi :: { ch :: Array Int, cc :: Array Int }
+      , midi :: MidiWords
       , rows :: Array { text :: Maybe String, muted :: Boolean }
       }
   }
@@ -280,13 +283,17 @@ closeBlock st = case st.open of
           M.KVoice -> buildVoices blk.layout (map _.text rows)
           k -> buildBank k (map _.text rows)
         mutedSlots = Array.catMaybes (mapWithIndex (\i r -> if r.muted && isJust r.text then Just i else Nothing) rows)
-        -- a MIDI row's channel and CC per signal, the defaults where unsaid
+        -- a MIDI row's channel, CC and span per signal, the defaults where
+        -- unsaid or out of range (`-`, or nothing: no CC)
         midi = case blk.target of
-          M.Midi n -> mapWithIndex (\k _ -> { channel: fromMaybe (M.defaultMidiOut n k).channel (blk.midi.ch !! k >>= inChannels)
-                                            , cc: fromMaybe (M.defaultMidiOut n k).cc (blk.midi.cc !! k >>= inCCs) }) rows
+          M.Midi n -> mapWithIndex (\k _ ->
+            let def = M.defaultMidiOut n
+            in { channel: fromMaybe def.channel (blk.midi.ch !! k >>= within 1 16)
+               , cc: blk.midi.cc !! k >>= within 0 127
+               , lo: fromMaybe def.lo (blk.midi.lo !! k >>= within 0 127)
+               , hi: fromMaybe def.hi (blk.midi.hi !! k >>= within 0 127) }) rows
           _ -> []
-        inChannels c = if c >= 1 && c <= 16 then Just c else Nothing
-        inCCs c = if c >= 0 && c <= 127 then Just c else Nothing
+        within lo hi w = Int.fromString w >>= \c -> if c >= lo && c <= hi then Just c else Nothing
     in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots, midi }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are silent).
@@ -323,7 +330,10 @@ buildBank kind rows = case kind of
 -- | A `retrig "<pattern>"` may close the header (the pattern is quoted and may
 -- | hold spaces, so it is taken off before the words are counted). Before it,
 -- | the word `muted` marks a muted destination.
-headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean, layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }, midi :: { ch :: Array Int, cc :: Array Int } }
+-- | A MIDI row's header values, word by word, read per slot at close.
+type MidiWords = { ch :: Array String, cc :: Array String, lo :: Array String, hi :: Array String }
+
+headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean, layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }, midi :: MidiWords }
 headerOf t0 = case words t of
   [] -> Nothing
   toks0 -> case toks0 !! 0 >>= kindOf of
@@ -349,14 +359,16 @@ headerOf t0 = case words t of
   split = case Str.indexOf (Str.Pattern " retrig \"") t0 of
     Just i -> { t: Str.take i t0, retrig: unquote (Str.trim (Str.drop (i + 8) t0)) }
     Nothing -> { t: t0, retrig: Nothing }
-  -- a MIDI row's `ch "…"` and `cc "…"`, each quoted, taken off before the
-  -- words are counted as `retrig` is
+  -- a MIDI row's `ch "…"`, `cc "…"`, `lo "…"` and `hi "…"`, each quoted,
+  -- taken off before the words are counted as `retrig` is
   chTaken = takeQuoted "ch" split.t
   ccTaken = takeQuoted "cc" chTaken.rest
-  t = ccTaken.rest
+  loTaken = takeQuoted "lo" ccTaken.rest
+  hiTaken = takeQuoted "hi" loTaken.rest
+  t = hiTaken.rest
   retrig = split.retrig
-  midi = { ch: ints chTaken.value, cc: ints ccTaken.value }
-  ints = maybe [] (Array.mapMaybe Int.fromString <<< words)
+  midi = { ch: ws chTaken.value, cc: ws ccTaken.value, lo: ws loTaken.value, hi: ws hiTaken.value }
+  ws = maybe [] words
   unquote s = Str.stripPrefix (Str.Pattern "\"") s >>= Str.stripSuffix (Str.Pattern "\"")
 
 -- | ` <key> "<value>"` taken out of a header: what is left, and the value.

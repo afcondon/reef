@@ -134,7 +134,7 @@ applyLine line sel = do
         M.Midi _ -> true
         _ -> false
       midiTerm k = if midiRow then Array.last (filter (\t -> t.param == k) line.terms) else Nothing
-      named = filter (\t -> not (Array.elem t.param ([ "fresh", "retrig", "outputs", "gates" ] <> if midiRow then [ "ch", "cc" ] else []))) line.terms
+      named = filter (\t -> not (Array.elem t.param ([ "fresh", "retrig", "outputs", "gates" ] <> if midiRow then [ "ch", "cc", "lo", "hi" ] else []))) line.terms
       -- `# retrig "<pattern>"` sets the bank's reset pattern, `# retrig off`
       -- clears it; the last one named wins
       retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
@@ -161,19 +161,29 @@ applyLine line sel = do
       muted = maybe false _.muted was
       mutedSlots = maybe [] _.mutedSlots was
       before = maybe [] M.midiOutsOf was
-      fallback k = fromMaybe (M.defaultMidiOut (midiNumber line.target) k) (before !! k)
+      fallback k = fromMaybe (M.defaultMidiOut (midiNumber line.target)) (before !! k)
   chs <- traverse (traverse (\v -> inRange "ch" 1 16 v)) (map _.values (midiTerm "ch"))
-  ccs <- traverse (traverse (\v -> inRange "cc" 0 127 v)) (map _.values (midiTerm "cc"))
+  -- `-` is no CC: that signal sends nothing
+  ccs <- traverse (traverse (\v -> if v == "-" then Right Nothing else Just <$> inRange "cc" 0 127 v)) (map _.values (midiTerm "cc"))
+  los <- traverse (traverse (\v -> inRange "lo" 0 127 v)) (map _.values (midiTerm "lo"))
+  his <- traverse (traverse (\v -> inRange "hi" 0 127 v)) (map _.values (midiTerm "hi"))
   let
       -- each named value in turn and wrapping, as every term is; the rest kept
       pick xs k def = maybe def (\vs -> fromMaybe def (vs !! (k `mod` max 1 (length vs)))) xs
+      -- but a CC is an address, and two signals can't share one, so its
+      -- values go to the slots in turn without wrapping (AC, 2026-10-25)
+      pickOnce xs k def = maybe def (\vs -> fromMaybe def (vs !! k)) xs
       midi = if midiRow
-        then mapWithIndex (\k _ -> { channel: pick chs k (fallback k).channel, cc: pick ccs k (fallback k).cc }) (Array.range 1 (M.bankSize bank))
+        then mapWithIndex (\k _ -> { channel: pick chs k (fallback k).channel, cc: pickOnce ccs k (fallback k).cc
+                                   , lo: pick los k (fallback k).lo, hi: pick his k (fallback k).hi }) (Array.range 1 (M.bankSize bank))
         else []
       dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, muted, mutedSlots, midi }
-  pure case existing of
-    Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
-    Nothing -> sel { destinations = snoc sel.destinations dest }
+      next = case existing of
+        Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
+        Nothing -> sel { destinations = snoc sel.destinations dest }
+  case M.midiClash next of
+    Just why | midiRow -> Left why
+    _ -> pure next
   where
   keepRange i d = d { range = (sel.destinations !! i) >>= _.range }
   isMidiTarget = case _ of
@@ -369,7 +379,10 @@ printLine d =
   -- a MIDI row's channel and CC per signal, always said (Rack's rule)
   midiTerms = case M.midiOutsOf d of
     [] -> []
-    outs -> [ "ch " <> value (map (show <<< _.channel) outs), "cc " <> value (map (show <<< _.cc) outs) ]
+    outs -> [ "ch " <> value (map (show <<< _.channel) outs), "cc " <> listed (map (maybe "-" show <<< _.cc) outs) ]
+      <> (if Array.all (\o -> o.lo == 0 && o.hi == 127) outs then [] else [ "lo " <> value (map (show <<< _.lo) outs), "hi " <> value (map (show <<< _.hi) outs) ])
+  -- a CC list said whole: one value would be slot 1's alone
+  listed vs = if length vs == 1 then fromMaybe "" (head vs) else "\"" <> joinWith " " vs <> "\""
   fresh = case d.bank of
     -- a layout's voices against fresh voices like them (their envelopes)
     M.GVoice vb -> case M.freshBank M.KVoice of
