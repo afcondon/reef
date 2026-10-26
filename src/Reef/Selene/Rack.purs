@@ -120,7 +120,7 @@ printDest d =
     M.GEnv slots -> map envLine slots
     M.GVoice vb -> map (voiceLine vb) vb.voices
     M.GThrow slots -> map throwLine slots
-    M.GVolt slots -> map (M.voltWord <<< _.volts) slots
+    M.GVolt slots -> map voltLine slots
 
 kindKeyword :: M.GenBank -> String
 kindKeyword = case _ of
@@ -306,7 +306,7 @@ slotText t = case Str.stripPrefix (Str.Pattern "--") t of
   -- tempo LFO's `÷` or `×`, or an envelope's or a throw's `a`); anything else
   -- after `--` is a note, not settings
   -- (`÷` and `×` by prefix: charAt gives a code unit in JS, a byte on the BEAM)
-  startsSlot b = isJust (Str.stripPrefix (Str.Pattern "÷") b) || isJust (Str.stripPrefix (Str.Pattern "×") b) || negative b || case Str.charAt 0 b of
+  startsSlot b = isJust (Str.stripPrefix (Str.Pattern "\"") b) || isJust (Str.stripPrefix (Str.Pattern "÷") b) || isJust (Str.stripPrefix (Str.Pattern "×") b) || negative b || case Str.charAt 0 b of
     Just c -> c >= '0' && c <= '9' || c >= 'A' && c <= 'G' || c == 'a'
     Nothing -> false
   -- a POLYVOLT's negative voltage, `-2.5V`
@@ -577,11 +577,20 @@ silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, s
 
 -- | 0 V, which every range holds.
 silentVolt :: M.VoltSlot
-silentVolt = { volts: 0.0 }
+silentVolt = { volts: 0.0, pattern: Nothing }
 
--- | `2.5V` (or a bare number); unreadable is 0 V.
+-- | `2.5V` (or a bare number); unreadable is 0 V. A quoted pattern of
+-- | voltages, `"<0 1.2 2.5>"`, is played on the clock by the rig.
 parseVolt :: String -> M.VoltSlot
-parseVolt s = { volts: fromMaybe 0.0 (words s !! 0 >>= M.voltOf) }
+parseVolt s = case Str.stripPrefix (Str.Pattern "\"") (Str.trim s) of
+  Just rest -> case Str.split (Str.Pattern "\"") rest of
+    [ p, _ ] | Str.trim p /= "" -> { volts: 0.0, pattern: Just (Str.trim p) }
+    _ -> silentVolt
+  Nothing -> { volts: fromMaybe 0.0 (words s !! 0 >>= M.voltOf), pattern: Nothing }
+
+-- | A POLYVOLT slot as the rack writes it: its voltage, or its pattern.
+voltLine :: M.VoltSlot -> String
+voltLine sl = maybe (M.voltWord sl.volts) (\p -> "\"" <> p <> "\"") sl.pattern
 
 silentEuclid :: M.EuclidSlot
 silentEuclid = { beats: 0, steps: 8, rotation: 0, rate: 4, accentRate: 0 }

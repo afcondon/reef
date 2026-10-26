@@ -1178,7 +1178,7 @@ freshBank = case _ of
   -- eight throws, the first a dub throw, the second an eight-bar riser
   KThrow -> GThrow (map throwSlot ixs)
   -- eight outputs at 0 V, to be dialled in
-  KVolt -> GVolt (map (const { volts: 0.0 }) ixs)
+  KVolt -> GVolt (map (const { volts: 0.0, pattern: Nothing }) ixs)
   where
   ixs = range 0 (slotCount - 1)
   throwSlot = case _ of
@@ -1472,8 +1472,11 @@ clampNum lo hi v = if v < lo then lo else if v > hi then hi else v
 -- | A POLYVOLT slot: the voltage its jack holds. It is kept as asked even
 -- | when the bank's range cannot reach it (AC, 2026-10-26: a range change
 -- | leaves the volts where they are), and then plays at the range's end and
--- | says so (`voltClipped`).
-type VoltSlot = { volts :: Number }
+-- | says so (`voltClipped`). Or it follows a pattern of voltages on the
+-- | clock, `<0 1.2 2.5>` (AC, 2026-10-26: to step Obsidian's MODEL from
+-- | Selene), played by the rig, a rest holding the voltage before it; `volts`
+-- | is then what it holds until the pattern plays.
+type VoltSlot = { volts :: Number, pattern :: Maybe String }
 
 -- | The range a bank's target holds it to, when the target has only one: the
 -- | ESX-8CV's encoder is ±5 V whatever is asked (es9-daemon installs its

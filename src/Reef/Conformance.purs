@@ -73,7 +73,7 @@ import Prelude
 
 import Data.Array (concatMap, filter, find, length, null, range, snoc, mapWithIndex, take, (!!))
 import Data.Array as Array
-import Data.Either (Either(..), either)
+import Data.Either (Either(..), either, hush)
 import Foreign (Foreign)
 import Simple.JSON as JSON
 import Data.String as String
@@ -83,7 +83,7 @@ import Reef.Odonus.Patch as Patch
 import Reef.Move as Move
 import Data.Foldable (foldl, intercalate)
 import Data.Int (round, toNumber)
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Tuple (Tuple(..))
 import Reef.Balistes.Engine (Trigger, evaluateStep, freshPerturbations) as Bal
 import Reef.Balistes.Sim (BalSim, defaultBalSim, stepBal, renderStep) as BSim
@@ -120,7 +120,7 @@ import Reef.Euclid as Euclid
 import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiMap, midiUnmap, midiBindings, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..), OutputRange(..), rangeToWire, voltsLevel, voltClipped, voltWord, voltOf) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
-import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine, mutesOf, mutedApply) as SL
+import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine, mutesOf, mutedApply, voltPatternsOf, heldApply) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -2409,6 +2409,31 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
             <> [ "  round-trips " <> show (SR.printRack (SR.parseRack lined.rack) == lined.rack) ]
             <> [ "  plays: " <> String.joinWith "; " (map (\m -> m.socket <> " " <> m.bank <> " " <> m.pattern) plays) ]
             <> map ("  " <> _) applies
+      -- patterns of voltages: one output follows a pattern, the others kept;
+      -- a voltage set ends it; what the rig plays (voltPatternsOf) and the
+      -- apply it sends with the patterns' voltages and mutes (heldApply)
+      voltPatterns =
+        let
+          lined = foldl step { rack: "", out: [] }
+            [ "volt fh2cv0 # volts \"1V 2V 3V\"", "volt fh2cv0 # volts 3 \"<0 1.2 [2.5 -1] ~>\"", "volt fh2cv0 # volts 2 \"4V\""
+            , "volt fh2cv0 # volts 1 \"<1 2>\" # range unipolar10v", "volt fh2cv0 # volts 9 \"<1 2>\"", "volt fh2cv0 # volts 1 \"\""
+            , "volt fh2cv0 # volts 2 loud", "volt es98cv0 # volts 1 \"0 5\"", "volt es98cv0 # volts \"2V\"", "mute es98cv0", "volt es98cv0 # volts 1 \"<1 2>\"" ]
+          plays = SL.voltPatternsOf lined.rack
+          -- the apply with a pattern's voltage is the apply of that voltage
+          -- set by hand (the JSON compared within a runtime, never printed)
+          bySet src = hush (SL.rigLine src lined.rack) <#> _.json
+          heldVolts ks vs = SL.heldApply lined.rack "fh2" "cv0" ks vs <#> _.json
+          applies =
+            [ "3 at 2.5V is volts 3 2.5V: " <> show (heldVolts [] [ { slot: 3, volts: 2.5 } ] == bySet "volt fh2cv0 # volts 3 2.5V")
+            , "1 at 7V, 9 ignored, is volts 1 7V: " <> show (heldVolts [] [ { slot: 1, volts: 7.0 }, { slot: 9, volts: 1.0 } ] == bySet "volt fh2cv0 # volts 1 7V")
+            , "muting 2 differs: " <> show (heldVolts [ 2 ] [] /= heldVolts [] [])
+            , "a bank not on the rack applies: " <> show (isJust (SL.heldApply lined.rack "es9" "nope" [] [])) ]
+        in
+          [ "== patterns of voltages" ] <> lined.out
+            <> map ("  " <> _) (filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") lined.rack))
+            <> [ "  round-trips " <> show (SR.printRack (SR.parseRack lined.rack) == lined.rack) ]
+            <> [ "  plays: " <> String.joinWith "; " (map (\m -> m.socket <> " " <> m.bank <> " " <> show m.slot <> " " <> m.pattern) plays) ]
+            <> map ("  " <> _) applies
       -- 2026-10-22 on the rig: an empty Euclid over the whole GT made the
       -- voices' gates unplaceable while `off` said the voices' jacks were free
       held = foldl step { rack: "", out: [] }
@@ -2436,6 +2461,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         <> mapped
         <> volts
         <> mutePatterns
+        <> voltPatterns
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is
   commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)

@@ -40,6 +40,8 @@ module Reef.Selene.Line
   , banksOf
   , mutesOf
   , mutedApply
+  , voltPatternsOf
+  , heldApply
   ) where
 
 import Prelude
@@ -281,10 +283,32 @@ applyTerm bank t = case bank of
       | p == "on" -> note ("on is now, beat or bar, not " <> v) (M.startOf v)
           <#> \o -> sl { start = o }
     _ -> unknown "throw" "a h d on"
+  -- `# volts 3 "<0 1.2 2.5>"`: output 3 follows a pattern of voltages, the
+  -- others kept; `# volts 3 2.5V` sets it alone
+  M.GVolt slots | Just one <- slotForm -> M.GVolt <$> oneSlot slots one
+  -- a voltage set is set: a pattern on the outputs it sets ends
   M.GVolt slots -> M.GVolt <$> each slots \sl v -> case t.param of
-    p | p == "volts" || p == "v" -> (\x -> sl { volts = x }) <$> note (t.param <> " wants a voltage, as 2.5V or -3V, not " <> v) (M.voltOf v)
+    p | p == "volts" || p == "v" -> (\x -> sl { volts = x, pattern = Nothing }) <$> note (t.param <> " wants a voltage, as 2.5V or -3V, not " <> v) (M.voltOf v)
     _ -> unknown "volt" "volts (and range)"
   where
+  -- `<output> <voltage or quoted pattern>`, one value as the term reads it
+  slotForm = case t.values of
+    [ v ] | t.param == "volts" || t.param == "v" -> case Str.indexOf (Str.Pattern " ") v of
+      Just at -> Just { slot: Str.take at v, value: trim (Str.drop (at + 1) v) }
+      Nothing -> Nothing
+    _ -> Nothing
+  oneSlot :: Array M.VoltSlot -> { slot :: String, value :: String } -> Either String (Array M.VoltSlot)
+  oneSlot slots one = do
+    k <- case Int.fromString one.slot of
+      Just k | k >= 1 && k <= length slots -> Right k
+      _ -> Left ("volts names an output from 1 to " <> show (length slots) <> ", not " <> one.slot)
+    sl <- case Str.stripPrefix (Str.Pattern "\"") one.value >>= Str.stripSuffix (Str.Pattern "\"") of
+      Just inner
+        | trim inner == "" -> Left "volts wants a pattern of voltages, as \"<0 1.2 2.5>\""
+        | Just x <- M.voltOf (trim inner) -> Right { volts: x, pattern: Nothing }
+        | otherwise -> Right { volts: 0.0, pattern: Just (trim inner) }
+      Nothing -> (\x -> { volts: x, pattern: Nothing }) <$> note ("volts wants a voltage, as 2.5V, or a quoted pattern; not " <> one.value) (M.voltOf one.value)
+    note "volts: no such output" (updateAt (k - 1) sl slots)
   -- an LFO slot's phase, level and shape: what POLYLFO and POLYLFOT share
   shaped :: String -> String -> M.ModSlot -> String -> Either String M.ModSlot
   shaped kind period sl v = case t.param of
@@ -427,7 +451,11 @@ printLine d =
       M.GVoice f -> M.GVoice vb { voices = map (\v -> v { env = fromMaybe v.env (map _.env (f.voices !! 0)) }) vb.voices }
       other -> other
     _ -> M.freshBankOn d.jacks (M.bankKind d.bank)
-  terms = layoutTerms <> Array.catMaybes (map term (filter said (paramsOf (M.bankKind d.bank))))
+  terms = layoutTerms <> Array.catMaybes (map term (filter said (paramsOf (M.bankKind d.bank)))) <> patternTerms
+  -- each output that follows a pattern, after the voltages it holds
+  patternTerms = case d.bank of
+    M.GVolt s -> Array.catMaybes (mapWithIndex (\k sl -> map (\p -> "volts " <> show (k + 1) <> " \"" <> p <> "\"") sl.pattern) s)
+    _ -> []
   layoutTerms = case d.bank of
     M.GVoice vb -> [ "outputs " <> M.voiceOutsWord vb.outputs ] <> maybe [] (\g -> [ "gates " <> M.placeWire g.target g.jacks ]) vb.gates
     _ -> []
@@ -551,10 +579,35 @@ mutesOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
 -- | is not changed, since a pattern's mute is an act, not a setting. Slots
 -- | outside the bank are ignored; Nothing when the bank is not on the rack.
 mutedApply :: String -> String -> String -> Array Int -> Maybe { json :: String, command :: String }
-mutedApply rack socket bank slots = do
+mutedApply rack socket bank slots = heldApply rack socket bank slots []
+
+-- | Each POLYVOLT output in a rack that follows a pattern of voltages, with
+-- | its bank (Architeuthis plays them, one stream a bank). A muted bank's, or
+-- | a muted output's, is left out, so it stops with the mute.
+voltPatternsOf :: String -> Array { socket :: String, bank :: String, slot :: Int, pattern :: String }
+voltPatternsOf rack = Array.concatMap one (Rack.parseRack rack).destinations
+  where
+  one d = case d.bank, Wire.targetSocketBank d.target of
+    M.GVolt slots, Just sb | not d.muted ->
+      Array.catMaybes (mapWithIndex (\k sl -> case sl.pattern of
+        Just pattern | not (Array.elem k d.mutedSlots) -> Just { socket: sb.socket, bank: Wire.placeOn sb d.jacks, slot: k + 1, pattern }
+        _ -> Nothing) slots)
+    _, _ -> []
+
+-- | The apply for a bank with these slots (1-based) silent as well as its
+-- | own muted ones, and these POLYVOLT outputs at these voltages: what the
+-- | rig sends when a mute pattern or a pattern of voltages moves. The rack
+-- | is not changed. Slots outside the bank are ignored; Nothing when the
+-- | bank is not on the rack.
+heldApply :: String -> String -> String -> Array Int -> Array { slot :: Int, volts :: Number } -> Maybe { json :: String, command :: String }
+heldApply rack socket bank slots volts = do
   d <- Array.find (\x -> map (\sb -> sb.socket == socket && Wire.placeOn sb x.jacks == bank) (Wire.targetSocketBank x.target) == Just true) (Rack.parseRack rack).destinations
   let extra = Array.mapMaybe (\k -> if k >= 1 && k <= M.bankSize d.bank then Just (k - 1) else Nothing) slots
-  w <- Wire.destinationEnvelope d { mutedSlots = Array.sort (Array.nub (d.mutedSlots <> extra)) }
+      at k sl = maybe sl (\v -> sl { volts = v.volts }) (Array.find (\v -> v.slot == k + 1) volts)
+      bank' = case d.bank of
+        M.GVolt s -> M.GVolt (mapWithIndex at s)
+        b -> b
+  w <- Wire.destinationEnvelope d { bank = bank', mutedSlots = Array.sort (Array.nub (d.mutedSlots <> extra)) }
   pure { json: w.json, command: "apply-polysignal " <> w.json }
 
 -- | What the rig does with a `selene $` line (Architeuthis's Handler): the

@@ -525,6 +525,50 @@ mute es98cv0 | cv0 | mute es98cv0
   fh2 gt0 [9] applies
   es9 cv0 [1] applies
   fh2 main [1] nothing
+== patterns of voltages
+volt fh2cv0 # volts "1V 2V 3V" | cv0 | volt fh2cv0 # volts "1V 2V 3V 1V 2V 3V 1V 2V"
+  sent polylfo as selene:fh2:cv0
+volt fh2cv0 # volts 3 "<0 1.2 [2.5 -1] ~>" | cv0 | volt fh2cv0 # volts "1V 2V 0V 1V 2V 3V 1V 2V" # volts 3 "<0 1.2 [2.5 -1] ~>"
+  sent polylfo as selene:fh2:cv0
+volt fh2cv0 # volts 2 "4V" | cv0 | volt fh2cv0 # volts "1V 4V 0V 1V 2V 3V 1V 2V" # volts 3 "<0 1.2 [2.5 -1] ~>"
+  sent polylfo as selene:fh2:cv0
+volt fh2cv0 # volts 1 "<1 2>" # range unipolar10v | cv0 | volt fh2cv0 # volts "0V 4V 0V 1V 2V 3V 1V 2V" # volts 1 "<1 2>" # volts 3 "<0 1.2 [2.5 -1] ~>" # range unipolar10v
+  sent polylfo as selene:fh2:cv0
+volt fh2cv0 # volts 9 "<1 2>" | refused: volts names an output from 1 to 8, not 9
+volt fh2cv0 # volts 1 "" | refused: volts wants a pattern of voltages, as "<0 1.2 2.5>"
+volt fh2cv0 # volts 2 loud | refused: volts wants a voltage, as 2.5V, or a quoted pattern; not loud
+volt es98cv0 # volts 1 "0 5" | cv0 | volt es98cv0 # volts 0V # volts 1 "0 5"
+  sent polylfo as selene:es9:cv0
+volt es98cv0 # volts "2V" | cv0 | volt es98cv0 # volts 2V
+  sent polylfo as selene:es9:cv0
+mute es98cv0 | cv0 | mute es98cv0
+  sent polylfo as selene:es9:cv0
+volt es98cv0 # volts 1 "<1 2>" | cv0 | volt es98cv0 # volts "0V 2V 2V 2V 2V 2V 2V 2V" # volts 1 "<1 2>"
+  sent polylfo as selene:es9:cv0
+  volt fh2cv0 unipolar10v
+    "<1 2>"   -- 1
+    4V   -- 2
+    "<0 1.2 [2.5 -1] ~>"   -- 3
+    1V   -- 4
+    2V   -- 5
+    3V   -- 6
+    1V   -- 7
+    2V   -- 8
+  volt es98cv0 muted
+    "<1 2>"   -- 1
+    2V   -- 2
+    2V   -- 3
+    2V   -- 4
+    2V   -- 5
+    2V   -- 6
+    2V   -- 7
+    2V   -- 8
+  round-trips true
+  plays: fh2 cv0 1 <1 2>; fh2 cv0 3 <0 1.2 [2.5 -1] ~>
+  3 at 2.5V is volts 3 2.5V: true
+  1 at 7V, 9 ignored, is volts 1 7V: true
+  muting 2 differs: true
+  a bank not on the rack applies: false
 == euclid (the FH-2's rule)
 E(3,8) r0 x..x..x.
 E(5,8) r0 x.xx.xx.
