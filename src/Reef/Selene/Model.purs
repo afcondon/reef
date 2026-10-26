@@ -964,6 +964,11 @@ type Destination =
   , range :: Maybe OutputRange
   , bank :: GenBank
   , retrig :: Maybe String
+  -- | a Tidal mini-notation pattern of slots (1..8, or `all`) that are
+  -- | silent while it names them: `"<~ 1 [1,2] 2>"` (AC, 2026-10-26: "muting
+  -- | first one kick then the other"). The rig plays it on the Link clock,
+  -- | as it plays `retrig`, on top of `mutedSlots`; reef never parses it.
+  , mutes :: Maybe String
   , muted :: Boolean
   , mutedSlots :: Array Int
   -- On a MIDI row, where each signal is sent, slot by slot (`midiOutsOf`
@@ -1149,10 +1154,10 @@ type Selene = { destinations :: Array Destination }
 defaultSelene :: Selene
 defaultSelene =
   { destinations:
-      [ { target: ES9Main, jacks: allJacks, range: Nothing, bank: freshBank KLfo, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
-      , { target: ES9Gt 0, jacks: allJacks, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
-      , { target: FH2 1, jacks: allJacks, range: Nothing, bank: freshBank KClock, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
-      , { target: Midi 1, jacks: allJacks, range: Nothing, bank: freshBank KNote, retrig: Nothing, muted: false, mutedSlots: [], midi: [] }
+      [ { target: ES9Main, jacks: allJacks, range: Nothing, bank: freshBank KLfo, retrig: Nothing, mutes: Nothing, muted: false, mutedSlots: [], midi: [] }
+      , { target: ES9Gt 0, jacks: allJacks, range: Nothing, bank: freshBank KEuclid, retrig: Nothing, mutes: Nothing, muted: false, mutedSlots: [], midi: [] }
+      , { target: FH2 1, jacks: allJacks, range: Nothing, bank: freshBank KClock, retrig: Nothing, mutes: Nothing, muted: false, mutedSlots: [], midi: [] }
+      , { target: Midi 1, jacks: allJacks, range: Nothing, bank: freshBank KNote, retrig: Nothing, mutes: Nothing, muted: false, mutedSlots: [], midi: [] }
       ]
   }
 
@@ -1217,7 +1222,7 @@ freshBank = case _ of
 
 addDestination :: GenKind -> Selene -> Selene
 addDestination kind s =
-  s { destinations = snoc s.destinations { target: defaultTargetFor kind, jacks: allJacks, range: Nothing, bank: freshBank kind, retrig: Nothing, muted: false, mutedSlots: [], midi: [] } }
+  s { destinations = snoc s.destinations { target: defaultTargetFor kind, jacks: allJacks, range: Nothing, bank: freshBank kind, retrig: Nothing, mutes: Nothing, muted: false, mutedSlots: [], midi: [] } }
 
 removeDestination :: Int -> Selene -> Selene
 removeDestination i s = s { destinations = fromMaybe s.destinations (deleteAt i s.destinations) }

@@ -38,6 +38,8 @@ module Reef.Selene.Line
   , moduleText
   , retrigsOf
   , banksOf
+  , mutesOf
+  , mutedApply
   ) where
 
 import Prelude
@@ -135,13 +137,16 @@ applyLine line sel = do
         M.Midi _ -> true
         _ -> false
       midiTerm k = if midiRow then Array.last (filter (\t -> t.param == k) line.terms) else Nothing
-      named = filter (\t -> not (Array.elem t.param ([ "fresh", "retrig", "outputs", "gates", "range" ] <> if midiRow then [ "ch", "cc", "lo", "hi" ] else []))) line.terms
+      named = filter (\t -> not (Array.elem t.param ([ "fresh", "retrig", "outputs", "gates", "range", "mute" ] <> if midiRow then [ "ch", "cc", "lo", "hi" ] else []))) line.terms
       -- `# retrig "<pattern>"` sets the bank's reset pattern, `# retrig off`
       -- clears it; the last one named wins
       retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
       -- `# range unipolar10v` pins the bank's output range, `# range default`
       -- unpins it; unnamed, the range is kept
       rangeSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "range") line.terms))
+      -- `# mute "<~ 1 [1,2]>"` sets the bank's mute pattern, `# mute off`
+      -- ends it; the last one named wins
+      muteSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "mute") line.terms))
   { start, terms } <- case line.recipe >>= Recipe.recipeNamed of
     Just b -> (\x -> { start: M.takeSlots line.jacks.count x.bank, terms: x.rest }) <$> Recipe.expand b named
     Nothing -> pure { start: if fresh then M.freshBankOn line.jacks kindOfLine else current, terms: named }
@@ -159,6 +164,12 @@ applyLine line sel = do
     Nothing -> Right case existing >>= (sel.destinations !! _) of
       Just d | M.bankKind d.bank == kindOfLine && not fresh -> d.retrig
       _ -> Nothing
+  mutes <- case muteSet of
+    Just v | isMidiTarget line.target -> Left ("a MIDI row's signals are muted by hand; a mute pattern needs jacks, not " <> v)
+    Just v | v == "off" || v == "" -> Right Nothing
+    Just v -> Right (Just (unquote v))
+    -- unnamed: kept, as a mute is (it is about the jacks, not the bank)
+    Nothing -> Right (existing >>= (sel.destinations !! _) >>= _.mutes)
   rangeNamed <- case rangeSet of
     Nothing -> Right Nothing
     Just w | isMidiTarget line.target -> Left ("a MIDI row has no output range, so no range " <> w)
@@ -190,7 +201,7 @@ applyLine line sel = do
         then mapWithIndex (\k _ -> { channel: pick chs k (fallback k).channel, cc: pickOnce ccs k (fallback k).cc
                                    , lo: pick los k (fallback k).lo, hi: pick his k (fallback k).hi, to: (fallback k).to }) (Array.range 1 (M.bankSize bank))
         else []
-      dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, muted, mutedSlots, midi }
+      dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, mutes, muted, mutedSlots, midi }
       next = case existing of
         Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (withRange (keepRange i dest)) sel.destinations) }
         Nothing -> sel { destinations = snoc sel.destinations (withRange dest) }
@@ -428,6 +439,7 @@ printLine d =
     let vs = valuesOf p d.bank
     in if vs == valuesOf p fresh && not (Array.elem p (mainOf (M.bankKind d.bank))) then Nothing else Just (p <> " " <> value vs)
   retrigTerm = maybe [] (\p -> [ "retrig \"" <> p <> "\"" ]) d.retrig
+    <> maybe [] (\p -> [ "mute \"" <> p <> "\"" ]) d.mutes
   -- said when pinned: a POLYVOLT's volts, or an LFO's level, mean what they
   -- do on it
   rangeTerm = maybe [] (\r -> [ "range " <> M.rangeToWire r ]) d.range
@@ -523,6 +535,27 @@ banksOf :: String -> Array { socket :: String, bank :: String, owner :: String }
 banksOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
   where
   one d = map (\sb -> { socket: sb.socket, bank: Wire.placeOn sb d.jacks, owner: Wire.ownerOf sb d.jacks }) (Wire.targetSocketBank d.target)
+
+-- | Each mute pattern in a rack, with the daemon and bank (its place token,
+-- | `main` or `main:5-8`) of the bank it mutes. Architeuthis plays them
+-- | (selene_mutes). A muted bank's pattern is left out: it is silent anyway.
+mutesOf :: String -> Array { socket :: String, bank :: String, pattern :: String }
+mutesOf rack = Array.mapMaybe one (Rack.parseRack rack).destinations
+  where
+  one d = case d.mutes, Wire.targetSocketBank d.target of
+    Just pattern, Just sb | not d.muted -> Just { socket: sb.socket, bank: Wire.placeOn sb d.jacks, pattern }
+    _, _ -> Nothing
+
+-- | The apply for a bank with these slots (1-based) silent as well as its
+-- | own muted ones: what the rig sends when a mute pattern changes. The rack
+-- | is not changed, since a pattern's mute is an act, not a setting. Slots
+-- | outside the bank are ignored; Nothing when the bank is not on the rack.
+mutedApply :: String -> String -> String -> Array Int -> Maybe { json :: String, command :: String }
+mutedApply rack socket bank slots = do
+  d <- Array.find (\x -> map (\sb -> sb.socket == socket && Wire.placeOn sb x.jacks == bank) (Wire.targetSocketBank x.target) == Just true) (Rack.parseRack rack).destinations
+  let extra = Array.mapMaybe (\k -> if k >= 1 && k <= M.bankSize d.bank then Just (k - 1) else Nothing) slots
+  w <- Wire.destinationEnvelope d { mutedSlots = Array.sort (Array.nub (d.mutedSlots <> extra)) }
+  pure { json: w.json, command: "apply-polysignal " <> w.json }
 
 -- | What the rig does with a `selene $` line (Architeuthis's Handler): the
 -- | rack it keeps on the stage (`selene/rack`) with the line applied, and the

@@ -120,7 +120,7 @@ import Reef.Euclid as Euclid
 import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiMap, midiUnmap, midiBindings, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..), OutputRange(..), rangeToWire, voltsLevel, voltClipped, voltWord, voltOf) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
-import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
+import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine, mutesOf, mutedApply) as SL
 
 -- ── 1. the original engine golden ────────────────────────────────────────────
 
@@ -2392,6 +2392,23 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
             <> [ "  levels (! clipped):" ] <> levels
             <> [ "  words: " <> String.joinWith " " words' ]
             <> map ("  " <> _) (filter (_ /= "") (String.split (String.Pattern "\n") (SR.printRack (SR.parseRack byHand))))
+      -- mute patterns: a bank's outputs silenced on the clock by a Tidal
+      -- pattern of slots, kept through later lines, ended with `off`; what
+      -- the rig plays (mutesOf) and the apply it sends (mutedApply)
+      mutePatterns =
+        let
+          lined = foldl step { rack: "", out: [] }
+            [ "euclid fh2_1 # hits 3 # mute \"<~ 1 [1,2] 2>\"", "euclid fh2_1 # hits \"3 5\"", "volt es98cv0 # mute \"<[1,2,3,4] ~!3>\""
+            , "lfo fh2cv0:5-8 # mute 1*2", "lfot midi1 # mute 1", "lfo fh2cv0:5-8 # mute off", "mute es98cv0" ]
+          plays = SL.mutesOf lined.rack
+          applies = map (\(Tuple p ks) -> p.socket <> " " <> p.bank <> " " <> show ks <> " " <> maybe "nothing" (const "applies") (SL.mutedApply lined.rack p.socket p.bank ks))
+            [ Tuple { socket: "fh2", bank: "gt0" } [ 1, 2 ], Tuple { socket: "fh2", bank: "gt0" } [ 9 ], Tuple { socket: "es9", bank: "cv0" } [ 1 ], Tuple { socket: "fh2", bank: "main" } [ 1 ] ]
+        in
+          [ "== mute patterns" ] <> lined.out
+            <> map ("  " <> _) (filter (\l -> l /= "" && String.take 2 l /= "--" && String.take 2 l /= "  ") (String.split (String.Pattern "\n") lined.rack))
+            <> [ "  round-trips " <> show (SR.printRack (SR.parseRack lined.rack) == lined.rack) ]
+            <> [ "  plays: " <> String.joinWith "; " (map (\m -> m.socket <> " " <> m.bank <> " " <> m.pattern) plays) ]
+            <> map ("  " <> _) applies
       -- 2026-10-22 on the rig: an empty Euclid over the whole GT made the
       -- voices' gates unplaceable while `off` said the voices' jacks were free
       held = foldl step { rack: "", out: [] }
@@ -2418,6 +2435,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         <> throwSamples
         <> mapped
         <> volts
+        <> mutePatterns
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is
   commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)

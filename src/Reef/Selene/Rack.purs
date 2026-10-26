@@ -87,6 +87,8 @@ printDest d =
   rangeTok = maybe "" (\r -> " " <> M.rangeToWire r) d.range
     <> (if d.muted then " muted" else "")
     <> midiTok
+    -- before retrig, whose pattern runs to the end of the line
+    <> maybe "" (\p -> " mute \"" <> p <> "\"") d.mutes
     <> maybe "" (\p -> " retrig \"" <> p <> "\"") d.retrig
   -- a MIDI row's channel and CC for each signal, always said: they are what
   -- the receiving instrument learns, so the text must never leave them
@@ -249,6 +251,7 @@ type PState =
       , kind :: M.GenKind
       , range :: Maybe M.OutputRange
       , retrig :: Maybe String
+      , mutes :: Maybe String
       , muted :: Boolean
       , layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }
       , midi :: MidiWords
@@ -269,7 +272,7 @@ parseRack doc =
     in
       if t == "" then closeBlock st
       else case headerOf t of
-        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, jacks: hdr.jacks, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, muted: hdr.muted, layout: hdr.layout, midi: hdr.midi, rows: [] } }
+        Just hdr -> (closeBlock st) { open = Just { target: hdr.target, jacks: hdr.jacks, kind: hdr.kind, range: hdr.range, retrig: hdr.retrig, mutes: hdr.mutes, muted: hdr.muted, layout: hdr.layout, midi: hdr.midi, rows: [] } }
         Nothing -> case st.open of
           Just blk -> st { open = Just (addLine blk t) }
           Nothing -> st   -- a stray line outside any block: ignore
@@ -339,7 +342,7 @@ closeBlock st = case st.open of
                , to: (rows !! k) >>= _.to }) rows
           _ -> []
         within lo hi w = Int.fromString w >>= \c -> if c >= lo && c <= hi then Just c else Nothing
-    in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, muted: blk.muted, mutedSlots, midi }, open: Nothing }
+    in { dests: snoc st.dests { target: blk.target, jacks: blk.jacks, range: blk.range, bank, retrig: blk.retrig, mutes: blk.mutes, muted: blk.muted, mutedSlots, midi }, open: Nothing }
 
 -- Pad/truncate the row list to n (missing positions are silent).
 fitTo :: Int -> Array Row -> Array Row
@@ -380,7 +383,7 @@ buildBank kind rows = case kind of
 -- | A MIDI row's header values, word by word, read per slot at close.
 type MidiWords = { ch :: Array String, cc :: Array String, lo :: Array String, hi :: Array String }
 
-headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, muted :: Boolean, layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }, midi :: MidiWords }
+headerOf :: String -> Maybe { kind :: M.GenKind, target :: M.Target, jacks :: M.Jacks, range :: Maybe M.OutputRange, retrig :: Maybe String, mutes :: Maybe String, muted :: Boolean, layout :: { outputs :: Array M.VoiceOut, gates :: Maybe { target :: M.Target, jacks :: M.Jacks } }, midi :: MidiWords }
 headerOf t0 = case words t of
   [] -> Nothing
   toks0 -> case toks0 !! 0 >>= kindOf of
@@ -395,7 +398,7 @@ headerOf t0 = case words t of
         outputs = if k == M.KVoice then toks2 !! 2 >>= M.voiceOutsOfWord else Nothing
         toks = if isJust outputs then Array.take 2 toks2 <> Array.drop 3 toks2 else toks2
         layout = { outputs: fromMaybe [] outputs, gates }
-        at tgt r = { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: r, retrig, muted, layout, midi }
+        at tgt r = { kind: k, target: (parsePlace tgt).target, jacks: (parsePlace tgt).jacks, range: r, retrig, mutes: muteTaken.value, muted, layout, midi }
       in
         case toks of
           [ _, tgt ] -> Just (at tgt Nothing)
@@ -412,7 +415,9 @@ headerOf t0 = case words t of
   ccTaken = takeQuoted "cc" chTaken.rest
   loTaken = takeQuoted "lo" ccTaken.rest
   hiTaken = takeQuoted "hi" loTaken.rest
-  t = hiTaken.rest
+  -- a mute pattern, `mute "<~ 1>"`
+  muteTaken = takeQuoted "mute" hiTaken.rest
+  t = muteTaken.rest
   retrig = split.retrig
   midi = { ch: ws chTaken.value, cc: ws ccTaken.value, lo: ws loTaken.value, hi: ws hiTaken.value }
   ws = maybe [] words

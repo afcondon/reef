@@ -502,6 +502,29 @@ convert es9main:5-8 lfo | refused: es9main:5-8 has nothing on it to convert
     0V   -- 6
     0V   -- 7
     0V   -- 8
+== mute patterns
+euclid fh2_1 # hits 3 # mute "<~ 1 [1,2] 2>" | gt0 | euclid fh2_1 # hits 3 # steps "8 8 8 8 16 16 16 16" # mute "<~ 1 [1,2] 2>"
+  sent polyeuclid as selene:fh2:gt0
+euclid fh2_1 # hits "3 5" | gt0 | euclid fh2_1 # hits "3 5 3 5 3 5 3 5" # steps "8 8 8 8 16 16 16 16" # mute "<~ 1 [1,2] 2>"
+  sent polyeuclid as selene:fh2:gt0
+volt es98cv0 # mute "<[1,2,3,4] ~!3>" | cv0 | volt es98cv0 # volts 0V # mute "<[1,2,3,4] ~!3>"
+  sent polylfo as selene:es9:cv0
+lfo fh2cv0:5-8 # mute 1*2 | cv0:5-8 | lfo fh2cv0:5-8 # rate 0.5 # phase "0 0.125 0.25 0.375" # mute "1*2"
+  sent polylfo as selene:fh2:cv0:5-8
+lfot midi1 # mute 1 | refused: a MIDI row's signals are muted by hand; a mute pattern needs jacks, not 1
+lfo fh2cv0:5-8 # mute off | cv0:5-8 | lfo fh2cv0:5-8 # rate 0.5 # phase "0 0.125 0.25 0.375"
+  sent polylfo as selene:fh2:cv0:5-8
+mute es98cv0 | cv0 | mute es98cv0
+  sent polylfo as selene:es9:cv0
+  euclid fh2_1 mute "<~ 1 [1,2] 2>"
+  volt es98cv0 muted mute "<[1,2,3,4] ~!3>"
+  lfo fh2cv0:5-8
+  round-trips true
+  plays: fh2 gt0 <~ 1 [1,2] 2>
+  fh2 gt0 [1,2] applies
+  fh2 gt0 [9] applies
+  es9 cv0 [1] applies
+  fh2 main [1] nothing
 == euclid (the FH-2's rule)
 E(3,8) r0 x..x..x.
 E(5,8) r0 x.xx.xx.
