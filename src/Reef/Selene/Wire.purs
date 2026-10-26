@@ -68,6 +68,8 @@ familyOf = case _ of
   M.GVoice _ -> "polyvoice"
   -- the rig plays a throw itself, as a CC; no daemon has one
   M.GThrow _ -> "throw"
+  -- a steady voltage is played as a still POLYLFO: its level, no shape
+  M.GVolt _ -> "polylfo"
 
 -- | The name a bank's claim is held under in its daemon: one per (socket,
 -- | bank), whatever is on it, so a re-push replaces the claim and an `off`
@@ -136,6 +138,11 @@ destinationEnvelope d0 = do
       M.GClock slots ->
         Just $ writeJSON { bank, family, alias, offset, outputRange: range, slots: map clockWire slots }
       M.GThrow _ -> Nothing
+      -- each voltage as a still LFO's level on the bank's range, which is
+      -- always sent: a level means a voltage only on a known range
+      M.GVolt slots ->
+        let r = M.voltRange d
+        in Just $ writeJSON { bank, family, alias, offset, outputRange: Just (M.rangeToWire r), slots: map (voltWire r) slots }
   json' <- json
   pure { socket: sb.socket, bank: placeOn sb d.jacks, json: json' }
   where
@@ -149,6 +156,10 @@ destinationEnvelope d0 = do
     , depth: v.env.depth, velDepth: v.env.velDepth, timeRange: v.env.timeRange
     , randomDepth: v.env.randomDepth
     , attackShape: v.env.attackShape, decayShape: v.env.decayShape, releaseShape: v.env.releaseShape
+    }
+  voltWire r s =
+    { rate: 0.0, phase: 0.0, level: M.voltsLevel r s.volts
+    , sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0
     }
   lfoWire s =
     { rate: s.rate, phase: s.phase, level: s.level

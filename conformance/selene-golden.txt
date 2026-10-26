@@ -105,7 +105,7 @@ rack round-trip true
 > lfo fh2cv0 # rate 2
   lfo fh2cv0 # rate 2 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # tri 1 # retrig "1 ~ [3 5] ~"
 == refusals
-squiggle es9main # rate 1 | refused: not a kind of polysignal or a recipe: squiggle (lfo, euclid, clock, note, env, voices; or a recipe: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, pitches, pitch-env, full-voice, chord)
+squiggle es9main # rate 1 | refused: not a kind of polysignal or a recipe: squiggle (lfo, lfot, euclid, clock, note, volt, env, voices, throw; or a recipe: ochd, quadrature, drift, divider, toussaint, polymeter, scatter, pitches, pitch-env, full-voice, chord)
 lfot fh2cv3 # ratio ×5 | refused: ratio wants ÷n (a cycle every n beats), ×n (n a beat) or ×p/q, whole 24ppqn ticks; not ×5
 lfot fh2cv3 # hits 3 | refused: lfot has no hits (it has ratio phase level sin sqr tri saw rnd nse)
 lfo es9main # hits 3 | refused: lfo has no hits (it has rate phase level sin sqr tri saw rnd nse)
@@ -428,6 +428,80 @@ throw midi4 # d 1.5s # lo 10 # hi 90 |  | throw midi4 # a "0 8bar 0 8bar 0 8bar 
     0 @0   -- 6
     0 @0   -- 7
     0 @0   -- 8
+== POLYVOLT: steady voltages, in volts
+volt es98cv0 # volts "1V 2.5 -3V" | cv0 | volt es98cv0 # volts "1V 2.5V -3V 1V 2.5V -3V 1V 2.5V"
+  sent polylfo as selene:es9:cv0
+volt es98cv0 # range unipolar10v | refused: es98cv0 is ±5V only (the ESX-8CV has one range)
+volt es98cv0 # range bipolar5v | cv0 | volt es98cv0 # volts "1V 2.5V -3V 1V 2.5V -3V 1V 2.5V" # range bipolar5v
+  sent polylfo as selene:es9:cv0
+volt fh2cv0 # volts "7V -2V 0 10.5V" # range unipolar10v | cv0 | volt fh2cv0 # volts "7V -2V 0V 10.5V 7V -2V 0V 10.5V" # range unipolar10v
+  sent polylfo as selene:fh2:cv0
+volt fh2cv0 # range bipolar5v | cv0 | volt fh2cv0 # volts "7V -2V 0V 10.5V 7V -2V 0V 10.5V" # range bipolar5v
+  sent polylfo as selene:fh2:cv0
+volt fh2cv0 # range sideways | refused: range is bipolar5v, unipolar5v, unipolar10v, unipolar8v, unipolar1v or default, not sideways
+volt es98cv0 # volts loud | refused: volts wants a voltage, as 2.5V or -3V, not loud
+volt midi1 | refused: midi1: a MIDI row takes LFOs and throws (sent as CCs) and notes, not POLYVOLT
+volt es9gt0 | gt0 | volt es9gt0 # volts 0V
+  sent polylfo as selene:es9:gt0
+volt es9main:1-2 # volts "-5V 5V" # range default | main:1-2 | volt es9main:1-2 # volts "-5V 5V"
+  sent polylfo as selene:es9:main:1-2
+convert fh2cv0 lfo | cv0 | lfo fh2cv0 # rate 0.5 # phase "0 0.125 0.25 0.375 0.5 0.625 0.75 0.875" # level "1 -0.4 0 1 1 -0.4 0 1" # sin 0 # range bipolar5v
+  sent polylfo as selene:fh2:cv0
+convert fh2cv0 lfo | refused: convert turns volts into LFOs, and fh2cv0 holds lfo
+convert es98cv0 lfot | cv0 | lfot es98cv0 # ratio "×1 ÷2 ÷4 ÷8 ÷16 ÷32 ÷64 ÷128" # phase 0 # level "0.2 0.5 -0.6 0.2 0.5 -0.6 0.2 0.5" # sin 0 # range bipolar5v
+  sent polylfot as selene:es9:cv0
+convert es9main:1-2 note | refused: convert makes lfo or lfot, not note
+convert es9main:5-8 lfo | refused: es9main:5-8 has nothing on it to convert
+  lfot es98cv0 bipolar5v
+    ×1 @0 lvl 0.2   -- 1
+    ÷2 @0 lvl 0.5   -- 2
+    ÷4 @0 lvl -0.6   -- 3
+    ÷8 @0 lvl 0.2   -- 4
+    ÷16 @0 lvl 0.5   -- 5
+    ÷32 @0 lvl -0.6   -- 6
+    ÷64 @0 lvl 0.2   -- 7
+    ÷128 @0 lvl 0.5   -- 8
+  lfo fh2cv0 bipolar5v
+    0.5 @0 lvl 1   -- 1
+    0.5 @0.125 lvl -0.4   -- 2
+    0.5 @0.25   -- 3
+    0.5 @0.375 lvl 1   -- 4
+    0.5 @0.5 lvl 1   -- 5
+    0.5 @0.625 lvl -0.4   -- 6
+    0.5 @0.75   -- 7
+    0.5 @0.875 lvl 1   -- 8
+  volt es9gt0
+    0V   -- 1
+    0V   -- 2
+    0V   -- 3
+    0V   -- 4
+    0V   -- 5
+    0V   -- 6
+    0V   -- 7
+    0V   -- 8
+  volt es9main:1-2
+    -5V   -- 1
+    5V   -- 2
+  round-trips true
+  levels (! clipped):
+  bipolar5v: -1! -1 -0.5 0 0.1 0.2 0.5 1 1! 1! 1!
+  unipolar10v: -1! -1! -1! -1 -0.9 -0.8 -0.5 0 0.6 1 1!
+  unipolar5v: -1! -1! -1! -1 -0.8 -0.6 0 1 1! 1! 1!
+  unipolar8v: -1! -1! -1! -1 -0.875 -0.75 -0.375 0.25 1 1! 1!
+  unipolar1v: -1! -1! -1! -1 0 1 1! 1! 1! 1! 1!
+  words: 2.5V 2.5V 2.5V 0V (1e1V) (V) (two) (1-2V) (1.2.3) (-) 0.5V 5V -0.5V (--1) (.)
+  -- SELENE · edit the numbers; the rack follows.
+  -- <kind> <target> [range] opens a group of 8 · <target>:5-8 takes jacks 5-8 · one slot per line · -- mutes a slot.
+  -- range is optional (unipolar5v / unipolar8v / bipolar5v …); omitted = the rig's default for that kind.
+  volt es9main unipolar5v
+    1V   -- 1
+    -- -2.5V   -- 2
+    -3V   -- 3
+    0V   -- 4
+    4.25V   -- 5
+    0V   -- 6
+    0V   -- 7
+    0V   -- 8
 == euclid (the FH-2's rule)
 E(3,8) r0 x..x..x.
 E(5,8) r0 x.xx.xx.

@@ -88,6 +88,15 @@ module Reef.Selene.Model
   , ClockSlot
   , EuclidSlot
   , PresetNoteSlot
+  , VoltSlot
+  , voltRange
+  , fixedRange
+  , rangeVolts
+  , voltsLevel
+  , voltClipped
+  , voltWord
+  , voltOf
+  , voltToLfo
   , EnvSlot
   , defaultEnvSlot
   , slotCount
@@ -139,7 +148,7 @@ import Data.Int as Int
 import Data.Number as Number
 import Reef.Conspicillum.Decimal (trimmed)
 import Data.String.CodeUnits as CU
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.String as Str
 import Data.Tuple (Tuple(..))
 import Reef.Bits (xorshift32)
@@ -159,12 +168,16 @@ import Reef.Numeric (ln, sin) as N
 -- |
 -- | `KThrow` is a MIDI row's alone: a one-shot the rig plays as a CC when it is
 -- | fired (a dub throw, a riser; docs/kb/plans/selene-midi-signals.md).
-data GenKind = KLfo | KLfoT | KEuclid | KClock | KNote | KEnv | KVoice | KThrow
+-- |
+-- | `KVolt` is a steady voltage a slot, set in volts: POLYNOTE's sibling, for a
+-- | CV dialled in by hand, which can become a POLYLFO's starting point
+-- | (`voltToLfo`; docs/kb/plans/selene-polyvolt.md).
+data GenKind = KLfo | KLfoT | KEuclid | KClock | KNote | KEnv | KVoice | KThrow | KVolt
 
 derive instance Eq GenKind
 
 allKinds :: Array GenKind
-allKinds = [ KLfo, KLfoT, KEuclid, KClock, KNote, KEnv, KVoice, KThrow ]
+allKinds = [ KLfo, KLfoT, KEuclid, KClock, KNote, KEnv, KVoice, KThrow, KVolt ]
 
 kindLabel :: GenKind -> String
 kindLabel = case _ of
@@ -176,6 +189,7 @@ kindLabel = case _ of
   KEnv -> "POLYENV"
   KVoice -> "POLYVOICE"
   KThrow -> "THROW"
+  KVolt -> "POLYVOLT"
 
 -- | An eight-slot bank, typed by its generator. The kind is implied by the
 -- | constructor (mirrors `Tidal.Selene`'s `Selene s` sum).
@@ -194,6 +208,8 @@ data GenBank
   | GVoice VoiceBank
   -- | one-shots on a MIDI row, each played as a CC when fired
   | GThrow (Array ThrowSlot)
+  -- | a steady voltage a slot, in volts
+  | GVolt (Array VoltSlot)
 
 bankKind :: GenBank -> GenKind
 bankKind = case _ of
@@ -205,6 +221,7 @@ bankKind = case _ of
   GNote _ -> KNote
   GEnv _ -> KEnv
   GThrow _ -> KThrow
+  GVolt _ -> KVolt
 
 -- | The eight slots of an octo bank.
 slotCount :: Int
@@ -611,6 +628,7 @@ defaultTargetFor = case _ of
   -- MIDI voices: the FH-2 is where the converters are
   KVoice -> FH2 0
   KThrow -> Midi 1
+  KVolt -> ES9Cv 0
 
 -- ---------------------------------------------------------------------------
 -- Output range + clock bases
@@ -1154,6 +1172,8 @@ freshBank = case _ of
   KVoice -> GVoice { outputs: [], gates: Nothing, voices: map (\k -> { channel: voiceChannel slotCount k, env: envSlot 4 }) ixs }
   -- eight throws, the first a dub throw, the second an eight-bar riser
   KThrow -> GThrow (map throwSlot ixs)
+  -- eight outputs at 0 V, to be dialled in
+  KVolt -> GVolt (map (const { volts: 0.0 }) ixs)
   where
   ixs = range 0 (slotCount - 1)
   throwSlot = case _ of
@@ -1283,6 +1303,7 @@ takeSlots n = case _ of
   GNote xs -> GNote (Array.take n xs)
   GEnv xs -> GEnv (Array.take n xs)
   GThrow xs -> GThrow (Array.take n xs)
+  GVolt xs -> GVolt (Array.take n xs)
   -- `n` jacks hold n / stride whole voices, and that many gates
   GVoice vb ->
     let m = n / voiceStride vb
@@ -1298,6 +1319,7 @@ bankSize = case _ of
   GNote xs -> length xs
   GEnv xs -> length xs
   GThrow xs -> length xs
+  GVolt xs -> length xs
   GVoice vb -> length vb.voices
 
 -- | How many jacks a bank drives: a slot each, or a voice's stride each.
@@ -1317,6 +1339,7 @@ widenBank j bank = case freshBank (bankKind bank), bank of
   GNote f, GNote xs -> GNote (spread f xs)
   GEnv f, GEnv xs -> GEnv (spread f xs)
   GThrow f, GThrow xs -> GThrow (spread f xs)
+  GVolt f, GVolt xs -> GVolt (spread f xs)
   -- a layout grows by whole voices, before and after its run
   _, GVoice vb ->
     let
@@ -1436,3 +1459,91 @@ ccIn o v =
 
 clampNum :: Number -> Number -> Number -> Number
 clampNum lo hi v = if v < lo then lo else if v > hi then hi else v
+
+-- ---------------------------------------------------------------------------
+-- POLYVOLT: a steady voltage a slot (docs/kb/plans/selene-polyvolt.md)
+-- ---------------------------------------------------------------------------
+
+-- | A POLYVOLT slot: the voltage its jack holds. It is kept as asked even
+-- | when the bank's range cannot reach it (AC, 2026-10-26: a range change
+-- | leaves the volts where they are), and then plays at the range's end and
+-- | says so (`voltClipped`).
+type VoltSlot = { volts :: Number }
+
+-- | The range a bank's target holds it to, when the target has only one: the
+-- | ESX-8CV's encoder is ±5 V whatever is asked (es9-daemon installs its
+-- | generators with an identity scale), so a range there would be a word with
+-- | nothing behind it.
+fixedRange :: Target -> Maybe OutputRange
+fixedRange = case _ of
+  ES9Cv _ -> Just Bipolar5V
+  _ -> Nothing
+
+-- | The range a destination's voltages are played on: its target's own, or
+-- | the one pinned, or ±5 V (both daemons' default for an LFO, which is how a
+-- | POLYVOLT is played).
+voltRange :: Destination -> OutputRange
+voltRange d = fromMaybe (fromMaybe Bipolar5V d.range) (fixedRange d.target)
+
+-- | The lowest and highest voltage of a range.
+rangeVolts :: OutputRange -> { lo :: Number, hi :: Number }
+rangeVolts = case _ of
+  Bipolar5V -> { lo: -5.0, hi: 5.0 }
+  Unipolar10V -> { lo: 0.0, hi: 10.0 }
+  Unipolar5V -> { lo: 0.0, hi: 5.0 }
+  Unipolar8V -> { lo: 0.0, hi: 8.0 }
+  Unipolar1V -> { lo: 0.0, hi: 1.0 }
+
+-- | A voltage as an LFO's level on a range: its position there, -1 at the
+-- | bottom to 1 at the top (both daemons: out = level × scale + offset), held
+-- | to the range.
+voltsLevel :: OutputRange -> Number -> Number
+voltsLevel r v =
+  let span = rangeVolts r
+  in clampNum (-1.0) 1.0 (2.0 * (v - span.lo) / (span.hi - span.lo) - 1.0)
+
+-- | Whether a voltage is outside a range, so plays at its end instead.
+voltClipped :: OutputRange -> Number -> Boolean
+voltClipped r v = let span = rangeVolts r in v < span.lo || v > span.hi
+
+-- | A voltage as the rack and a line write it: `2.5V`, `-3V`, `0V`.
+voltWord :: Number -> String
+voltWord v = trimmed 3 v <> "V"
+
+-- | A voltage read from `2.5V`, `2.5v` or `2.5`: a plain decimal only, since
+-- | the two runtimes read `1e1` differently (10 in JS, 1 on the BEAM; caught
+-- | by conformance).
+voltOf :: String -> Maybe Number
+voltOf w =
+  let
+    n = fromMaybe w (Str.stripSuffix (Str.Pattern "V") w <|> Str.stripSuffix (Str.Pattern "v") w)
+    neg = Str.stripPrefix (Str.Pattern "-") n
+    body = fromMaybe n neg
+    digits x = Array.all (\c -> c >= '0' && c <= '9') (CU.toCharArray x)
+    -- written out whole (`0.5`, never `.5` or `5.`) before it is read, so
+    -- both runtimes read the same text
+    whole i f = (if isJust neg then "-" else "") <> (if i == "" then "0" else i) <> "." <> (if f == "" then "0" else f)
+  in case Str.split (Str.Pattern ".") body of
+    [ i ] | i /= "" && digits i -> Number.fromString (whole i "")
+    [ i, f ] | i <> f /= "" && digits i && digits f -> Number.fromString (whole i f)
+    _ -> Nothing
+
+-- | A POLYVOLT bank as an LFO bank (`KLfo` or `KLfoT`) that starts where it
+-- | is: each slot a still LFO whose level is its voltage, every shape at 0,
+-- | so nothing moves until a shape is turned up (AC, 2026-10-26: dial the CV
+-- | in, then modulate it). The range the volts were played on is pinned,
+-- | since an LFO's level means a voltage only on its range. Anything else is
+-- | left as it is.
+voltToLfo :: GenKind -> Destination -> Destination
+voltToLfo kind d = case d.bank of
+  GVolt slots ->
+    let
+      r = voltRange d
+      still fresh v = fresh { level = voltsLevel r v.volts, sin = 0.0, sqr = 0.0, tri = 0.0, saw = 0.0, rnd = 0.0, nse = 0.0 }
+      pinned = if isJust (fixedRange d.target) then d.range else Just r
+      over fresh = Array.zipWith still fresh slots
+    in case kind, freshBank kind of
+      KLfo, GLfo f -> d { bank = GLfo (over f), range = pinned }
+      KLfoT, GLfoT f -> d { bank = GLfoT (over f), range = pinned }
+      _, _ -> d
+  _ -> d

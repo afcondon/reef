@@ -117,7 +117,7 @@ import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
 import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Euclid as Euclid
-import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiMap, midiUnmap, midiBindings, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..)) as SM
+import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiMap, midiUnmap, midiBindings, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..), OutputRange(..), rangeToWire, voltsLevel, voltClipped, voltWord, voltOf) as SM
 import Reef.Selene.Wire (destinationEnvelope) as SW
 import Reef.Selene.Rack (bankOf, parseRack, printRack, silenced, slotsSilenced) as SR
 import Reef.Selene.Line (applyLine, banksOf, parseLine, printLine, retrigsOf, rigLine) as SL
@@ -2369,6 +2369,29 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
             <> [ "  bindings: " <> bindings done.sel ]
             <> [ "  by hand: " <> bindings (SR.parseRack byHand) ]
             <> map ("  " <> _) (filter (_ /= "") (String.split (String.Pattern "\n") (SR.printRack (SR.parseRack byHand))))
+      -- POLYVOLT: steady voltages in volts, a range that is pinned, or the
+      -- ESX-8CV's one; volts kept through a range change and played at its
+      -- end; and a bank turned into still LFOs at its voltages
+      -- (docs/kb/plans/selene-polyvolt.md)
+      volts =
+        let
+          lined = foldl step { rack: "", out: [] }
+            [ "volt es98cv0 # volts \"1V 2.5 -3V\"", "volt es98cv0 # range unipolar10v", "volt es98cv0 # range bipolar5v"
+            , "volt fh2cv0 # volts \"7V -2V 0 10.5V\" # range unipolar10v", "volt fh2cv0 # range bipolar5v", "volt fh2cv0 # range sideways"
+            , "volt es98cv0 # volts loud", "volt midi1", "volt es9gt0", "volt es9main:1-2 # volts \"-5V 5V\" # range default"
+            , "convert fh2cv0 lfo", "convert fh2cv0 lfo", "convert es98cv0 lfot", "convert es9main:1-2 note", "convert es9main:5-8 lfo" ]
+          levels = do
+            r <- [ SM.Bipolar5V, SM.Unipolar10V, SM.Unipolar5V, SM.Unipolar8V, SM.Unipolar1V ]
+            pure ("  " <> SM.rangeToWire r <> ": " <> String.joinWith " " (map (\v -> Decimal.trimmed 3 (SM.voltsLevel r v) <> (if SM.voltClipped r v then "!" else "")) [ -6.0, -5.0, -2.5, 0.0, 0.5, 1.0, 2.5, 5.0, 8.0, 10.0, 12.0 ]))
+          byHand = "volt es9main unipolar5v\n  1V\n  -- -2.5V\n  -3v   -- 3\n  x\n  4.25V"
+          words' = map (\v -> maybe ("(" <> v <> ")") SM.voltWord (SM.voltOf v)) [ "2.5V", "2.5v", "2.5", "-0V", "1e1V", "V", "two", "1-2V", "1.2.3", "-", ".5V", "5.V", "-.5", "--1", "." ]
+        in
+          [ "== POLYVOLT: steady voltages, in volts" ] <> lined.out
+            <> map ("  " <> _) (filter (\l -> l /= "" && String.take 2 l /= "--") (String.split (String.Pattern "\n") lined.rack))
+            <> [ "  round-trips " <> show (SR.printRack (SR.parseRack lined.rack) == lined.rack) ]
+            <> [ "  levels (! clipped):" ] <> levels
+            <> [ "  words: " <> String.joinWith " " words' ]
+            <> map ("  " <> _) (filter (_ /= "") (String.split (String.Pattern "\n") (SR.printRack (SR.parseRack byHand))))
       -- 2026-10-22 on the rig: an empty Euclid over the whole GT made the
       -- voices' gates unplaceable while `off` said the voices' jacks were free
       held = foldl step { rack: "", out: [] }
@@ -2394,6 +2417,7 @@ seleneRun = intercalate "\n" (rack0 <> roundTrip <> lines <> refusals <> offs <>
         <> lfoSamples
         <> throwSamples
         <> mapped
+        <> volts
   -- each daemon command a line sends: a voice layout by its fields, any
   -- other apply by its family and owner, a release as it is
   commandsOf c = if c == "" then [ "(nothing)" ] else map one (String.split (String.Pattern "\n") c)

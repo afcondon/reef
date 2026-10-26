@@ -76,7 +76,7 @@ parseLine src = do
   case words h of
     [ k, t ] -> do
       let named = Recipe.recipeNamed k
-      kind <- note ("not a kind of polysignal or a recipe: " <> k <> " (lfo, euclid, clock, note, env, voices; or a recipe: " <> joinWith ", " (map _.name Recipe.recipes) <> ")")
+      kind <- note ("not a kind of polysignal or a recipe: " <> k <> " (lfo, lfot, euclid, clock, note, volt, env, voices, throw; or a recipe: " <> joinWith ", " (map _.name Recipe.recipes) <> ")")
         (case named of
           Just b -> Just b.kind
           Nothing -> Rack.kindOf k)
@@ -135,10 +135,13 @@ applyLine line sel = do
         M.Midi _ -> true
         _ -> false
       midiTerm k = if midiRow then Array.last (filter (\t -> t.param == k) line.terms) else Nothing
-      named = filter (\t -> not (Array.elem t.param ([ "fresh", "retrig", "outputs", "gates" ] <> if midiRow then [ "ch", "cc", "lo", "hi" ] else []))) line.terms
+      named = filter (\t -> not (Array.elem t.param ([ "fresh", "retrig", "outputs", "gates", "range" ] <> if midiRow then [ "ch", "cc", "lo", "hi" ] else []))) line.terms
       -- `# retrig "<pattern>"` sets the bank's reset pattern, `# retrig off`
       -- clears it; the last one named wins
       retrigSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "retrig") line.terms))
+      -- `# range unipolar10v` pins the bank's output range, `# range default`
+      -- unpins it; unnamed, the range is kept
+      rangeSet = map (\t -> joinWith " " t.values) (Array.last (filter (\t -> t.param == "range") line.terms))
   { start, terms } <- case line.recipe >>= Recipe.recipeNamed of
     Just b -> (\x -> { start: M.takeSlots line.jacks.count x.bank, terms: x.rest }) <$> Recipe.expand b named
     Nothing -> pure { start: if fresh then M.freshBankOn line.jacks kindOfLine else current, terms: named }
@@ -156,6 +159,15 @@ applyLine line sel = do
     Nothing -> Right case existing >>= (sel.destinations !! _) of
       Just d | M.bankKind d.bank == kindOfLine && not fresh -> d.retrig
       _ -> Nothing
+  rangeNamed <- case rangeSet of
+    Nothing -> Right Nothing
+    Just w | isMidiTarget line.target -> Left ("a MIDI row has no output range, so no range " <> w)
+    Just w | w == "default" || w == "-" -> Right (Just Nothing)
+    Just w -> case M.rangeOfWire w of
+      Nothing -> Left ("range is bipolar5v, unipolar5v, unipolar10v, unipolar8v, unipolar1v or default, not " <> w)
+      Just r -> case M.fixedRange line.target of
+        Just fixed | fixed /= r -> Left (M.targetWire line.target <> " is " <> M.rangeLabel fixed <> " only (the ESX-8CV has one range)")
+        _ -> Right (Just (Just r))
   -- a mute is about the jacks, not the bank, so every line keeps it, and
   -- keeps each muted output too
   let was = existing >>= (sel.destinations !! _)
@@ -180,8 +192,9 @@ applyLine line sel = do
         else []
       dest = { target: line.target, jacks: line.jacks, range: Nothing, bank, retrig, muted, mutedSlots, midi }
       next = case existing of
-        Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (keepRange i dest) sel.destinations) }
-        Nothing -> sel { destinations = snoc sel.destinations dest }
+        Just i -> sel { destinations = fromMaybe sel.destinations (updateAt i (withRange (keepRange i dest)) sel.destinations) }
+        Nothing -> sel { destinations = snoc sel.destinations (withRange dest) }
+      withRange d = maybe d (\r -> d { range = r }) rangeNamed
   case M.midiClash next of
     Just why | midiRow -> Left why
     _ -> pure next
@@ -257,6 +270,9 @@ applyTerm bank t = case bank of
       | p == "on" -> note ("on is now, beat or bar, not " <> v) (M.startOf v)
           <#> \o -> sl { start = o }
     _ -> unknown "throw" "a h d on"
+  M.GVolt slots -> M.GVolt <$> each slots \sl v -> case t.param of
+    p | p == "volts" || p == "v" -> (\x -> sl { volts = x }) <$> note (t.param <> " wants a voltage, as 2.5V or -3V, not " <> v) (M.voltOf v)
+    _ -> unknown "volt" "volts (and range)"
   where
   -- an LFO slot's phase, level and shape: what POLYLFO and POLYLFOT share
   shaped :: String -> String -> M.ModSlot -> String -> Either String M.ModSlot
@@ -290,6 +306,7 @@ paramsOf = case _ of
   M.KEnv -> [ "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
   M.KVoice -> [ "ch", "a", "d", "s", "r", "depth", "vel", "time", "rnd", "ashape", "dshape", "rshape" ]
   M.KThrow -> [ "a", "h", "d", "on" ]
+  M.KVolt -> [ "volts" ]
 
 -- | A voice layout's outputs and gates for a line: set from its terms, the
 -- | voices sized to the run (as many whole voices as fit), and the gates on
@@ -384,7 +401,7 @@ gateBankFor = case _ of
 -- | whole of it.
 printLine :: M.Destination -> String
 printLine d =
-  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks ] <> terms <> midiTerms <> retrigTerm)
+  joinWith " # " ([ Rack.kindKeyword d.bank <> " " <> M.placeWire d.target d.jacks ] <> terms <> rangeTerm <> midiTerms <> retrigTerm)
   where
   -- a MIDI row's channel and CC per signal, always said (Rack's rule)
   midiTerms = case M.midiOutsOf d of
@@ -411,6 +428,9 @@ printLine d =
     let vs = valuesOf p d.bank
     in if vs == valuesOf p fresh && not (Array.elem p (mainOf (M.bankKind d.bank))) then Nothing else Just (p <> " " <> value vs)
   retrigTerm = maybe [] (\p -> [ "retrig \"" <> p <> "\"" ]) d.retrig
+  -- said when pinned: a POLYVOLT's volts, or an LFO's level, mean what they
+  -- do on it
+  rangeTerm = maybe [] (\r -> [ "range " <> M.rangeToWire r ]) d.range
   value vs = case head vs of
     Just v | all (_ == v) vs -> v
     _ -> "\"" <> joinWith " " vs <> "\""
@@ -426,6 +446,7 @@ mainOf = case _ of
   M.KEnv -> [ "a", "d", "s", "r" ]
   M.KVoice -> [ "ch" ]
   M.KThrow -> [ "a", "h", "d" ]
+  M.KVolt -> [ "volts" ]
 
 valuesOf :: String -> M.GenBank -> Array String
 valuesOf p = case _ of
@@ -475,6 +496,7 @@ valuesOf p = case _ of
     "h" -> M.lengthWord sl.hold
     "d" -> M.lengthWord sl.decay
     _ -> M.startWord sl.start) s
+  M.GVolt s -> map (M.voltWord <<< _.volts) s
 
 words :: String -> Array String
 words = filter (_ /= "") <<< Str.split (Str.Pattern " ") <<< trim
@@ -623,6 +645,31 @@ rigCommand src rack = case words src of
       , json: maybe "" _.json sent
       , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
       , note: if muted then "" else rateNote dest'
+      , also: []
+      }
+  -- `convert <bank> lfo` (or `lfot`): a POLYVOLT bank becomes LFOs that
+  -- start where its voltages are, every shape at 0, so it is modulated from
+  -- the CV dialled in (AC, 2026-10-26). The jacks do not move.
+  [ "convert", t, k ] -> do
+    place <- Rack.placeOf t
+    kind <- case Rack.kindOf k of
+      Just kd | kd == M.KLfo || kd == M.KLfoT -> Right kd
+      _ -> Left ("convert makes lfo or lfot, not " <> k)
+    let sel = Rack.parseRack rack
+    i <- note (t <> " has nothing on it to convert") (findIndex (M.samePlace place) sel.destinations)
+    d <- note (t <> " went missing") (sel.destinations !! i)
+    unless (M.bankKind d.bank == M.KVolt) $ Left ("convert turns volts into LFOs, and " <> t <> " holds " <> Rack.kindKeyword d.bank)
+    let
+      d' = M.voltToLfo kind d
+      sent = Wire.destinationEnvelope d'
+    pure
+      { rack: Rack.printRack (sel { destinations = fromMaybe sel.destinations (updateAt i d' sel.destinations) })
+      , line: printLine d'
+      , socket: maybe "" _.socket sent
+      , bank: maybe "" _.bank sent
+      , json: maybe "" _.json sent
+      , command: maybe "" (\w -> "apply-polysignal " <> w.json) sent
+      , note: ""
       , also: []
       }
   _ -> rigLine' src rack

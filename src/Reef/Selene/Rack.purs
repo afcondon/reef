@@ -24,6 +24,7 @@
 -- |   euclid  <beats> <steps> [@<rate>] [acc <n>]
 -- |   clock   <base> x<mult> [<pw>%] [ph<deg>]      (base = 1/4, 1/8T, …)
 -- |   note    <name-or-midi>                        (C4 or 60)
+-- |   volt    <volts>V                              (2.5V, -3V)
 -- |
 -- | `parseRack` is total + lenient: bad fields fall back to defaults and short
 -- | blocks pad to eight with silent slots, so the live viz never blanks while
@@ -117,6 +118,7 @@ printDest d =
     M.GEnv slots -> map envLine slots
     M.GVoice vb -> map (voiceLine vb) vb.voices
     M.GThrow slots -> map throwLine slots
+    M.GVolt slots -> map (M.voltWord <<< _.volts) slots
 
 kindKeyword :: M.GenBank -> String
 kindKeyword = case _ of
@@ -128,6 +130,7 @@ kindKeyword = case _ of
   M.GEnv _ -> "env"
   M.GVoice _ -> "voices"
   M.GThrow _ -> "throw"
+  M.GVolt _ -> "volt"
 
 -- ADSR always; the rest only when moved off its default, so a plain envelope
 -- reads as four numbers and a shaped one shows exactly what was changed.
@@ -300,8 +303,12 @@ slotText t = case Str.stripPrefix (Str.Pattern "--") t of
   -- tempo LFO's `÷` or `×`, or an envelope's or a throw's `a`); anything else
   -- after `--` is a note, not settings
   -- (`÷` and `×` by prefix: charAt gives a code unit in JS, a byte on the BEAM)
-  startsSlot b = isJust (Str.stripPrefix (Str.Pattern "÷") b) || isJust (Str.stripPrefix (Str.Pattern "×") b) || case Str.charAt 0 b of
+  startsSlot b = isJust (Str.stripPrefix (Str.Pattern "÷") b) || isJust (Str.stripPrefix (Str.Pattern "×") b) || negative b || case Str.charAt 0 b of
     Just c -> c >= '0' && c <= '9' || c >= 'A' && c <= 'G' || c == 'a'
+    Nothing -> false
+  -- a POLYVOLT's negative voltage, `-2.5V`
+  negative b = case Str.stripPrefix (Str.Pattern "-") b >>= Str.charAt 0 of
+    Just c -> c >= '0' && c <= '9'
     Nothing -> false
 
 stripTrailingComment :: String -> String
@@ -356,6 +363,7 @@ buildBank kind rows = case kind of
   M.KEnv -> M.GEnv (map (maybe silentEnv parseEnv) rows)
   M.KVoice -> buildVoices { outputs: [], gates: Nothing } rows
   M.KThrow -> M.GThrow (map (maybe M.defaultThrow parseThrow) rows)
+  M.KVolt -> M.GVolt (map (maybe silentVolt parseVolt) rows)
 
 -- ---------------------------------------------------------------------------
 -- Header
@@ -431,6 +439,7 @@ kindOf = case _ of
   "env" -> Just M.KEnv
   "voices" -> Just M.KVoice
   "throw" -> Just M.KThrow
+  "volt" -> Just M.KVolt
   _ -> Nothing
 
 parseTarget :: String -> M.Target
@@ -508,6 +517,7 @@ silence = case _ of
   M.GVoice vb -> M.GVoice vb
   -- a MIDI row sends nothing to a daemon: muted, it is left out of midiSends
   M.GThrow s -> M.GThrow s
+  M.GVolt s -> M.GVolt (map (const silentVolt) s)
 
 -- | A destination as it plays while muted: every slot silent, on a range that
 -- | puts silence at 0 V. A slot's level is a position in its range (both
@@ -528,6 +538,7 @@ silenced d = d { bank = silence d.bank, range = rangeFor d.bank }
     M.GNote _ -> d.range
     M.GVoice _ -> d.range
     M.GThrow _ -> d.range
+    M.GVolt _ -> Just M.Bipolar5V
 
 -- | A destination as it plays with its muted slots (`mutedSlots`) silent and
 -- | the rest as they are. An LFO slot's level is a position in its range, so on
@@ -554,9 +565,18 @@ slotsSilenced d
     M.GEnv s -> M.GEnv (over silentEnv s)
     M.GVoice vb -> M.GVoice vb
     M.GThrow s -> M.GThrow s
+    M.GVolt s -> M.GVolt (over silentVolt s)
 
 silentLfo :: M.ModSlot
 silentLfo = { rate: 0.0, phase: 0.0, level: 0.0, sin: 0.0, sqr: 0.0, tri: 0.0, saw: 0.0, rnd: 0.0, nse: 0.0, wave: M.WaveSin }
+
+-- | 0 V, which every range holds.
+silentVolt :: M.VoltSlot
+silentVolt = { volts: 0.0 }
+
+-- | `2.5V` (or a bare number); unreadable is 0 V.
+parseVolt :: String -> M.VoltSlot
+parseVolt s = { volts: fromMaybe 0.0 (words s !! 0 >>= M.voltOf) }
 
 silentEuclid :: M.EuclidSlot
 silentEuclid = { beats: 0, steps: 8, rotation: 0, rate: 4, accentRate: 0 }
