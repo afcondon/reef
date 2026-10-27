@@ -51,6 +51,10 @@ module Reef.Route
   , odonusInputs
   , printFeeds
   , parseFeeds
+  , Locks
+  , parseLocks
+  , printLocks
+  , followed
   ) where
 
 import Prelude
@@ -185,6 +189,36 @@ inputText = case _ of
   "odonus.grid" -> Right OdonusGrid
   "odonus.out" -> Right OdonusOut
   other -> Left ("no input '" <> other <> "' (odonus.grid, odonus.out)")
+
+-- | **Odonus's locks** (docs/kb/plans/routing-in-tidal.md, AC 2026-10-27: "a
+-- | concept of locking the in-app quantisation or yielding to takeover"): the
+-- | inputs that keep Odonus's own scale whatever is routed to them. A locked
+-- | input's route stays in the table (it is still sent, and drawn held off)
+-- | but is not followed. Odonus's own state, kept on the stage as
+-- | `odonus/locks`: the inputs' short names, `grid out`, `grid`, or nothing.
+type Locks = Array Input
+
+parseLocks :: String -> Either String Locks
+parseLocks t = map (Array.nubEq <<< sort') (traverse one (filter (_ /= "") (split (Pattern " ") (trim t))))
+  where
+  one = case _ of
+    "grid" -> Right OdonusGrid
+    "out" -> Right OdonusOut
+    "output" -> Right OdonusOut
+    other -> Left ("no input '" <> other <> "' to lock (grid, out)")
+  sort' = Array.sortWith (\i -> if i == OdonusGrid then 0 else 1)
+
+printLocks :: Locks -> String
+printLocks ls = joinWith " " (map short (Array.sortWith (\i -> if i == OdonusGrid then 0 else 1) (Array.nubEq ls)))
+  where
+  short = case _ of
+    OdonusGrid -> "grid"
+    OdonusOut -> "out"
+
+-- | The routes Odonus follows: the table less any route to a locked input,
+-- | which then takes Odonus's own scale, as an input with no route does.
+followed :: Locks -> Routes -> Routes
+followed locks = filter (\r -> not (Array.elem r.input locks))
 
 -- | Vetula's key: a root (pitch class) and the scale's steps above it.
 type Key = { root :: Int, offsets :: Array Int }
