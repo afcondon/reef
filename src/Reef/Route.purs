@@ -218,7 +218,7 @@ printLocks ls = joinWith " " (map short (Array.sortWith (\i -> if i == OdonusGri
 -- | The routes Odonus follows: the table less any route to a locked input,
 -- | which then takes Odonus's own scale, as an input with no route does.
 followed :: Locks -> Routes -> Routes
-followed locks = filter (\r -> not (Array.elem r.input locks))
+followed locks routes = filter (\r -> not (Array.elem r.input locks)) routes
 
 -- | Vetula's key: a root (pitch class) and the scale's steps above it.
 type Key = { root :: Int, offsets :: Array Int }
