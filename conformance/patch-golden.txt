@@ -6,6 +6,7 @@ odonusPatch "live"
   , scalarTransp: 0
   , gate: 90
   , quantize: harmony "<c'maj7 a'min7>/2"
+  , locks: "grid"
   , voices: "quartal melody lead 1 voice 2 voice 4"
   , swing: 12
   , velHumanize: 9
@@ -38,6 +39,8 @@ odonusPatch "live"
       , source vel rate 72 amt 30 off ]
   }
 patch round-trip true
+patch locks grid
+legacy locks []
 odonusNow
   { step: 1234
   , tempo: 178

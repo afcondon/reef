@@ -34,8 +34,8 @@ module Reef.Odonus.Patch
 
 import Prelude
 
-import Data.Array (concatMap, find, findIndex, length, mapWithIndex, range, snoc, uncons, unsnoc, (!!))
-import Data.Either (Either(..), hush)
+import Data.Array (concatMap, null, find, findIndex, length, mapWithIndex, range, snoc, uncons, unsnoc, (!!))
+import Data.Either (Either(..), either, hush)
 import Data.Foldable (foldl)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
@@ -48,6 +48,7 @@ import Reef.Odonus (Head, Odonus, defaultOdonus, patternLibrary, setHarmony, set
 import Reef.Scale (Distribution(..), normaliseIvls, rootName, rootNames, scaleTypes)
 import Reef.Vetula.Harmony (clockHarmony)
 import Reef.Odonus.Voices (parseVoices, printVoices)
+import Reef.Route.Locks (Locks, parseLocks, printLocks)
 
 -- | The whole authored setup: the model, plus the generators and feel that
 -- | live beside it on the page.
@@ -59,6 +60,10 @@ type OdonusPatch =
   , genBias :: Number
   , swing :: Number          -- 0..0.6 (fraction of a step the off-beats lag)
   , velHumanize :: Int
+  -- the inputs that keep this patch's own scale whatever is routed to them
+  -- (Odonus's padlocks); written only when there are some, so a patch from
+  -- before them reads as following its routes, as it did
+  , locks :: Locks
   }
 
 -- ---------------------------------------------------------------------------
@@ -86,10 +91,11 @@ printPatch p =
       , "  , scalarTransp: " <> show o.degShift
       , "  , gate: " <> show o.gatePct
       , "  , quantize: " <> maybe "scale" (\h -> "harmony " <> quote h) o.harmony
+      ] <> (if null p.locks then [] else [ "  , locks: " <> quote (printLocks p.locks) ])
       -- the heads, octave and degree patterns are the Tidal line's, not the
       -- patch's (Reef.Odonus.recallScene), so they are not written; older
       -- patches that have them read past them
-      ] <> maybe [] (\v -> [ "  , voices: " <> quote (printVoices v) ]) o.voices <>
+      <> maybe [] (\v -> [ "  , voices: " <> quote (printVoices v) ]) o.voices <>
       [ "  , swing: " <> pct p.swing
       , "  , velHumanize: " <> show p.velHumanize
       , "  , clock: " <> decimal (clockOf o)
@@ -406,6 +412,7 @@ patchP = do
   scalarT <- field "scalarTransp" intP
   gatePct <- field "gate" intP
   quant <- field "quantize" sourceP
+  locks <- fromMaybe [] <$> optionalP (field "locks" locksP)
   _ <- optionalP (field "heads" strP)
   _ <- optionalP (field "octaves" strP)
   _ <- optionalP (field "degrees" strP)
@@ -446,7 +453,7 @@ patchP = do
   pure
     { name, odo
     , gen, genSpread: Int.toNumber marbles.spread / 100.0, genBias: Int.toNumber marbles.bias / 100.0
-    , swing: Int.toNumber swing / 100.0, velHumanize: velH }
+    , swing: Int.toNumber swing / 100.0, velHumanize: velH, locks }
   where
   at :: forall a. Array a -> Int -> a -> a
   at arr i d = fromMaybe d (arr !! i)
@@ -462,6 +469,9 @@ scaleP = do
   named = word >>= \w -> case find (\t -> t.name == w) scaleTypes of
     Just t -> pure t.intervals
     Nothing -> failP ("no scale named " <> w)
+
+locksP :: P Locks
+locksP = strP >>= \t -> either failP pure (parseLocks t)
 
 rootP :: P Int
 rootP = word >>= \w -> maybe (failP ("no root " <> w)) pure (findIndex (_ == w) rootNames)

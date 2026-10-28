@@ -780,11 +780,14 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
     , heads = mapWithIndex (\i h -> h { offset = i, transp = 7 * i, mute = i == 3, restart = i == 2, pulses = 5, esteps = 8, rotation = i, spreadOct = i - 2, spreadDeg = i, invert = i == 1 }) defaultOdonus.heads }
   p0 =
     { name: "live", odo: setPat odo0 { clockIx = 5 }, gen: Patch.reconcileGen [], genSpread: 0.3, genBias: 0.7
-    , swing: 0.12, velHumanize: 9 }
+    , swing: 0.12, velHumanize: 9, locks: [ Route.OdonusGrid ] }
   setPat o = setHeadClock 1 1 (o { scalePattern = Just "<dorian lydian>/4", scaleHeld = Just o.scaleIvls })
   t1 = Patch.printPatch p0
   t2 = maybe "UNREAD" Patch.printPatch (Patch.parsePatch t1)
-  patchLines = [ t1, "patch round-trip " <> show (t1 == t2) ]
+  unlocked = String.replaceAll (String.Pattern "  , locks: \"grid\"\n") (String.Replacement "") t1
+  patchLines = [ t1, "patch round-trip " <> show (t1 == t2)
+               , "patch locks " <> maybe "UNREAD" (\p -> Route.printLocks p.locks) (Patch.parsePatch t1)
+               , "legacy locks [" <> maybe "UNREAD" (\p -> Route.printLocks p.locks) (Patch.parsePatch unlocked) <> "]" ]
   n0 =
     { step: 1234, tempo: 178, seed: 987654321.0, frozen: false
     , phases: map (\i -> { cursor: i, seqPos: i + 1, accumulator: i `mod` 8, pendStep: if i == 3 then -1 else 1, etick: 2 * i, hold: if i == 2 then 3 else 0 }) (range 0 3)

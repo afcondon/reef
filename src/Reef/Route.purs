@@ -29,7 +29,7 @@
 -- | `feedInputs` gives the inputs that move Odonus from one to the next, so a
 -- | card edited under a route re-feeds Odonus as a changed route does.
 module Reef.Route
-  ( Input(..)
+  ( module Reef.Route.Locks
   , Source(..)
   , Route
   , Routes
@@ -51,7 +51,6 @@ module Reef.Route
   , odonusInputs
   , printFeeds
   , parseFeeds
-  , Locks
   , parseLocks
   , printLocks
   , followed
@@ -69,13 +68,11 @@ import Data.String (Pattern(..), joinWith, lastIndexOf, indexOf, split, trim)
 import Data.String.CodeUnits as CU
 import Data.Traversable (traverse)
 import Reef.Input as I
+import Reef.Route.Locks (Input(..), Locks)
+import Reef.Route.Locks as L
 import Reef.Move (pitchClass)
 import Reef.PitchSet (PitchSet(..))
 import Reef.Vetula.VoiceName (voiceLetter, voiceOfName)
-
-data Input = OdonusGrid | OdonusOut
-
-derive instance Eq Input
 
 data Source
   = Scale { pattern :: String, root :: Int }
@@ -190,30 +187,14 @@ inputText = case _ of
   "odonus.out" -> Right OdonusOut
   other -> Left ("no input '" <> other <> "' (odonus.grid, odonus.out)")
 
--- | **Odonus's locks** (docs/kb/plans/routing-in-tidal.md, AC 2026-10-27: "a
--- | concept of locking the in-app quantisation or yielding to takeover"): the
--- | inputs that keep Odonus's own scale whatever is routed to them. A locked
--- | input's route stays in the table (it is still sent, and drawn held off)
--- | but is not followed. Odonus's own state, kept on the stage as
--- | `odonus/locks`: the inputs' short names, `grid out`, `grid`, or nothing.
-type Locks = Array Input
-
+-- | Odonus's locks (Reef.Route.Locks), defined here as well so the rig's
+-- | `reef_route@ps:parseLocks/1` and `printLocks/1` stay where they were.
+-- | (With their arguments written: point-free, purerl would make them /0.)
 parseLocks :: String -> Either String Locks
-parseLocks t = map (Array.nubEq <<< sort') (traverse one (filter (_ /= "") (split (Pattern " ") (trim t))))
-  where
-  one = case _ of
-    "grid" -> Right OdonusGrid
-    "out" -> Right OdonusOut
-    "output" -> Right OdonusOut
-    other -> Left ("no input '" <> other <> "' to lock (grid, out)")
-  sort' = Array.sortWith (\i -> if i == OdonusGrid then 0 else 1)
+parseLocks t = L.parseLocks t
 
 printLocks :: Locks -> String
-printLocks ls = joinWith " " (map short (Array.sortWith (\i -> if i == OdonusGrid then 0 else 1) (Array.nubEq ls)))
-  where
-  short = case _ of
-    OdonusGrid -> "grid"
-    OdonusOut -> "out"
+printLocks ls = L.printLocks ls
 
 -- | The routes Odonus follows: the table less any route to a locked input,
 -- | which then takes Odonus's own scale, as an input with no route does.
