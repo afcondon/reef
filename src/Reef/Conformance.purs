@@ -94,7 +94,7 @@ import Reef.Balistes.Lepidoptera (parsePattern, printPattern, rhythmSlug) as BL
 import Reef.Balistes.Pattern (toWire) as BP
 import Reef.Routing (DrumRouting, Send(..), VoiceRouting, decodeDrumRouting, decodeVoiceRouting, drumSends, encodeDrumRouting, encodeVoiceRouting) as RR
 import Reef.Articulation as Art
-import Reef.Odonus (floorDivI, Cell, Fired, Head, Odonus, defaultOdonus, renderHead, setHeadClock, setVoices, stepEmit)
+import Reef.Odonus (floorDivI, Cell, Fired, Head, Odonus, defaultOdonus, renderCell, renderHead, setHeadClock, setPitchSet, setVoices, stepEmit)
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
@@ -338,8 +338,20 @@ scaleRun =
 -- | SetSampled, across the wire), then its output too, then back to the scale.
 -- | The ninth (D) must only ever sound a ninth above a C.
 voicingRun :: String
-voicingRun = intercalate "\n" (sets <> snaps <> sim)
+voicingRun = intercalate "\n" (sets <> snaps <> spreads <> sim)
   where
+  -- a head's spread and the DEGREE shift on a wide chord keep their size in
+  -- Odonus's scale and land on the chord (AC, 2026-10-28): every cell, heads
+  -- spread 0 0, 0 2, 0 4, 0 6, 1 0, -1 3, with DEGREE 0 and 2
+  spreads = do
+    ns <- [ maj9, [ -19, 0, 5, 8 ] ]
+    deg <- [ 0, 2 ]
+    hd0 <- maybe [] pure (defaultOdonus.heads !! 0)
+    Tuple so sd <- [ Tuple 0 0, Tuple 0 2, Tuple 0 4, Tuple 0 6, Tuple 1 0, Tuple (-1) 3 ]
+    let o = (maybe defaultOdonus (\ps -> setPitchSet ps defaultOdonus) (PS.voicing ns)) { degShift = deg }
+        hd = hd0 { spreadOct = so, spreadDeg = sd }
+    pure ("spread " <> show ns <> " degree " <> show deg <> " head " <> show so <> " " <> show sd <> ": "
+      <> intercalate " " (map (show <<< renderCell o hd) defaultOdonus.cells))
   maj9 = [ 0, 4, 7, 11, 14 ]
   sets = map (\ns -> "voicing " <> show ns <> " -> " <> maybe "none" (\(PitchSet p) -> show p.offsets <> " root " <> show p.root <> " period " <> show p.period) (PS.voicing ns))
     [ [], [ 0, 4, 7 ], maj9, [ -12, -5, 4, 11, 14 ], [ 0, 4, 7, 12 ], [ 7, 0, 4, 0 ] ]

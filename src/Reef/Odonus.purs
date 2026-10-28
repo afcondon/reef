@@ -324,7 +324,7 @@ scaleTypeName o = recogniseScale o.scaleIvls
 renderCell :: Odonus -> Head -> Cell -> Int
 renderCell o hd c =
     let scaleSet = effectivePitchSet o
-        shift = o.degShift + hd.spreadOct * cardinality scaleSet + hd.spreadDeg
+        moves = { octaves: hd.spreadOct, steps: o.degShift + hd.spreadDeg }
         slots = PS.periodsIn scaleSet o.span * cardinality scaleSet
         index v = PS.equalIndex slots knobMax v
         -- inverted, the cell's degree is mirrored on the degree of the first
@@ -346,7 +346,7 @@ renderCell o hd c =
               in
                 2 * axis - index c.note + periods * card
           | otherwise = index c.note
-        home = PS.realize scaleSet (degree + shift)
+        home = homeAt o scaleSet degree moves
         target = home + hd.transp
         snapped =
           case o.chord of
@@ -357,6 +357,43 @@ renderCell o hd c =
               Just ps -> PS.nearestIn ps target
               Nothing -> quantiseToScale (scaleOf o) target
     in snapped + o.octaveShift * 12
+
+-- | A cell's home: degree `degree` of the grid's set, moved by a head's
+-- | SPREAD and the DEGREE shift: `octaves` octaves and `steps` scale degrees.
+-- |
+-- | In a set an octave wide or less (a scale, a close chord, Vetula's key) an
+-- | octave is the set's notes once round and a step is one of its notes, as
+-- | they always were. A chord voiced wider (`odonus.grid <- vetula R`, its
+-- | octaves kept) has few notes spread over octaves, so counting its notes
+-- | threw heads two to four octaves up: `spread 0 4` was four notes up
+-- | `f3 c5 f5 af5`, 36 semitones (AC, 2026-10-28: "the quantisation seemed to
+-- | push everything up at least an octave, maybe two"). There the moves keep
+-- | their size in Odonus's own scale (`spread 0 4`, about a fifth; `1 0`, an
+-- | octave) and land on the nearest note of the chord, so heads harmonise at
+-- | the intervals set, on chord tones.
+homeAt :: Odonus -> PitchSet -> Int -> { octaves :: Int, steps :: Int } -> Int
+homeAt o set@(PitchSet s) degree m
+  | maybe false (_ > 12) s.period =
+      let
+        own = PitchSet { offsets: o.scaleIvls, root: 48 + o.rootPc, period: Just 12 }
+        base = PS.realize set degree
+        k = nearestIndex own base
+      in
+        PS.nearestIn set (base + 12 * m.octaves + PS.realize own (k + m.steps) - PS.realize own k)
+  | otherwise = PS.realize set (degree + m.octaves * cardinality set + m.steps)
+
+-- | The index of the note of an octave-periodic set nearest to `note` (the
+-- | lower on a tie).
+nearestIndex :: PitchSet -> Int -> Int
+nearestIndex set@(PitchSet s) note =
+  let
+    n = max 1 (cardinality set)
+    k = floorDivI (note - s.root) 12 * n
+    better i j = if absI (PS.realize set i - note) <= absI (PS.realize set j - note) then i else j
+  in
+    foldl (\best i -> better best i) (k - n) (range (k - n + 1) (k + 2 * n - 1))
+  where
+  absI x = if x < 0 then negate x else x
 
 -- | The note an inverted head mirrors its melody on: the first cell of its loop
 -- | (its pattern's order from its offset).
@@ -505,7 +542,7 @@ cellLabel :: Odonus -> Int -> Int
 cellLabel o knob =
   let
     ps = effectivePitchSet o
-    h = PS.realizeEqualShift ps (PS.periodsIn ps o.span) knobMax o.degShift (clampI 0 knobMax knob)
+    h = homeAt o ps (PS.equalIndex (PS.periodsIn ps o.span * cardinality ps) knobMax (clampI 0 knobMax knob)) { octaves: 0, steps: o.degShift }
     coloured = maybe h (\notes -> PS.quantiseToVoicing notes h) o.chord
   in coloured + o.octaveShift * 12
 
