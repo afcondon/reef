@@ -207,7 +207,7 @@ it (`tune root`, `tune bass`, `tune tones`). Named for what the chord-hit corpor
 **Single hit** — one sample, fixed read head — the Morphagene gesture
 
 ```
-s "chord-hits-0916-185508:0" # grains 8 # sustain 0.14 # position 0.35 # follow 0 # gain 0.9 # seed 12345
+s "chord-hits-0916-185508:0" # grains 8 # sustain 0.14 # position 0.35 # follow 0 # gain 0.9 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -215,7 +215,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Read head walk** — long grains, no spray — drag position
 
 ```
-s "chord-hits-0916-185508:0" # grains 4 # sustain 0.4 # position 0.1 # spray 0.02 # follow 0 # gain 0.95 # seed 12345
+s "chord-hits-0916-185508:0" # grains 4 # sustain 0.4 # position 0.1 # spray 0.02 # follow 0 # gain 0.95 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -223,7 +223,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Cloud** — whole corpus, full spray — the Borderlands move
 
 ```
-s "chord-hits-0915-232247" # grains 32 # sustain 0.07 # position 0.5 # spray 1 # follow 0 # gain 0.55 # seed 12345
+s "chord-hits-0915-232247" # grains 32 # sustain 0.07 # position 0.5 # spray 1 # follow 0 # gain 0.55 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -231,7 +231,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Every third backwards** — the figure no granulator can express
 
 ```
-s "chord-hits-0916-185508" # sustain 0.12 # position 0.4 # spray 0.6 # follow 0 # gain 0.8 # every 3 0 (speed -1) # seed 12345
+s "chord-hits-0916-185508" # sustain 0.12 # position 0.4 # spray 0.6 # follow 0 # gain 0.8 # every 3 0 (speed -1) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -239,7 +239,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Stutter cascade** — euclid 7/16, every other grain clipped short
 
 ```
-s "chord-hits-0915-232247" # euclid 7 16 # sustain 0.05 # position 0.45 # spray 0.35 # follow 0 # gain 0.9 # accelerate 0.4 # every 2 0 (length 0.35) # every 4 1 (speed 2) # seed 12345
+s "chord-hits-0915-232247" # euclid 7 16 # sustain 0.05 # position 0.45 # spray 0.35 # follow 0 # gain 0.9 # accelerate 0.4 # every 2 0 (length 0.35) # every 4 1 (speed 2) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -247,7 +247,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Chance rain** — re-rolled from the cycle seed — never twice the same
 
 ```
-s "chord-hits-0915-232247" # grains 24 # sustain 0.06 # position 0.5 # spray 0.9 # follow 0 # gain 0.6 # sometimesBy 0.35 (pan 0.95) # sometimesBy 0.25 (speed -1) # sometimesBy 0.2 (gain 0.25) # seed 12345
+s "chord-hits-0915-232247" # grains 24 # sustain 0.06 # position 0.5 # spray 0.9 # follow 0 # gain 0.6 # sometimesBy 0.35 (pan 0.95) # sometimesBy 0.25 (speed -1) # sometimesBy 0.2 (gain 0.25) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -255,7 +255,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Only the bright** — a hard cut on zcr — filter, not weighting
 
 ```
-s "chord-hits-0915-232247" # grains 20 # sustain 0.1 # position 0.4 # spray 0.7 # follow 0 # gain 0.75 # seed 12345
+s "chord-hits-0915-232247" # grains 20 # sustain 0.1 # position 0.4 # spray 0.7 # follow 0 # gain 0.75 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B). Has a query.
@@ -263,7 +263,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Mostly the long ones** — a soft lean on decay — weighting, not filter
 
 ```
-s "chord-hits-0915-232247" # grains 12 # sustain 0.18 # position 0.3 # spray 0.8 # follow 0 # gain 0.8 # seed 12345
+s "chord-hits-0915-232247" # grains 12 # sustain 0.18 # position 0.3 # spray 0.8 # follow 0 # gain 0.8 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B). Has a query.
@@ -271,7 +271,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Deep drone** — quarter speed, half-second grains
 
 ```
-s "chord-hits-0916-185508:14" # grains 4 # sustain 0.5 # position 0.2 # spray 0.15 # follow 0 # speed 0.25 # seed 12345
+s "chord-hits-0916-185508:14" # grains 4 # sustain 0.5 # position 0.2 # spray 0.15 # follow 0 # speed 0.25 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -279,7 +279,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Transect sweep** — the 4×12 drum grid, straight through
 
 ```
-s "drum-hits-0912-121546" # euclid 9 16 # sustain 0.09 # position 0.15 # spray 0.25 # follow 0 # gain 0.7 # every 4 2 (speed -1) # seed 12345
+s "drum-hits-0912-121546" # euclid 9 16 # sustain 0.09 # position 0.15 # spray 0.25 # follow 0 # gain 0.7 # every 4 2 (speed -1) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -289,7 +289,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Andrew's chord** — one hit, long grains from the attack, saturated into a slow leslie
 
 ```
-s "chord-hits-0916-185508:0" # grains 4 # sustain 1.62 # spray 0.185 # follow 0 # gain 1.02 # shape 0.45 # lpf 5500 # room 0.37 # size 0.47 # dry 0.29 # delay 0.22 # delaytime 0.31 # leslie 0.23 # lrate 10.4 # lsize 0.09 # seed 12345
+s "chord-hits-0916-185508:0" # grains 4 # sustain 1.62 # spray 0.185 # follow 0 # gain 1.02 # shape 0.45 # lpf 5500 # room 0.37 # size 0.47 # dry 0.29 # delay 0.22 # delaytime 0.31 # leslie 0.23 # lrate 10.4 # lsize 0.09 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -297,7 +297,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Brion Gysin cut-ups** — one two-second splice per bar, swelling in backwards, out of a 116-second tape
 
 ```
-s "burroughs-junky" # grains 1 # sustain 2 # position 0.2 # spray 0.55 # follow 0 # gain 0.8 # lpf 4200 # res 0.2 # genv 1 # gtilt 0.92 # gplat 0.05 # curve -3 # room 0.65 # size 0.9 # dry 0.2 # seed 12345
+s "burroughs-junky" # grains 1 # sustain 2 # position 0.2 # spray 0.55 # follow 0 # gain 0.8 # lpf 4200 # res 0.2 # genv 1 # gtilt 0.92 # gplat 0.05 # curve -3 # room 0.65 # size 0.9 # dry 0.2 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -305,7 +305,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Brion Gysin Daleks** — reversed at a tenth speed, crushed, then pitched back up — the voice only pshift can make
 
 ```
-s "burroughs-junky" # euclid 5 16 # sustain 2 # position 0.2 # spray 0.55 # follow 0 # speed -0.1 # gain 0.8 # crush 5.5 # coarse 15 # lpf 6850 # res 0.47 # pshift 1.82 # phdepth 0.31 # gtilt 0.95 # gplat 0.08 # curve -2.5 # room 0.29 # size 0.83 # dry 0.2 # grsnpitch 46 # grsndecay 5.7 # grsnbright 0.9 # seed 12345
+s "burroughs-junky" # euclid 5 16 # sustain 2 # position 0.2 # spray 0.55 # follow 0 # speed -0.1 # gain 0.8 # crush 5.5 # coarse 15 # lpf 6850 # res 0.47 # pshift 1.82 # phdepth 0.31 # gtilt 0.95 # gplat 0.08 # curve -2.5 # room 0.29 # size 0.83 # dry 0.2 # grsnpitch 46 # grsndecay 5.7 # grsnbright 0.9 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -313,7 +313,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Brion Gysin Speeding** — 23 bursts a bar, each sounding for a seventh of the slot it sits in
 
 ```
-s "burroughs-junky:0" # euclid 23 29 # sustain 1.545 # position 0.3 # spray 0.25 # follow 0 # gain 0.9 # coarse 7 # lpf 7100 # res 0.25 # tremolo 6.5 # tremdepth 0.85 # atk 0.055 # hold 0.11 # rel 0.05 # curve -2 # room 0.55 # size 0.85 # dry 0.2 # seed 12345
+s "burroughs-junky:0" # euclid 23 29 # sustain 1.545 # position 0.3 # spray 0.25 # follow 0 # gain 0.9 # coarse 7 # lpf 7100 # res 0.25 # tremolo 6.5 # tremdepth 0.85 # atk 0.055 # hold 0.11 # rel 0.05 # curve -2 # room 0.55 # size 0.85 # dry 0.2 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -323,7 +323,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Polychord pairs** — two plain triads struck at once every other bar — a walk through the set's pairings
 
 ```
-s "chord-hits-0924-171929" # onsets "0 0 0.5" # sustain 2.6 # follow 0 # gain 0.75 # room 0.3 # size 0.7 # dry 0.1 # every 6 2 (gain 0) # every 6 4 (gain 0) # every 3 0 (pan 0.3) # every 3 1 (pan 0.7) # seed 12345
+s "chord-hits-0924-171929" # onsets "0 0 0.5" # sustain 2.6 # follow 0 # gain 0.75 # room 0.3 # size 0.7 # dry 0.1 # every 6 2 (gain 0) # every 6 4 (gain 0) # every 3 0 (pan 0.3) # every 3 1 (pan 0.7) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -333,7 +333,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Tape** — the bar as sixteen grains, in order — should sound exactly like the loop
 
 ```
-s "fd-beat-bar" # seed 12345
+s "fd-beat-bar" # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -341,7 +341,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Repeat** — the head sometimes doesn't advance: a sixteenth again, and the tape catches up
 
 ```
-s "fd-beat-bar" # walk 0 0.14 0 # seed 12345
+s "fd-beat-bar" # walk 0 0.14 0 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -349,7 +349,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Relocate** — the head jumps anywhere and carries on from there — the bar re-laid, home at every downbeat
 
 ```
-s "fd-beat-bar" # walk 0.22 0 0.06 # seed 12345
+s "fd-beat-bar" # walk 0.22 0 0.06 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -357,7 +357,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Eighth hops** — short hops on the eighth-note grid, often back to the tape
 
 ```
-s "fd-beat-bar" # walk 0.25 0 0.3 # grid 8 # reach 2 # seed 12345
+s "fd-beat-bar" # walk 0.25 0 0.3 # grid 8 # reach 2 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -365,7 +365,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Fill** — plain for a bar, then a ratcheted fill into the next downbeat
 
 ```
-s "fd-beat-bar" # every 32 24 (shift -0.125) # every 32 26 (shift -0.25) # every 32 28 (ratchet 2) # every 32 29 (ratchet 3) # every 32 30 (ratchet 4) # every 32 31 (ratchet 6) # every 32 31 (gain 0.8) # seed 12345
+s "fd-beat-bar" # every 32 24 (shift -0.125) # every 32 26 (shift -0.25) # every 32 28 (ratchet 2) # every 32 29 (ratchet 3) # every 32 30 (ratchet 4) # every 32 31 (ratchet 6) # every 32 31 (gain 0.8) # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -373,7 +373,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Stutter** — one grain in seven rolls into four; one in nine holds
 
 ```
-s "fd-beat-bar" # walk 0 0.11 0 # sometimesBy 0.14 (ratchet 4) # seed 12345
+s "fd-beat-bar" # walk 0 0.11 0 # sometimesBy 0.14 (ratchet 4) # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -381,7 +381,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Beat echo** — every sixteenth twice: itself, and a quieter copy from a beat earlier, panned right
 
 ```
-s "fd-beat-bar" # onsets "0 0 0.0625 0.0625 0.125 0.125 0.1875 0.1875 0.25 0.25 0.3125 0.3125 0.375 0.375 0.4375 0.4375 0.5 0.5 0.5625 0.5625 0.625 0.625 0.6875 0.6875 0.75 0.75 0.8125 0.8125 0.875 0.875 0.9375 0.9375" # every 2 1 (shift -0.25) # every 2 1 (gain 0.45) # every 2 1 (pan 0.85) # seed 12345
+s "fd-beat-bar" # onsets "0 0 0.0625 0.0625 0.125 0.125 0.1875 0.1875 0.25 0.25 0.3125 0.3125 0.375 0.375 0.4375 0.4375 0.5 0.5 0.5625 0.5625 0.625 0.625 0.6875 0.6875 0.75 0.75 0.8125 0.8125 0.875 0.875 0.9375 0.9375" # every 2 1 (shift -0.25) # every 2 1 (gain 0.45) # every 2 1 (pan 0.85) # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -389,7 +389,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Drag** — the head at half rate: each sixteenth heard twice over, pitch untouched — half-time
 
 ```
-s "fd-beat-bar" # follow 0.5 # seed 12345
+s "fd-beat-bar" # follow 0.5 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -397,7 +397,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Half-speed tape** — the tape really slowed: half rate AND half speed, an octave down
 
 ```
-s "fd-beat-bar" # follow 0.5 # speed 0.5 # seed 12345
+s "fd-beat-bar" # follow 0.5 # speed 0.5 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -405,7 +405,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Double time** — the head at twice the rate: the bar twice a bar, every other sixteenth
 
 ```
-s "fd-beat-bar" # follow 2 # seed 12345
+s "fd-beat-bar" # follow 2 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -413,7 +413,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Reverse bar** — the tape backwards: slices in reverse order, each played backwards
 
 ```
-s "fd-beat-bar" # position -0.0625 # follow -1 # speed -1 # seed 12345
+s "fd-beat-bar" # position -0.0625 # follow -1 # speed -1 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -421,7 +421,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Tape sag** — the last beat slows, grain by grain, like a tape running down
 
 ```
-s "fd-beat-bar" # every 16 12 (speed 0.8) # every 16 13 (speed 0.62) # every 16 14 (speed 0.45) # every 16 15 (speed 0.3) # seed 12345
+s "fd-beat-bar" # every 16 12 (speed 0.8) # every 16 13 (speed 0.62) # every 16 14 (speed 0.45) # every 16 15 (speed 0.3) # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -429,7 +429,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Cloud at the head** — 48 short grains sprayed round a moving head — the beat smeared, still in time
 
 ```
-s "fd-beat-bar" # grains 48 # sustain 0.09 # spray 0.035 # gain 0.6 # sometimesBy 0.5 (pan 0.25) # sometimesBy 0.5 (pan 0.75) # seed 12345
+s "fd-beat-bar" # grains 48 # sustain 0.09 # spray 0.035 # gain 0.6 # sometimesBy 0.5 (pan 0.25) # sometimesBy 0.5 (pan 0.75) # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -437,7 +437,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Breakdown** — hops, holds, reversals and a roll — the Sector move, coming home every bar
 
 ```
-s "fd-beat-bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # every 16 14 (ratchet 3) # sometimesBy 0.1 (speed -1) # sometimesBy 0.06 (speed 0.5) # seed 12345
+s "fd-beat-bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # every 16 14 (ratchet 3) # sometimesBy 0.1 (speed -1) # sometimesBy 0.06 (speed 0.5) # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
@@ -447,7 +447,7 @@ Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 **Every 4th downbeat back** — ordinals count across bars, so every 64th grain is the downbeat of every fourth bar
 
 ```
-s "fd-beat-bar" # every 64 0 (speed -1) # seed 12345
+s "fd-beat-bar" # every 64 0 (speed -1) # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -455,7 +455,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Snare up a fifth** — only what scores as snare is pitch-shifted — fix (# pshift 1.5) snare
 
 ```
-s "fd-beat-bar" # fix snare 0.5 (pshift 1.5) # seed 12345
+s "fd-beat-bar" # fix snare 0.5 (pshift 1.5) # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -463,7 +463,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Kick bassline** — each kick rings a resonator tuned from a sequence — the kick drum plays the bass
 
 ```
-s "fd-beat-bar" # rsndecay 0.9 # rsnbright 0.35 # rsnmix 0.75 # fix kick 0.5 (rsnpitch "36 36 43 39") # seed 12345
+s "fd-beat-bar" # rsndecay 0.9 # rsnbright 0.35 # rsnmix 0.75 # fix kick 0.5 (rsnpitch "36 36 43 39") # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -471,7 +471,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Kick bassline, per bar** — one note a bar, <36 36 39 31> — four bars of root motion
 
 ```
-s "fd-beat-bar" # rsndecay 1.4 # rsnbright 0.3 # rsnmix 0.8 # fix kick 0.5 (rsnpitch "<36 36 39 31>") # seed 12345
+s "fd-beat-bar" # rsndecay 1.4 # rsnbright 0.3 # rsnmix 0.8 # fix kick 0.5 (rsnpitch "<36 36 39 31>") # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -479,7 +479,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Snare roll build** — the snare ratchets 1, 2, 3, 4 across four bars, <1 2 3 4>
 
 ```
-s "fd-beat-bar" # fix snare 0.5 (ratchet "<1 2 3 4>") # seed 12345
+s "fd-beat-bar" # fix snare 0.5 (ratchet "<1 2 3 4>") # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -487,7 +487,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Hat ping-pong** — hats alternate left and right; at 0.2 the kicks' click counts as hat too
 
 ```
-s "fd-beat-bar" # fix hat 0.2 (pan "0.1 0.9") # seed 12345
+s "fd-beat-bar" # fix hat 0.2 (pan "0.1 0.9") # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -495,7 +495,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Creative errors** — thresholds low enough to be wrong: half the bar is 'snare', crushed and dropped an octave
 
 ```
-s "fd-beat-bar" # fix snare 0.1 (pshift 0.5) # fix hat 0.15 (crush 5) # seed 12345
+s "fd-beat-bar" # fix snare 0.1 (pshift 0.5) # fix hat 0.15 (crush 5) # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -503,7 +503,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Fix under the walk** — the Breakdown walk, with snare and kick rules that follow whatever the head lands on
 
 ```
-s "fd-beat-bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # rsndecay 0.8 # rsnbright 0.35 # rsnmix 0.7 # fix snare 0.5 (pshift 1.5) # fix kick 0.5 (rsnpitch "36 43 39 34") # fix hat 0.5 (ratchet 3) # seed 12345
+s "fd-beat-bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # rsndecay 0.8 # rsnbright 0.35 # rsnmix 0.7 # fix snare 0.5 (pshift 1.5) # fix kick 0.5 (rsnpitch "36 43 39 34") # fix hat 0.5 (ratchet 3) # seed 12345 # knobs "walkJump:chaos grainLength:grain sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), grain (grain length), throw (send A)
@@ -513,7 +513,7 @@ Knobs: chaos (jump), grain (grain length), throw (send A)
 **Snare to the return** — every snare flicked into send A — put a delay on 3/4
 
 ```
-s "fd-beat-bar" # fix snare 0.5 (send 1) # seed 12345
+s "fd-beat-bar" # fix snare 0.5 (send 1) # seed 12345 # knobs "sendLevelA:send_A sendLevelB:send_B walkJump:chaos"
 ```
 
 Knobs: send A (send A), send B (send B), chaos (jump)
@@ -521,7 +521,7 @@ Knobs: send A (send A), send B (send B), chaos (jump)
 **Throw the last hit** — the last sixteenth of every bar into send A, loud
 
 ```
-s "fd-beat-bar" # sendA 1 # every 16 15 (send 1) # seed 12345
+s "fd-beat-bar" # sendA 1 # every 16 15 (send 1) # seed 12345 # knobs "sendLevelA:send_A sendLevelB:send_B walkJump:chaos"
 ```
 
 Knobs: send A (send A), send B (send B), chaos (jump)
@@ -529,7 +529,7 @@ Knobs: send A (send A), send B (send B), chaos (jump)
 **Hats to the room** — hats into send B — put a reverb on 5/6
 
 ```
-s "fd-beat-bar" # fix hat 0.3 (send 2) # seed 12345
+s "fd-beat-bar" # fix hat 0.3 (send 2) # seed 12345 # knobs "sendLevelA:send_A sendLevelB:send_B walkJump:chaos"
 ```
 
 Knobs: send A (send A), send B (send B), chaos (jump)
@@ -537,7 +537,7 @@ Knobs: send A (send A), send B (send B), chaos (jump)
 **Random throws** — now and then a grain goes to A, or B, alternating
 
 ```
-s "fd-beat-bar" # sendA 0.9 # sendB 0.9 # sometimesBy 0.1 (send "1 2") # seed 12345
+s "fd-beat-bar" # sendA 0.9 # sendB 0.9 # sometimesBy 0.1 (send "1 2") # seed 12345 # knobs "sendLevelA:send_A sendLevelB:send_B walkJump:chaos"
 ```
 
 Knobs: send A (send A), send B (send B), chaos (jump)
@@ -545,7 +545,7 @@ Knobs: send A (send A), send B (send B), chaos (jump)
 **Echo out every 4th bar** — the whole last beat of every fourth bar thrown into A
 
 ```
-s "fd-beat-bar" # sendA 1 # every 64 60 (send 1) # every 64 61 (send 1) # every 64 62 (send 1) # every 64 63 (send 1) # seed 12345
+s "fd-beat-bar" # sendA 1 # every 64 60 (send 1) # every 64 61 (send 1) # every 64 62 (send 1) # every 64 63 (send 1) # seed 12345 # knobs "sendLevelA:send_A sendLevelB:send_B walkJump:chaos"
 ```
 
 Knobs: send A (send A), send B (send B), chaos (jump)
@@ -553,7 +553,7 @@ Knobs: send A (send A), send B (send B), chaos (jump)
 **Dub breakdown** — the Breakdown walk, snares to A and the odd jump-landing to B
 
 ```
-s "fd-beat-bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # fix snare 0.5 (send 1) # sometimesBy 0.08 (send 2) # fix snare 0.5 (pshift 0.75) # seed 12345
+s "fd-beat-bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # fix snare 0.5 (send 1) # sometimesBy 0.08 (send 2) # fix snare 0.5 (pshift 0.75) # seed 12345 # knobs "sendLevelA:send_A sendLevelB:send_B walkJump:chaos"
 ```
 
 Knobs: send A (send A), send B (send B), chaos (jump)
@@ -563,7 +563,7 @@ Knobs: send A (send A), send B (send B), chaos (jump)
 **Swing it** — a straight break played at 62%: offbeat sixteenths land late
 
 ```
-s "fd-beat-bar" # swing 0.62 # seed 12345
+s "fd-beat-bar" # swing 0.62 # seed 12345 # knobs "playSwing walkJump:chaos walkHold"
 ```
 
 Knobs: swing (swing), chaos (jump), repeat (repeat)
@@ -571,7 +571,7 @@ Knobs: swing (swing), chaos (jump), repeat (repeat)
 **Heavy shuffle** — 68%, near triplet — the short offbeats get clipped, which is the feel
 
 ```
-s "fd-beat-bar" # swing 0.68 # seed 12345
+s "fd-beat-bar" # swing 0.68 # seed 12345 # knobs "playSwing walkJump:chaos walkHold"
 ```
 
 Knobs: swing (swing), chaos (jump), repeat (repeat)
@@ -579,7 +579,7 @@ Knobs: swing (swing), chaos (jump), repeat (repeat)
 **Eighth swing** — swing on 8ths instead of 16ths: the and-of-each-beat moves
 
 ```
-s "fd-beat-bar" # swing 0.6 # swinggrid 8 # seed 12345
+s "fd-beat-bar" # swing 0.6 # swinggrid 8 # seed 12345 # knobs "playSwing walkJump:chaos walkHold"
 ```
 
 Knobs: swing (swing), chaos (jump), repeat (repeat)
@@ -587,7 +587,7 @@ Knobs: swing (swing), chaos (jump), repeat (repeat)
 **Swung tape, as it was** — a swung break with its swing declared: the tape back exactly
 
 ```
-s "fd-beat-bar-swung" # swing 0.62 # tapeswing 0.62 # seed 12345
+s "fd-beat-bar-swung" # swing 0.62 # tapeswing 0.62 # seed 12345 # knobs "playSwing walkJump:chaos walkHold"
 ```
 
 Knobs: swing (swing), chaos (jump), repeat (repeat)
@@ -595,7 +595,7 @@ Knobs: swing (swing), chaos (jump), repeat (repeat)
 **Swung breakdown, kept** — the Breakdown walk on a swung break, slices cut on ITS grid: the swing survives the chopping
 
 ```
-s "fd-beat-bar-swung" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # swing 0.62 # tapeswing 0.62 # seed 12345
+s "fd-beat-bar-swung" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # swing 0.62 # tapeswing 0.62 # seed 12345 # knobs "playSwing walkJump:chaos walkHold"
 ```
 
 Knobs: swing (swing), chaos (jump), repeat (repeat)
@@ -603,7 +603,7 @@ Knobs: swing (swing), chaos (jump), repeat (repeat)
 **Swung breakdown, broken** — the same, told the tape is straight: offbeat slices land on downbeats late — the Sector problem
 
 ```
-s "fd-beat-bar-swung" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # seed 12345
+s "fd-beat-bar-swung" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # seed 12345 # knobs "playSwing walkJump:chaos walkHold"
 ```
 
 Knobs: swing (swing), chaos (jump), repeat (repeat)
@@ -611,7 +611,7 @@ Knobs: swing (swing), chaos (jump), repeat (repeat)
 **Straighten it** — the swung break played straight: cut on its swing, landed on the grid
 
 ```
-s "fd-beat-bar-swung" # tapeswing 0.62 # seed 12345
+s "fd-beat-bar-swung" # tapeswing 0.62 # seed 12345 # knobs "playSwing walkJump:chaos walkHold"
 ```
 
 Knobs: swing (swing), chaos (jump), repeat (repeat)
@@ -621,7 +621,7 @@ Knobs: swing (swing), chaos (jump), repeat (repeat)
 **Progression from hits** — four separate chord hits as a I–vi–IV–V in G, one a bar — nothing rendered
 
 ```
-s "chord-hits-0924-171929" # bars 4 # samples "<4 7 5 0>" # seed 12345
+s "chord-hits-0924-171929" # bars 4 # samples "<4 7 5 0>" # seed 12345 # knobs "tapeFollow:tape_rate playSwing sendLevelB:space"
 ```
 
 Knobs: tape rate (tape follow), swing (swing), space (send B)
@@ -629,7 +629,7 @@ Knobs: tape rate (tape follow), swing (swing), space (send B)
 **ii–V–I–vi from hits** — the same hits re-chosen: Am7 D G Em, a turnaround
 
 ```
-s "chord-hits-0924-171929" # bars 4 # samples "<8 0 4 7>" # seed 12345
+s "chord-hits-0924-171929" # bars 4 # samples "<8 0 4 7>" # seed 12345 # knobs "walkJump:chaos playSwing sendLevelB:space"
 ```
 
 Knobs: chaos (jump), swing (swing), space (send B)
@@ -637,7 +637,7 @@ Knobs: chaos (jump), swing (swing), space (send B)
 **Hits, Sector'd** — the I–vi–IV–V with the walk on the eighths and a stutter now and then
 
 ```
-s "chord-hits-0924-171929" # walk 0.25 0.15 0.2 # grid 8 # reach 3 # bars 4 # samples "<4 7 5 0>" # sometimesBy 0.1 (ratchet 3) # seed 12345
+s "chord-hits-0924-171929" # walk 0.25 0.15 0.2 # grid 8 # reach 3 # bars 4 # samples "<4 7 5 0>" # sometimesBy 0.1 (ratchet 3) # seed 12345 # knobs "walkJump:chaos walkHold sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), throw (send A)
@@ -645,7 +645,7 @@ Knobs: chaos (jump), repeat (repeat), throw (send A)
 **Progression as tape** — the comping loop as 16 grains a bar — should sound like the loop
 
 ```
-s "prog-g-2bar" # bars 2 # gain 1.6 # seed 12345
+s "prog-g-2bar" # bars 2 # gain 1.6 # seed 12345 # knobs "tapeFollow:tape_rate playSwing sendLevelB:space"
 ```
 
 Knobs: tape rate (tape follow), swing (swing), space (send B)
@@ -653,7 +653,7 @@ Knobs: tape rate (tape follow), swing (swing), space (send B)
 **Chords swapped** — each bar's two chords traded: G-Em becomes Em-G, Csus2-D becomes D-Csus2
 
 ```
-s "prog-g-2bar" # bars 2 # steps "2 3 0 1" # gain 1.6 # seed 12345
+s "prog-g-2bar" # bars 2 # steps "2 3 0 1" # gain 1.6 # seed 12345 # knobs "walkJump:chaos playSwing sendLevelB:space"
 ```
 
 Knobs: chaos (jump), swing (swing), space (send B)
@@ -661,7 +661,7 @@ Knobs: chaos (jump), swing (swing), space (send B)
 **Bar order 0 1 1 0** — the phrase re-laid a bar at a time: four-bar form from a two-bar loop
 
 ```
-s "prog-g-2bar" # bars 2 # order "0 1 1 0" # gain 1.6 # seed 12345
+s "prog-g-2bar" # bars 2 # order "0 1 1 0" # gain 1.6 # seed 12345 # knobs "walkJump:chaos playSwing sendLevelB:space"
 ```
 
 Knobs: chaos (jump), swing (swing), space (send B)
@@ -669,7 +669,7 @@ Knobs: chaos (jump), swing (swing), space (send B)
 **Harmonic Sector** — Sector's step table on the eighths: some steps jump, some only sometimes
 
 ```
-s "prog-g-2bar" # walk 0 0.1 0 # grid 8 # bars 2 # steps "~ ~ 5?0.4 ~ 2?0.35 ~ ~ 7?0.25" # gain 1.6 # seed 12345
+s "prog-g-2bar" # walk 0 0.1 0 # grid 8 # bars 2 # steps "~ ~ 5?0.4 ~ 2?0.35 ~ ~ 7?0.25" # gain 1.6 # seed 12345 # knobs "walkHold walkJump:chaos sendLevelB:space"
 ```
 
 Knobs: repeat (repeat), chaos (jump), space (send B)
@@ -677,7 +677,7 @@ Knobs: repeat (repeat), chaos (jump), space (send B)
 **Chord hops** — the walk on the half-bar grid: whole chords swapped in and out, home every bar
 
 ```
-s "prog-g-2bar" # walk 0.35 0 0.2 # grid 2 # bars 2 # gain 1.6 # seed 12345
+s "prog-g-2bar" # walk 0.35 0 0.2 # grid 2 # bars 2 # gain 1.6 # seed 12345 # knobs "walkJump:chaos walkHome:home sendLevelB:space"
 ```
 
 Knobs: chaos (jump), home (return), space (send B)
@@ -685,7 +685,7 @@ Knobs: chaos (jump), home (return), space (send B)
 **Comping stutter** — the chord re-struck as a roll now and then
 
 ```
-s "prog-g-2bar" # bars 2 # gain 1.6 # sometimesBy 0.12 (ratchet 3) # seed 12345
+s "prog-g-2bar" # bars 2 # gain 1.6 # sometimesBy 0.12 (ratchet 3) # seed 12345 # knobs "walkJump:chaos walkHold sendLevelA:throw"
 ```
 
 Knobs: chaos (jump), repeat (repeat), throw (send A)
@@ -693,7 +693,7 @@ Knobs: chaos (jump), repeat (repeat), throw (send A)
 **Swung comping** — the straight comping loop at 62% swing
 
 ```
-s "prog-g-2bar" # swing 0.62 # bars 2 # gain 1.6 # seed 12345
+s "prog-g-2bar" # swing 0.62 # bars 2 # gain 1.6 # seed 12345 # knobs "playSwing walkJump:chaos sendLevelB:space"
 ```
 
 Knobs: swing (swing), chaos (jump), space (send B)
@@ -701,7 +701,7 @@ Knobs: swing (swing), chaos (jump), space (send B)
 **Stabs to the room** — every downbeat chord into send B — put a reverb on it
 
 ```
-s "prog-g-2bar" # bars 2 # gain 1.6 # every 8 0 (send 2) # seed 12345
+s "prog-g-2bar" # bars 2 # gain 1.6 # every 8 0 (send 2) # seed 12345 # knobs "sendLevelB:space walkJump:chaos playSwing"
 ```
 
 Knobs: space (send B), chaos (jump), swing (swing)
@@ -709,7 +709,7 @@ Knobs: space (send B), chaos (jump), swing (swing)
 **Progression breakdown** — hops, holds, a reversed chord, a roll — the Breakdown on harmony
 
 ```
-s "prog-g-2bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # bars 2 # gain 1.6 # sometimesBy 0.08 (speed -1) # every 16 14 (ratchet 3) # seed 12345
+s "prog-g-2bar" # walk 0.2 0.12 0.1 # grid 8 # reach 3 # bars 2 # gain 1.6 # sometimesBy 0.08 (speed -1) # every 16 14 (ratchet 3) # seed 12345 # knobs "walkJump:chaos walkHold sendLevelB:space"
 ```
 
 Knobs: chaos (jump), repeat (repeat), space (send B)
@@ -719,7 +719,7 @@ Knobs: chaos (jump), repeat (repeat), space (send B)
 **Attack wave** — a six-step triangle over the ATTACK, indexed by grain ordinal — an LFO that cannot drift
 
 ```
-s "burroughs-junky:0" # euclid 23 29 # sustain 1.2 # position 0.3 # spray 0.35 # follow 0 # gain 0.9 # coarse 7 # lpf 7100 # res 0.25 # atk 0.03 # hold 0.11 # rel 0.05 # curve -2 # room 0.55 # size 0.85 # dry 0.2 # every 6 0 (atk 0.004) # every 6 1 (atk 0.03) # every 6 2 (atk 0.09) # every 6 3 (atk 0.18) # every 6 4 (atk 0.09) # every 6 5 (atk 0.03) # seed 12345
+s "burroughs-junky:0" # euclid 23 29 # sustain 1.2 # position 0.3 # spray 0.35 # follow 0 # gain 0.9 # coarse 7 # lpf 7100 # res 0.25 # atk 0.03 # hold 0.11 # rel 0.05 # curve -2 # room 0.55 # size 0.85 # dry 0.2 # every 6 0 (atk 0.004) # every 6 1 (atk 0.03) # every 6 2 (atk 0.09) # every 6 3 (atk 0.18) # every 6 4 (atk 0.09) # every 6 5 (atk 0.03) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -727,7 +727,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Reverse swell** — tilt 0.92 — every grain arrives backwards
 
 ```
-s "chord-hits-0915-232247" # grains 5 # sustain 0.35 # position 0.2 # spray 0.55 # follow 0 # gain 0.8 # lpf 4200 # res 0.2 # genv 1 # gtilt 0.92 # gplat 0.05 # curve -3 # room 0.65 # size 0.9 # dry 0.2 # seed 12345
+s "chord-hits-0915-232247" # grains 5 # sustain 0.35 # position 0.2 # spray 0.55 # follow 0 # gain 0.8 # lpf 4200 # res 0.2 # genv 1 # gtilt 0.92 # gplat 0.05 # curve -3 # room 0.65 # size 0.9 # dry 0.2 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -735,7 +735,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Burst grains** — tremolo at 6 cycles per grain — a multi-lobe envelope from an effect wired for something else
 
 ```
-s "chord-hits-0915-232247" # grains 6 # sustain 0.25 # position 0.15 # spray 0.4 # follow 0 # gain 0.85 # tremolo 24 # tremdepth 1 # genv 1 # gtilt 0.3 # gplat 0.4 # room 0.3 # size 0.6 # every 3 1 (tremolo 40) # seed 12345
+s "chord-hits-0915-232247" # grains 6 # sustain 0.25 # position 0.15 # spray 0.4 # follow 0 # gain 0.85 # tremolo 24 # tremdepth 1 # genv 1 # gtilt 0.3 # gplat 0.4 # room 0.3 # size 0.6 # every 3 1 (tremolo 40) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -745,7 +745,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Crushed every fifth** — the headline — one grain in five, bitcrushed
 
 ```
-s "chord-hits-0916-185508" # grains 20 # sustain 0.11 # position 0.4 # spray 0.55 # follow 0 # gain 0.8 # room 0.25 # size 0.5 # every 5 0 (crush 3) # seed 12345
+s "chord-hits-0916-185508" # grains 20 # sustain 0.11 # position 0.4 # spray 0.55 # follow 0 # gain 0.8 # room 0.25 # size 0.5 # every 5 0 (crush 3) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -753,7 +753,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Pitch shadow** — a fifth up and an octave down, in the SAME time
 
 ```
-s "chord-hits-0916-185508" # grains 12 # sustain 0.16 # position 0.35 # spray 0.45 # follow 0 # gain 0.8 # room 0.35 # size 0.6 # every 3 0 (pshift 1.5) # every 7 2 (pshift 0.5) # seed 12345
+s "chord-hits-0916-185508" # grains 12 # sustain 0.16 # position 0.35 # spray 0.45 # follow 0 # gain 0.8 # room 0.35 # size 0.6 # every 3 0 (pshift 1.5) # every 7 2 (pshift 0.5) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -761,7 +761,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Formant choir** — a, i, o, u — one vowel per grain, in rotation
 
 ```
-s "chord-hits-0915-232247" # grains 8 # sustain 0.22 # position 0.4 # spray 0.5 # follow 0 # gain 0.85 # res 0.45 # room 0.5 # size 0.75 # dry 0.15 # every 4 0 (vowel 1) # every 4 1 (vowel 3) # every 4 2 (vowel 4) # every 4 3 (vowel 5) # seed 12345
+s "chord-hits-0915-232247" # grains 8 # sustain 0.22 # position 0.4 # spray 0.5 # follow 0 # gain 0.85 # res 0.45 # room 0.5 # size 0.75 # dry 0.15 # every 4 0 (vowel 1) # every 4 1 (vowel 3) # every 4 2 (vowel 4) # every 4 3 (vowel 5) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -769,7 +769,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Cathedral** — four long grains a cycle into a very large room
 
 ```
-s "chord-hits-0916-185508" # grains 4 # sustain 0.45 # position 0.25 # spray 0.3 # follow 0 # gain 0.75 # lpf 3500 # res 0.1 # room 0.85 # size 0.95 # dry 0.25 # seed 12345
+s "chord-hits-0916-185508" # grains 4 # sustain 0.45 # position 0.25 # spray 0.3 # follow 0 # gain 0.75 # lpf 3500 # res 0.1 # room 0.85 # size 0.95 # dry 0.25 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -777,7 +777,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Dub chamber** — delay LOCKED to the cycle, so it stays in time
 
 ```
-s "chord-hits-0916-185508" # euclid 5 16 # sustain 0.09 # position 0.4 # spray 0.6 # follow 0 # gain 0.8 # room 0.2 # delay 0.6 # delaytime 0.375 # delayfeedback 0.72 # lock 1 # sometimesBy 0.4 (pan 0.92) # every 4 2 (hpf 900) # seed 12345
+s "chord-hits-0916-185508" # euclid 5 16 # sustain 0.09 # position 0.4 # spray 0.6 # follow 0 # gain 0.8 # room 0.2 # delay 0.6 # delaytime 0.375 # delayfeedback 0.72 # lock 1 # sometimesBy 0.4 (pan 0.92) # every 4 2 (hpf 900) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -785,7 +785,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Shredder** — decimate, crush and distort — all three at once
 
 ```
-s "drum-hits-0912-121546" # euclid 11 16 # sustain 0.05 # position 0.1 # spray 0.4 # follow 0 # gain 0.55 # accelerate 0.2 # shape 0.65 # crush 3 # lpf 6000 # res 0.2 # room 0.15 # every 3 1 (coarse 12) # sometimesBy 0.3 (speed -1) # seed 12345
+s "drum-hits-0912-121546" # euclid 11 16 # sustain 0.05 # position 0.1 # spray 0.4 # follow 0 # gain 0.55 # accelerate 0.2 # shape 0.65 # crush 3 # lpf 6000 # res 0.2 # room 0.15 # every 3 1 (coarse 12) # sometimesBy 0.3 (speed -1) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -793,7 +793,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Filter rain** — every grain lands in a different band
 
 ```
-s "chord-hits-0915-232247" # grains 28 # sustain 0.07 # position 0.5 # spray 0.95 # follow 0 # gain 0.65 # res 0.35 # room 0.45 # size 0.8 # delay 0.25 # delaytime 0.125 # delayfeedback 0.5 # lock 1 # sometimesBy 0.4 (bpf 400) # sometimesBy 0.3 (bpf 1400) # sometimesBy 0.25 (bpf 4200) # sometimesBy 0.5 (pan 0.85) # seed 12345
+s "chord-hits-0915-232247" # grains 28 # sustain 0.07 # position 0.5 # spray 0.95 # follow 0 # gain 0.65 # res 0.35 # room 0.45 # size 0.8 # delay 0.25 # delaytime 0.125 # delayfeedback 0.5 # lock 1 # sometimesBy 0.4 (bpf 400) # sometimesBy 0.3 (bpf 1400) # sometimesBy 0.25 (bpf 4200) # sometimesBy 0.5 (pan 0.85) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -801,7 +801,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Leslie drift** — rotary on the chain, phaser on every third grain
 
 ```
-s "chord-hits-0915-232247" # grains 6 # sustain 0.2 # position 0.35 # spray 0.4 # follow 0 # gain 0.85 # phdepth 0.8 # room 0.3 # leslie 0.75 # lrate 5.2 # lsize 0.4 # every 3 0 (phaser 0.4) # seed 12345
+s "chord-hits-0915-232247" # grains 6 # sustain 0.2 # position 0.35 # spray 0.4 # follow 0 # gain 0.85 # phdepth 0.8 # room 0.3 # leslie 0.75 # lrate 5.2 # lsize 0.4 # every 3 0 (phaser 0.4) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -809,7 +809,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Tape saturation** — soft clip and a lid — nothing per grain at all
 
 ```
-s "chord-hits-0916-185508" # sustain 0.13 # position 0.35 # spray 0.5 # follow 0 # gain 0.7 # shape 0.45 # lpf 5200 # res 0.15 # room 0.2 # size 0.5 # seed 12345
+s "chord-hits-0916-185508" # sustain 0.13 # position 0.35 # spray 0.5 # follow 0 # gain 0.7 # shape 0.45 # lpf 5200 # res 0.15 # room 0.2 # size 0.5 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -817,7 +817,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Tremolo bed** — long grains, amplitude-chopped under the cloud
 
 ```
-s "chord-hits-0915-232247" # grains 3 # sustain 0.5 # position 0.3 # spray 0.25 # follow 0 # speed 0.5 # gain 0.9 # lpf 2600 # res 0.25 # tremolo 6.5 # tremdepth 0.85 # room 0.55 # size 0.85 # dry 0.2 # seed 12345
+s "chord-hits-0915-232247" # grains 3 # sustain 0.5 # position 0.3 # spray 0.25 # follow 0 # speed 0.5 # gain 0.9 # lpf 2600 # res 0.25 # tremolo 6.5 # tremdepth 0.85 # room 0.55 # size 0.85 # dry 0.2 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -827,7 +827,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Struck bar** — a ringing bank — high partials die first
 
 ```
-s "chord-hits-0916-185508" # grains 4 # sustain 1.6 # position 0.02 # spray 0.25 # follow 0 # gain 0.75 # genv 1 # gtilt 0.015 # gplat 0.02 # curve -4 # rsnpitch 52 # rsnbright 0.9 # rsnmix 0.85 # room 0.4 # size 0.8 # dry 0.2 # seed 12345
+s "chord-hits-0916-185508" # grains 4 # sustain 1.6 # position 0.02 # spray 0.25 # follow 0 # gain 0.75 # genv 1 # gtilt 0.015 # gplat 0.02 # curve -4 # rsnpitch 52 # rsnbright 0.9 # rsnmix 0.85 # room 0.4 # size 0.8 # dry 0.2 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -835,7 +835,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Dull thud** — the same bank with the highs taken out
 
 ```
-s "chord-hits-0916-185508" # euclid 5 16 # sustain 0.7 # position 0.02 # spray 0.2 # follow 0 # gain 0.85 # genv 1 # gtilt 0.01 # gplat 0.02 # curve -4 # rsnpitch 40 # rsndecay 1.2 # rsnbright 0.38 # rsnmix 0.9 # room 0.2 # seed 12345
+s "chord-hits-0916-185508" # euclid 5 16 # sustain 0.7 # position 0.02 # spray 0.2 # follow 0 # gain 0.85 # genv 1 # gtilt 0.01 # gplat 0.02 # curve -4 # rsnpitch 40 # rsndecay 1.2 # rsnbright 0.38 # rsnmix 0.9 # room 0.2 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -843,7 +843,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Plucked chord** — Karplus-Strong, strung with the grain — one chord tone per grain
 
 ```
-s "chord-hits-0916-185508" # grains 6 # sustain 1.4 # position 0.02 # spray 0.15 # follow 0 # chords "<F#m(maj7) B7 E E>" # fit 0.4 0.9 # tune tones # gain 0.8 # genv 1 # gtilt 0.01 # gplat 0.02 # curve -4 # rsnpitch 48 # rsndecay 1.3 # rsnbright 0.82 # rsnmix 0.95 # rsnmodel 1 # room 0.35 # size 0.7 # delay 0.2 # delayfeedback 0.45 # lock 1 # seed 12345
+s "chord-hits-0916-185508" # grains 6 # sustain 1.4 # position 0.02 # spray 0.15 # follow 0 # chords "<F#m(maj7) B7 E E>" # fit 0.4 0.9 # tune tones # gain 0.8 # genv 1 # gtilt 0.01 # gplat 0.02 # curve -4 # rsnpitch 48 # rsndecay 1.3 # rsnbright 0.82 # rsnmix 0.95 # rsnmodel 1 # room 0.35 # size 0.7 # delay 0.2 # delayfeedback 0.45 # lock 1 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -851,7 +851,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Answer the chord** — a filter the material often fails — the resonator carries the harmony
 
 ```
-s "chord-hits-0916-185508" # grains 10 # sustain 0.5 # position 0.02 # spray 0.3 # follow 0 # chords "<Bm Bm(maj7) Bdim F#m>" # fit 0.75 0.98 # tune root # gain 0.9 # genv 1 # gtilt 0.02 # gplat 0.05 # curve -4 # room 0.55 # size 0.9 # dry 0.25 # grsn 0.85 # grsndecay 5.5 # grsnbright 0.88 # seed 12345
+s "chord-hits-0916-185508" # grains 10 # sustain 0.5 # position 0.02 # spray 0.3 # follow 0 # chords "<Bm Bm(maj7) Bdim F#m>" # fit 0.75 0.98 # tune root # gain 0.9 # genv 1 # gtilt 0.02 # gplat 0.05 # curve -4 # room 0.55 # size 0.9 # dry 0.25 # grsn 0.85 # grsndecay 5.5 # grsnbright 0.88 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -859,7 +859,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **One body, many strikes** — the global resonator — the cloud is the exciter, nothing is per grain
 
 ```
-s "drum-hits-0912-121546" # euclid 9 16 # sustain 0.05 # position 0.05 # spray 0.4 # follow 0 # gain 0.6 # room 0.3 # size 0.7 # grsn 0.9 # grsnpitch 38 # grsndecay 8 # grsnbright 0.92 # seed 12345
+s "drum-hits-0912-121546" # euclid 9 16 # sustain 0.05 # position 0.05 # spray 0.4 # follow 0 # gain 0.6 # room 0.3 # size 0.7 # grsn 0.9 # grsnpitch 38 # grsndecay 8 # grsnbright 0.92 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -867,7 +867,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Struck every fourth** — the resonator as a RULE — three dry grains, then a rung one
 
 ```
-s "chord-hits-0915-232247" # grains 8 # sustain 0.9 # position 0.03 # spray 0.5 # follow 0 # gain 0.7 # genv 1 # gtilt 0.02 # gplat 0.03 # curve -4 # rsndecay 0.85 # rsnbright 0.86 # rsnmix 0.8 # rsnmodel 1 # room 0.4 # size 0.75 # every 4 0 (rsnpitch 57) # every 8 4 (rsnpitch 64) # sometimesBy 0.3 (pan 0.9) # seed 12345
+s "chord-hits-0915-232247" # grains 8 # sustain 0.9 # position 0.03 # spray 0.5 # follow 0 # gain 0.7 # genv 1 # gtilt 0.02 # gplat 0.03 # curve -4 # rsndecay 0.85 # rsnbright 0.86 # rsnmix 0.8 # rsnmodel 1 # room 0.4 # size 0.75 # every 4 0 (rsnpitch 57) # every 8 4 (rsnpitch 64) # sometimesBy 0.3 (pan 0.9) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -877,7 +877,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **ii – V – I in E** — leaf-cloud answers all three exactly
 
 ```
-s "chord-hits-0915-232247" # sustain 0.11 # position 0.4 # spray 0.6 # follow 0 # chords "<F#m(maj7) B7 E E>" # fit 0.5 0.95 # gain 0.8 # seed 12345
+s "chord-hits-0915-232247" # sustain 0.11 # position 0.4 # spray 0.6 # follow 0 # chords "<F#m(maj7) B7 E E>" # fit 0.5 0.95 # gain 0.8 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -885,7 +885,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Chromatic descent** — Bm → Bm(maj7) → Bdim → F#m
 
 ```
-s "chord-hits-0916-185508" # grains 12 # sustain 0.15 # position 0.35 # spray 0.5 # follow 0 # chords "<Bm Bm(maj7) Bdim F#m>" # fit 0.5 0.95 # gain 0.85 # seed 12345
+s "chord-hits-0916-185508" # grains 12 # sustain 0.15 # position 0.35 # spray 0.5 # follow 0 # chords "<Bm Bm(maj7) Bdim F#m>" # fit 0.5 0.95 # gain 0.85 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -893,7 +893,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Diminished drift** — chord per cycle, chance on top
 
 ```
-s "chord-hits-0915-232247" # euclid 11 16 # sustain 0.08 # position 0.45 # spray 0.85 # follow 0 # chords "<C#dim F#dim D#m B7>" # fit 0.5 0.95 # gain 0.7 # accelerate 0.15 # sometimesBy 0.3 (pan 0.9) # every 5 0 (speed -1) # seed 12345
+s "chord-hits-0915-232247" # euclid 11 16 # sustain 0.08 # position 0.45 # spray 0.85 # follow 0 # chords "<C#dim F#dim D#m B7>" # fit 0.5 0.95 # gain 0.7 # accelerate 0.15 # sometimesBy 0.3 (pan 0.9) # every 5 0 (speed -1) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -901,7 +901,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Wet progression** — a chord a cycle, through the whole chain
 
 ```
-s "chord-hits-0915-232247" # grains 14 # sustain 0.14 # position 0.4 # spray 0.6 # follow 0 # chords "<F#m(maj7) B7 E E>" # fit 0.5 0.95 # gain 0.75 # lpf 7000 # res 0.2 # room 0.6 # size 0.85 # dry 0.15 # delay 0.3 # delayfeedback 0.55 # lock 1 # every 5 0 (pshift 2) # sometimesBy 0.25 (crush 4) # seed 12345
+s "chord-hits-0915-232247" # grains 14 # sustain 0.14 # position 0.4 # spray 0.6 # follow 0 # chords "<F#m(maj7) B7 E E>" # fit 0.5 0.95 # gain 0.75 # lpf 7000 # res 0.2 # room 0.6 # size 0.85 # dry 0.15 # delay 0.3 # delayfeedback 0.55 # lock 1 # every 5 0 (pshift 2) # sometimesBy 0.25 (crush 4) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
@@ -909,7 +909,7 @@ Knobs: grain (grain length), position (read position), spray (spray), space (sen
 **Everything at once** — progression + euclid + chance + reversal
 
 ```
-s "chord-hits-0915-232247" # euclid 13 32 # sustain 0.06 # position 0.5 # spray 1 # follow 0 # chords "<E D Bm E F#m(maj7) B7 E E>" # fit 0.45 0.95 # gain 0.55 # accelerate 0.5 # every 3 0 (speed -1) # sometimesBy 0.4 (pan 0.95) # every 7 2 (length 0.3) # sometimesBy 0.2 (accelerate 1.5) # seed 12345
+s "chord-hits-0915-232247" # euclid 13 32 # sustain 0.06 # position 0.5 # spray 1 # follow 0 # chords "<E D Bm E F#m(maj7) B7 E E>" # fit 0.45 0.95 # gain 0.55 # accelerate 0.5 # every 3 0 (speed -1) # sometimesBy 0.4 (pan 0.95) # every 7 2 (length 0.3) # sometimesBy 0.2 (accelerate 1.5) # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)

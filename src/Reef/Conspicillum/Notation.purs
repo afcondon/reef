@@ -35,9 +35,15 @@
 -- |   `fix snare 0.5 (op x)`; `x` may be `"a b c"` (one per firing) or
 -- |   `"<a b c>"` (one per bar), as in Tidal
 -- | - `seed n`
+-- | - `knobs "grainLength readPosition spray sendLevelB:space"` — the four
+-- |   knobs on the module's face, by the parameters' stable identifiers
+-- |   (`Parameter.identifier`), each with its label after `:` where it is not
+-- |   the parameter's own (`_` for a space). The rig never reads it.
 module Reef.Conspicillum.Notation
   ( Line
+  , Knob
   , defaultLine
+  , knobLabel
   , parse
   , print
   , opNames
@@ -65,9 +71,21 @@ import Data.String.CodeUnits as SCU
 import Reef.Conspicillum.Decimal (trimmed)
 import Reef.Conspicillum.Cloud (Chain, Fx, Kind(..), ResonatorFollow(..), Rule, Spec, WarpMode(..), When(..), noChain, noFx, noProgression, noSteps, noSwing, noWalk, noWarp, oneBar)
 import Reef.Conspicillum.Harmonic (Target, chordNamed, nameOfChord)
+import Reef.Conspicillum.Parameter (Parameter, describe, fromIdentifier, identifier)
 import Reef.Conspicillum.Protocol (fromWireRule, toWireRule)
 
-type Line = { set :: String, n :: Maybe Int, seed :: Int, spec :: Spec }
+type Line = { set :: String, n :: Maybe Int, seed :: Int, spec :: Spec, knobs :: Array Knob }
+
+-- | A knob on the module's face: a parameter, and what this scene calls it.
+-- | The same parameter can be "chaos" in one preset and "jump" in another,
+-- | because what it does musically depends on the rest of the scene. Part of
+-- | the line (CR-29, 2026-10-29), so a scene written in Limulus chooses its
+-- | own knobs.
+type Knob = { parameter :: Parameter, label :: String }
+
+-- | What a parameter is called on a knob unless the line says otherwise.
+knobLabel :: Parameter -> String
+knobLabel = String.toLower <<< _.label <<< describe
 
 -- | Send A is orbit 10 (outputs 3/4), send B orbit 11 (5/6), both dry, both at
 -- | 0.8: the rig's standard pair, so a line only mentions them to change them.
@@ -76,6 +94,7 @@ defaultLine =
   { set: ""
   , n: Nothing
   , seed: 1
+  , knobs: []
   , spec:
       { onsets: even 16
       , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
@@ -219,6 +238,7 @@ term l toks = case uncons toks of
           Right l { set = name, n = Just n }
         _ -> Right l { set = s, n = Nothing }
     "seed" -> one w \a -> int w a <#> \k -> l { seed = k }
+    "knobs" -> one w \a -> str w a >>= knobList <#> \ks -> l { knobs = ks }
     "grains" -> one w \a -> int w a >>= \k -> withSpec _ { onsets = even k }
     "euclid" -> case args of
       [ a, b ] -> do
@@ -470,6 +490,7 @@ print l = intercalate " # " (filter (_ /= "") parts)
          ]
       <> map ruleText sp.rules
       <> [ if l.seed == defaultLine.seed then "" else "seed " <> show l.seed ]
+      <> [ if null l.knobs then "" else "knobs " <> q (intercalate " " (map knobText l.knobs)) ]
   level i s = maybe 0.0 _.level (index s.sends i)
   onsetsTerm
     | sp.onsets == d.onsets = ""
@@ -477,6 +498,24 @@ print l = intercalate " # " (filter (_ /= "") parts)
         EvenGrains k -> "grains " <> show k
         Euclidean k n -> "euclid " <> show k <> " " <> show n
         Placed os -> "onsets " <> q (intercalate " " (map fmt os))
+
+-- | Up to four knobs, `identifier` or `identifier:label`.
+knobList :: String -> Either String (Array Knob)
+knobList s = do
+  ks <- Array.foldM one' [] (filter (_ /= "") (String.split (String.Pattern " ") s))
+  if length ks > 4 then Left "knobs: four at most" else Right ks
+  where
+  one' acc w = do
+    let { name, label } = case String.indexOf (String.Pattern ":") w of
+          Just i -> { name: String.take i w, label: Just (String.replaceAll (String.Pattern "_") (String.Replacement " ") (String.drop (i + 1) w)) }
+          Nothing -> { name: w, label: Nothing }
+    parameter <- note ("knobs: no parameter called " <> name) (fromIdentifier name)
+    Right (snoc acc { parameter, label: fromMaybe (knobLabel parameter) label })
+
+knobText :: Knob -> String
+knobText k
+  | k.label == knobLabel k.parameter = identifier k.parameter
+  | otherwise = identifier k.parameter <> ":" <> String.replaceAll (String.Pattern " ") (String.Replacement "_") k.label
 
 -- | How a cycle's onsets are laid out, as the shortest thing that makes them:
 -- | `k` even grains, `k` hits spread euclidean over `n` steps (tried against

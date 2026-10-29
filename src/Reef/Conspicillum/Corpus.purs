@@ -60,6 +60,8 @@ module Reef.Conspicillum.Corpus
   , weights
   , pick
   , grainAt
+  , levelGain
+  , inSound
   , clampTo
   , wrap01
   , emptyQuery
@@ -67,9 +69,10 @@ module Reef.Conspicillum.Corpus
 
 import Prelude
 
-import Data.Array (filter, index, length, zipWith, (!!))
+import Data.Array (filter, index, length, null, zipWith, (!!))
 import Data.Foldable (foldl, sum)
 import Data.Int (floor, toNumber)
+import Reef.Numeric (sqrt)
 import Data.Maybe (Maybe(..))
 import Reef.Conspicillum.Harmonic (Harmonic, fit)
 import Reef.Marbles (Seed, nextRand)
@@ -106,6 +109,15 @@ type Grainable =
   -- | threshold — and a low threshold is how a snare rule starts catching the
   -- | clap and the kick's click, which is sometimes the point.
   , hits   :: Hits
+  -- | Where the sample sounds, as spans of it (0..1), in order: everything
+  -- | above a threshold of its own peak (`build-corpora.py`, −24 dB). A hit is
+  -- | one span and then its tail, which is left out. Empty: not measured, so
+  -- | the whole sample counts (2026-10-29, CR-28).
+  , sounding :: Array { from :: Number, to :: Number }
+  -- | The file's own peak, 0..1, which a grain is normalised by
+  -- | (`levelGain`). 0: not measured, so no normalising. Not `peak`, which
+  -- | is Quadrat's measurement for querying, taken differently.
+  , level  :: Number
   }
 
 type Hits = { kick :: Array Number, snare :: Array Number, hat :: Array Number }
@@ -339,13 +351,51 @@ grainAt cl head g s =
     room = 1.0 - w
     jitter = (u - 0.5) * cl.spray
     begin =
-      if cl.follow == 0.0 then clampTo 0.0 room (cl.position * room + jitter)
+      if cl.follow == 0.0 then inSound g.sounding w room (clampTo 0.0 room (cl.position * room + jitter))
       else clampTo 0.0 room (wrap01 (head + cl.position + jitter))
   in
     { grain: { n: g.index, begin, end: begin + w, sustain: cl.sustain }, seed }
 
 clamp01 :: Number -> Number
 clamp01 = clampTo 0.0 1.0
+
+-- | **A granulator reads only where the sample sounds** (CR-28). The scan
+-- | point, as a share of the room a window has (`at / room`), is laid along
+-- | the sounding spans end to end, so `position` 0..1 runs from the start of
+-- | the sound to the end of it and `spray` scatters within it, never into a
+-- | hit's silent tail or the gaps of a cut-up. The window's width comes back
+-- | off the far end, so `position 1` ends where the sound ends. A sample with
+-- | no spans measured reads as before.
+-- |
+-- | Only `+ - * /` and comparison, as the rest of the select path, so the
+-- | browser and the rig agree to the bit. A tape that follows the bar is not
+-- | moved: it has to read in time, silence and all.
+inSound :: Array { from :: Number, to :: Number } -> Number -> Number -> Number -> Number
+inSound spans w room at
+  | null spans = at
+  | otherwise =
+      let
+        p = if room <= 0.0 then 0.0 else at / room
+        total = sum (map (\sp -> sp.to - sp.from) spans)
+        x = along (p * total) 0 spans
+      in
+        clampTo 0.0 room (x - p * w)
+  where
+  along d i ss = case index ss i of
+    Nothing -> 1.0
+    Just sp ->
+      let len = sp.to - sp.from
+      in if d <= len || i == length ss - 1 then sp.from + (if d < len then d else len) else along (d - len) (i + 1) ss
+
+-- | **A grain's gain, normalised** by its sample's measured `level` toward a
+-- | peak of 0.7, within ×0.5..×6, so a quiet recording and a hot one play at
+-- | about one loudness. SuperDirt raises `gain` to the fourth power, so the
+-- | amplitude factor goes in as its fourth root: two square roots, which are
+-- | correctly rounded on V8 and the BEAM alike, where `pow` is not.
+levelGain :: Grainable -> Number
+levelGain g
+  | g.level <= 0.0 = 1.0
+  | otherwise = sqrt (sqrt (clampTo 0.5 6.0 (0.7 / g.level)))
 
 -- | Into [0, 1), for a read head that runs off one end of the tape and back on
 -- | at the other.

@@ -87,7 +87,7 @@ import Data.Int (floor, round, toNumber)
 import Data.Int.Bits (and)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Reef.Bits (xorshift32)
-import Reef.Conspicillum.Corpus (Cloud, Corpus, Grainable, Query, clampTo, grainAt, pick, wrap01)
+import Reef.Conspicillum.Corpus (Cloud, Corpus, Grainable, Query, clampTo, grainAt, levelGain, pick, wrap01)
 import Reef.Conspicillum.Harmonic (Target)
 import Reef.Marbles (Seed, nextRand, seedFrom)
 
@@ -884,7 +884,10 @@ cycleUnder corpus query spec base cyc =
             }
           sc = scoresAt g (if spec.cloud.follow == 0.0 then read else onTape read)
           r = foldl (applyRule ordinal sc) { e: base', seed: s2, fired: acc.fired, i: 0 } spec.rules
-        in { seed: r.seed, head: hd, stepSeed: ss, fired: r.fired, out: snoc acc.out r.e }
+          -- normalised after the rules, so a rule's gain is relative to
+          -- the sample's level as the scene's is (CR-28)
+          e' = r.e { gain = r.e.gain * levelGain g }
+        in { seed: r.seed, head: hd, stepSeed: ss, fired: r.fired, out: snoc acc.out e' }
 
   -- A ratcheted grain's slot runs to the next onset (round the bar for the
   -- last), and its repeats share it evenly.

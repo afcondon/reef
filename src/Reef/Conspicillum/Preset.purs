@@ -28,6 +28,8 @@ import Prelude
 import Data.Either (Either(..))
 import Reef.Conspicillum.Corpus (Query)
 import Reef.Conspicillum.Notation (Line, parse, print)
+import Reef.Conspicillum.Notation as Notation
+import Data.Array (null)
 import Data.Maybe (Maybe(..))
 import Reef.Conspicillum.Parameter (Parameter, identifier)
 import Reef.Conspicillum.Protocol (WireQuery, WireSpec, toWireQuery, toWireSpec)
@@ -64,10 +66,9 @@ bankName = case _ of
   Resonators -> "Resonator"
   Progressions -> "Progression"
 
--- | A knob a preset puts on the panel: a parameter, and what this preset calls
--- | it. The same parameter can be "chaos" in one preset and "jump" in another,
--- | because what it does musically depends on the rest of the scene.
-type Knob = { parameter :: Parameter, label :: String }
+-- | A knob a preset puts on the panel (`Notation.Knob`): part of the line,
+-- | since CR-29.
+type Knob = Notation.Knob
 
 knob :: Parameter -> String -> Knob
 knob parameter label = { parameter, label }
@@ -89,7 +90,6 @@ type Preset =
   , about :: String
   , line :: Line
   , query :: Query
-  , knobs :: Array Knob
   }
 
 resolve :: PresetSource -> Either String Preset
@@ -99,9 +99,10 @@ resolve source = case parse source.line of
     { name: source.name
     , bank: source.bank
     , about: source.about
-    , line
+    -- the knobs a line names win; a line that names none takes the
+    -- preset's own list
+    , line: if null line.knobs then line { knobs = source.knobs } else line
     , query: source.query
-    , knobs: source.knobs
     }
 
 -- ── for pages ────────────────────────────────────────────────────────────────
@@ -140,5 +141,5 @@ presetOnWire p =
   , seed: p.line.seed
   , spec: toWireSpec p.line.spec
   , query: toWireQuery p.query
-  , knobs: map (\k -> { parameter: identifier k.parameter, label: k.label }) p.knobs
+  , knobs: map (\k -> { parameter: identifier k.parameter, label: k.label }) p.line.knobs
   }

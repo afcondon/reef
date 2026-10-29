@@ -111,7 +111,7 @@ main = do
   -- i/16 — scaled by `room` the way the scan point is, the last slice would
   -- read a sixteenth early — and a `position` of a beat must wrap, so the
   -- grain on the last beat reads the first.
-  let tape = { index: 0, secs: 2.0, peak: 1.0, rms: 0.5, zcr: 0.0, tilt: 0.0, decay: 0.0, cell: [], notes: [], params: [], hits: CC.noHits }
+  let tape = { index: 0, secs: 2.0, peak: 1.0, rms: 0.5, zcr: 0.0, tilt: 0.0, decay: 0.0, cell: [], notes: [], params: [], hits: CC.noHits, sounding: [], level: 0.0 }
       followAt pos at = (CC.grainAt { sustain: 0.125, position: pos, spray: 0.0, follow: 1.0 } at tape (seedFrom 1)).grain.begin
       sixteenths = map (\k -> toNumber k / 16.0) (range 0 15)
   assertEqual' "Conspicillum follow: sixteen grains read the bar in order"

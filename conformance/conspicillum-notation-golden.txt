@@ -8,3 +8,6 @@ s "x" # onsets "0 0.3 0.55" # position 0.25 # accelerate -0.5 # always (send 1)
 ERR walk takes jump, hold and home
 ERR every takes n, k and an (op x)
 ERR unknown word: bogus
+s "x" # follow 0 # knobs "grainLength readPosition spray sendLevelB:space"
+s "x" # seed 7 # knobs "walkJump:a_lot_of_chaos tapeFollow"
+ERR knobs: no parameter called bogus

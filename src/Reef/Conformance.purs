@@ -61,6 +61,7 @@ module Reef.Conformance
   , conspicillumVirtualRun
   , conspicillumWarpRun
   , conspicillumNotationRun
+  , conspicillumSoundingRun
   , conspicillumParameterRun
   , conspicillumPresetRun
   , conspicillumDisplayRun
@@ -105,7 +106,7 @@ import Reef.Marbles (Seed, seedFrom, rollValue)
 import Reef.Vetula.Perf (Perf, VDest(..), VRenderer(..), cursorAt, odoCursorAt, odoPcsAt, renderVoiceMidiAt) as VP
 import Reef.Vetula.Protocol (decodePerf, encodePerf) as VP
 import Reef.Conspicillum.Corpus
-  (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, noHits, pick) as CC
+  (Axis(..), Cmp(..), Grainable, Toward(..), emptyQuery, grainAt, levelGain, noHits, pick) as CC
 import Reef.Conspicillum.Notation as CN
 import Reef.Conspicillum.Parameter as PM
 import Reef.Conspicillum.Preset as PR
@@ -1393,7 +1394,7 @@ conspicillumCorpus =
   ]
   where
   g ix secs peak rms zcr tilt decay cell params =
-    { index: ix, secs, peak, rms, zcr, tilt, decay, cell, params, notes: [], hits: CC.noHits }
+    { index: ix, secs, peak, rms, zcr, tilt, decay, cell, params, notes: [], hits: CC.noHits, sounding: [], level: 0.0 }
   p nm level = { name: nm, level }
 
 -- | The scene: a filter on a MEASURED axis and one on an INTENTIONAL axis
@@ -1456,6 +1457,31 @@ conspicillumRun = case CP.decodeScene (CP.encodeScene conspicillumScene) of
   six :: Number -> String
   six x = show (round (x * 1000000.0))
 
+
+-- ── Conspicillum: reading where the sample sounds, at one loudness (CR-28) ──
+
+-- | A grain's window over a sample with two sounding spans and a silent gap
+-- | and tail, at five scan points and three sprays, then each grain's gain
+-- | normalised by the sample's level, for four levels (one unmeasured). The
+-- | walk along the spans and the fourth root are the parts that must agree to
+-- | the bit; they are only `+ - * /`, comparison and `sqrt`.
+conspicillumSoundingRun :: String
+conspicillumSoundingRun = intercalate "\n" (windows <> levels)
+  where
+  sample spans lvl =
+    { index: 0, secs: 4.0, peak: 0.3, rms: 0.05, zcr: 900.0, tilt: 0.1, decay: 0.4
+    , cell: [], params: [], notes: [], hits: CC.noHits, sounding: spans, level: lvl }
+  cut = sample [ { from: 0.0, to: 0.1 }, { from: 0.4, to: 0.62 } ] 0.25
+  hit = sample [ { from: 0.0, to: 0.18 } ] 0.3
+  windows = do
+    Tuple name g <- [ Tuple "cut" cut, Tuple "hit" hit, Tuple "whole" (sample [] 0.0) ]
+    spray <- [ 0.0, 0.3, 1.0 ]
+    position <- [ 0.0, 0.25, 0.5, 0.75, 1.0 ]
+    let { grain } = CC.grainAt { sustain: 0.2, position, spray, follow: 0.0 } 0.0 g (seedFrom 99)
+    pure (name <> " spray " <> six spray <> " pos " <> six position <> " b " <> six grain.begin <> " e " <> six grain.end)
+  levels = [ 0.0, 0.05, 0.25, 0.9 ] <#> \l -> "level " <> six l <> " gain " <> six (CC.levelGain (sample [] l))
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
 
 -- ── 13. Conspicillum: the cloud over a cycle ─────────────────────────────────
 
@@ -1579,7 +1605,7 @@ conspicillumChordCorpus =
   where
   g ix secs peak rms zcr tilt decay notes =
     { index: ix, secs, peak, rms, zcr, tilt, decay
-    , cell: [], params: [], notes, hits: CC.noHits }
+    , cell: [], params: [], notes, hits: CC.noHits, sounding: [], level: 0.0 }
 
 -- | A ii-V-i in D minor, as (name, target). Roots and basses are given
 -- | explicitly because a realised `Harmonia.Chord` is SORTED and its root
@@ -1670,7 +1696,7 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
 
   tape =
     { index: 0, secs: 2.0, peak: 0.6, rms: 0.08, zcr: 4000.0, tilt: 0.2, decay: 2.0
-    , cell: [], params: [], notes: [], hits: CC.noHits }
+    , cell: [], params: [], notes: [], hits: CC.noHits, sounding: [], level: 0.0 }
 
   sectorScene =
     { corpus: { name: "fd-beat-bar", samples: [ tape ] }
@@ -1744,7 +1770,7 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
 
   tape =
     { index: 0, secs: 2.0, peak: 0.6, rms: 0.08, zcr: 4000.0, tilt: 0.2, decay: 2.0
-    , cell: [], params: [], notes: [], hits: { kick, snare, hat } }
+    , cell: [], params: [], notes: [], hits: { kick, snare, hat }, sounding: [], level: 0.0 }
 
   fixScene =
     { corpus: { name: "fd-beat-bar", samples: [ tape ] }
@@ -1795,7 +1821,7 @@ conspicillumPermuteRun = case CP.decodeScene (CP.encodeScene permuteScene) of
 
   tape =
     { index: 0, secs: 4.0, peak: 0.45, rms: 0.08, zcr: 900.0, tilt: 0.1, decay: 2.0
-    , cell: [], params: [], notes: [], hits: CC.noHits }
+    , cell: [], params: [], notes: [], hits: CC.noHits, sounding: [], level: 0.0 }
 
   permuteScene =
     { corpus: { name: "prog-g-2bar", samples: [ tape ] }
@@ -1845,7 +1871,7 @@ conspicillumVirtualRun = case CP.decodeScene (CP.encodeScene virtualScene) of
 
   chord k secs =
     { index: k, secs, peak: 0.5, rms: 0.1, zcr: 800.0, tilt: 0.1, decay: 1.5
-    , cell: [], params: [], notes: [], hits: CC.noHits }
+    , cell: [], params: [], notes: [], hits: CC.noHits, sounding: [], level: 0.0 }
 
   virtualScene =
     { corpus: { name: "chord-hits", samples: [ chord 0 2.0, chord 1 2.5, chord 2 3.0 ] }
@@ -1892,7 +1918,7 @@ conspicillumWarpRun =
 
   tape =
     { index: 0, secs: 2.0, peak: 0.6, rms: 0.08, zcr: 4000.0, tilt: 0.2, decay: 2.0
-    , cell: [], params: [], notes: [], hits: CC.noHits }
+    , cell: [], params: [], notes: [], hits: CC.noHits, sounding: [], level: 0.0 }
 
   scene warp =
     { corpus: { name: "fd-beat-bar", samples: [ tape ] }
@@ -1933,6 +1959,9 @@ conspicillumNotationRun = intercalate "\n" (map one lines)
     , "s \"x\" # walk 0.2 0.1"
     , "s \"x\" # every 4 (speed -1)"
     , "s \"x\" # bogus 3"
+    , "s \"x\" # follow 0 # knobs \"grainLength readPosition spray sendLevelB:space\""
+    , "s \"x\" # knobs \"walkJump:a_lot_of_chaos tapeFollow\" # seed 7"
+    , "s \"x\" # knobs \"grainLength bogus\""
     ]
 
 
@@ -1984,10 +2013,14 @@ conspicillumPresetRun = intercalate "\n" (map one PS.presetSources <> [ total ])
     Right p -> intercalate " | "
       [ p.name
       , PR.bankName p.bank
-      , intercalate ", " (map (\k -> k.label <> "=" <> PM.identifier k.parameter) p.knobs)
+      , intercalate ", " (map (\k -> k.label <> "=" <> PM.identifier k.parameter) p.line.knobs)
       , if null p.line.spec.progression.chords then "no progression"
         else show (length p.line.spec.progression.chords) <> " chords"
-      , if CN.print p.line == source.line then "canonical" else "REPRINTS AS " <> CN.print p.line
+      -- the line as written, before the preset's own knobs join it
+      , case CN.parse source.line of
+          Right written | CN.print written == source.line -> "canonical"
+          Right written -> "REPRINTS AS " <> CN.print written
+          Left problem -> "ERR " <> problem
       ]
   total = case PS.presets of
     Left problem -> "presets: ERR " <> problem
@@ -2011,7 +2044,7 @@ conspicillumDisplayRun = intercalate "\n" (presetLines <> drawings)
       facts = fromMaybe { name: p.line.set, tape: Nothing, samples: [] } (find (\f -> f.name == p.line.set) displaySets)
       material = DI.materialOf { line: p.line, samples: facts.samples, tape: facts.tape }
       said = SE.plainText p.line.spec
-        (SE.sentences { line: p.line, material, knobs: map _.parameter p.knobs })
+        (SE.sentences { line: p.line, material, knobs: map _.parameter p.line.knobs })
       rows = map (\r -> "[" <> r.which <> " / " <> r.what <> " / " <> r.amount <> "]") (SE.ruleRows p.line.spec.rules)
     in
       intercalate " | " ([ p.name, DI.materialName material, show (length (DI.segments material)) <> " segments", said ] <> rows)

@@ -204,7 +204,7 @@ presetList = case presets of
     , Notation.print p.line
     , "```"
     , ""
-    , "Knobs: " <> intercalate ", " (map (\k -> k.label <> " (" <> (describe k.parameter).label <> ")") p.knobs)
+    , "Knobs: " <> intercalate ", " (map (\k -> k.label <> " (" <> (describe k.parameter).label <> ")") p.line.knobs)
         <> (if null p.query.clauses && isNothing p.query.weighting then "" else ". Has a query.")
     , ""
     ]

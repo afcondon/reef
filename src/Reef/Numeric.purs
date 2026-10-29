@@ -13,7 +13,7 @@
 -- | co-locates the engine's sole transcendental — see `Reef.Conformance.betaProbe`,
 -- | which probes whether the two native `pow`s agree closely enough for the
 -- | generative path to stay bit-identical across runtimes.
-module Reef.Numeric (pow, ln, sin) where
+module Reef.Numeric (pow, ln, sin, sqrt) where
 
 -- | The first argument raised to the power of the second. Delegates to the
 -- | runtime's native primitive; IEEE 754 does not mandate a correctly-rounded
@@ -31,3 +31,9 @@ foreign import ln :: Number -> Number
 -- | not in the purerl era's numbers. Needed by `Reef.Selene.Model`'s LFO
 -- | preview, which the rig compiles with the rest of Selene's language.
 foreign import sin :: Number -> Number
+
+-- | Square root. For the same reason again (`Data.Number.sqrt` is not in the
+-- | purerl era's numbers). Unlike `pow`, IEEE 754 requires `sqrt` to be
+-- | correctly rounded, so V8 and the BEAM agree to the bit: Conspicillum's
+-- | level normalisation leans on that (`Corpus.levelGain`).
+foreign import sqrt :: Number -> Number
