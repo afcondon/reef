@@ -176,7 +176,12 @@ data PerfDragSrc = FromPalette PerfFx | FromBox Int Int
 -- | WebMIDI / feed Odonus locally); `TRig` is a rig-only destination (CV/OSC/ES-9/
 -- | FH-2) the browser can't sound — so in Solo it GHOSTS (silent, greyed). Only
 -- | the terminal forks; the whole layer body above it is shared across runtimes.
-data PerfTerm = TMidi | TOdo | TRig
+-- |
+-- | `TOdo` and `TGrid` make the voice a **conductor** (AC, 2026-10-29): its
+-- | chords feed Odonus's output (`# out odo`) or its grid (`# grid odo`), and
+-- | it never plays a note itself, mute or no mute. A voice plays or
+-- | conducts, never both: with eight voices, at most two go to conducting.
+data PerfTerm = TMidi | TOdo | TGrid | TRig
 
 derive instance eqPerfTerm :: Eq PerfTerm
 
@@ -184,6 +189,7 @@ termLabel :: PerfTerm -> String
 termLabel = case _ of
   TMidi -> "→ midi"
   TOdo -> "→ odo"
+  TGrid -> "→ odo grid"
   TRig -> "→ rig"
 
 -- | Short pill label for the terminal selector.
@@ -191,12 +197,21 @@ termShort :: PerfTerm -> String
 termShort = case _ of
   TMidi -> "midi"
   TOdo -> "odo"
+  TGrid -> "grid"
   TRig -> "rig"
+
+-- | A conductor: its chords feed Odonus, and it never sounds.
+termConducts :: PerfTerm -> Boolean
+termConducts = case _ of
+  TOdo -> true
+  TGrid -> true
+  _ -> false
 
 nextTerm :: PerfTerm -> PerfTerm
 nextTerm = case _ of
   TMidi -> TOdo
-  TOdo -> TRig
+  TOdo -> TGrid
+  TGrid -> TRig
   TRig -> TMidi
 
 -- | A rig-only terminal has no local (browser) realisation.

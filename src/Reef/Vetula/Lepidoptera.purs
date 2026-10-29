@@ -122,6 +122,7 @@ printVoice v = joinWith " " ([ "ch" <> show v.channel, srcTok, quote v.seqText ]
   directives = bind v.stack layerDirs <> termDir <> muteDir
   termDir = case v.term of
     TMidi -> []
+    TGrid -> [ "grid odo" ]
     t -> [ "out " <> termShort t ]
   muteDir = if v.muted then [ "mute" ] else []
   -- interleave a `#` before each directive: [d1,d2] -> ["#",d1,"#",d2]
@@ -278,6 +279,8 @@ foldMods = foldl step { stack: [], term: TMidi, muted: false }
          "afterbar" -> acc { stack = setLastWhen (AfterBar (max 0 (argInt 8 arg))) acc.stack }
          "whenmod" -> acc { stack = setLastWhen (whenmodOf arg) acc.stack }
          "out" -> acc { term = parseTerm arg }
+         -- `# grid odo`: its chords feed Odonus's grid; it plays nothing
+         "grid" | arg == "odo" -> acc { term = TGrid }
          "mute" -> acc { muted = true }
          _ -> case fxOfVerb m.verb arg of
                 Just fx -> acc { stack = snoc acc.stack (mkLayer fx) }
