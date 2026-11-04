@@ -51,9 +51,9 @@ sentences
   -> Array Sentence
 sentences { line, material, knobs } =
   filter (not <<< null)
-    [ what <> onsets <> grain
-    , reading
-    , walking
+    [ if played then sampler else what <> onsets <> grain
+    , if played then [] else reading
+    , if played then [] else walking
     , order
     , stepTable
     , swinging
@@ -68,6 +68,11 @@ sentences { line, material, knobs } =
   -- Shown when doing something, or when a knob is on it.
   shows parameter active = active || elem parameter knobs
   moved parameter = read parameter spec /= neutral parameter
+
+  played = spec.samplePattern /= ""
+  sampler =
+    [ Words "Play samples ", Code spec.samplePattern, Words " of ", SetName line.set
+    , Words (if spec.cut == 0 then ", each in full." else ", each in full until the next.") ]
 
   what = case material of
     HitsAsBars keys ->

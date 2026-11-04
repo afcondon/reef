@@ -200,7 +200,7 @@ it (`tune root`, `tune bass`, `tune tones`). Named for what the chord-hit corpor
 
 ## Presets
 
-86 presets in 12 banks. Each is its line, and the knobs it puts on the panel; a query, where it has one, is noted.
+90 presets in 13 banks. Each is its line, and the knobs it puts on the panel; a query, where it has one, is noted.
 
 ### Early
 
@@ -913,4 +913,38 @@ s "chord-hits-0915-232247" # euclid 13 32 # sustain 0.06 # position 0.5 # spray 
 ```
 
 Knobs: grain (grain length), position (read position), spray (spray), space (send B)
+
+### Sampler
+
+**Four chords** — four whole chords a bar, ringing into each other
+
+```
+s "chord-hits-0924-171929" # n "0 4 7 5" # seed 12345 # knobs "speed gain:level pan sendLevelB:space"
+```
+
+Knobs: speed (speed), level (gain), pan (pan), space (send B)
+
+**Chords in a rhythm** — a Tidal pattern choosing the chords, each ending the last
+
+```
+s "chord-hits-0924-171929" # n "<0 4>(3,8) [7 5]" # cut 1 # seed 12345 # knobs "speed gain:level pan sendLevelB:space"
+```
+
+Knobs: speed (speed), level (gain), pan (pan), space (send B)
+
+**Stacked** — two chords at once, alternating pairs, each pair ending the last
+
+```
+s "chord-hits-0924-171929" # n "<[0,4] [7,5]>" # cut 1 # seed 12345 # knobs "speed gain:level pan sendLevelB:space"
+```
+
+Knobs: speed (speed), level (gain), pan (pan), space (send B)
+
+**Slow chords** — whole 14-second chords every 12 seconds at 120 bpm, overlapping by two
+
+```
+s "chord-hits-0915-232247" # n "<0 4 7 5>/6" # seed 12345 # knobs "gain:level pan sendLevelB:space"
+```
+
+Knobs: level (gain), pan (pan), space (send B)
 

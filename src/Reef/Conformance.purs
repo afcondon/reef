@@ -62,6 +62,7 @@ module Reef.Conformance
   , conspicillumWarpRun
   , conspicillumNotationRun
   , conspicillumSoundingRun
+  , conspicillumPlayRun
   , conspicillumParameterRun
   , conspicillumPresetRun
   , conspicillumDisplayRun
@@ -115,7 +116,7 @@ import Reef.Conspicillum.Display (Material(..), SampleFacts, TapeFacts, colourAt
 import Reef.Conspicillum.Sentence (plainText, ruleRows, sentences) as SE
 import Reef.Conspicillum.Decimal as Decimal
 import Reef.Conspicillum.Protocol (Scene, decodeScene, encodeScene) as CP
-import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
+import Reef.Conspicillum.Cloud (Kind(..), Op(..), Spec, Step(..), WarpMode(..), When(..), chordOf, cycleOf, cycleOfPlays, noChain, noFx, noSteps, noSwing, noWalk, noProgression, noWarp, oneBar, rule) as CL
 import Reef.Conspicillum.Harmonic (Target, fit, nameOfChord) as CH
 import Reef.Euclid as Euclid
 import Reef.Selene.Model (defaultSelene, overlaps, lfoAt, ccOfValue, ccIn, midiLearn, midiMap, midiUnmap, midiBindings, midiSends, midiValueAt, throwStartAt, lengthOf, lengthWord, MidiSignal(..), ThrowStart(..), LfoWave(..), OutputRange(..), rangeToWire, voltsLevel, voltClipped, voltWord, voltOf) as SM
@@ -1483,6 +1484,39 @@ conspicillumSoundingRun = intercalate "\n" (windows <> levels)
   six :: Number -> String
   six x = show (round (x * 1000000.0))
 
+-- | **A sampler cycle** (CR-32). Plays as the rig hands them over: a sample each
+-- | read whole at its own length, an index past the end wrapping, a rest being
+-- | silence and not a cloud, ratchet and sends still applying, and the cloud
+-- | that ignores `plays` when the line has no pattern.
+conspicillumPlayRun :: String
+conspicillumPlayRun = intercalate "\n" (printed <> cases)
+  where
+  sample index secs =
+    { index, secs, peak: 0.3, rms: 0.05, zcr: 900.0, tilt: 0.1, decay: 0.4
+    , cell: [], params: [], notes: [], hits: CC.noHits, sounding: [], level: 0.0 }
+  corpus = { name: "chords", samples: [ sample 0 2.5, sample 1 13.0, sample 2 0.75 ] }
+  plays = [ { at: 0.0, index: 0 }, { at: 0.25, index: 1 }, { at: 0.5, index: 5 }, { at: 0.875, index: -1 } ]
+  lineOf text = either (const CN.defaultLine) identity (CN.parse text)
+  cycleText text ps =
+    let l = lineOf text
+    in text <> " :: " <> intercalate " | " (map emitText (CL.cycleOfPlays ps corpus CC.emptyQuery l.spec l.seed 3))
+  emitText e = six e.at <> " n" <> show e.n <> " " <> six e.begin <> " " <> six e.end
+    <> " su" <> six e.sustain <> " sp" <> six e.speed <> " cut" <> show e.cut <> " o" <> show e.chain.orbit
+  printed = [ "s \"chords\" # n \"<0 4>(3,8) [7 5]\" # seed 3", "s \"chords\" # n \"<0 4>/6\" # cut 1 # seed 3" ] <#> \text -> CN.print (lineOf text)
+  cases =
+    [ cycleText "s \"chords\" # n \"0 1 5 ~\"" plays
+    , cycleText "s \"chords\" # n \"0 1 5 ~\" # cut 1" plays
+    , cycleText "s \"chords\" # n \"[0,1]\" # cut 2" [ { at: 0.0, index: 0 }, { at: 0.0, index: 1 } ]
+    , cycleText "s \"chords\" # n \"~\"" []
+    , cycleText "s \"chords\" # n \"0 1\" # speed 0.5" (take 2 plays)
+    , cycleText "s \"chords\" # n \"0 1\" # speed -2" (take 2 plays)
+    , cycleText "s \"chords\" # n \"0\" # always (ratchet 2)" (take 1 plays)
+    , cycleText "s \"chords\" # n \"0\" # always (send 1)" (take 1 plays)
+    , cycleText "s \"chords\" # grains 2 # sustain 0.5" plays
+    ]
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
 -- ── 13. Conspicillum: the cloud over a cycle ─────────────────────────────────
 
 -- | Cycles rendered, and the one asked for OUT OF ORDER.
@@ -1502,7 +1536,7 @@ conspicillumSpec :: CL.Spec
 conspicillumSpec =
   { onsets: [ 0.0, 0.125, 0.1875, 0.375, 0.5, 0.625, 0.6875, 0.875 ]
   , cloud: { sustain: 0.05, position: 0.4, spray: 0.3, follow: 0.0 }
-  , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression
+  , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression, samplePattern: "", cut: 0
   , rules:
       -- The headline, and the thing no hardware granulator can express: every
       -- third grain, counted ACROSS cycles, plays backwards. Eight onsets a
@@ -1709,7 +1743,7 @@ conspicillumSectorRun = case CP.decodeScene (CP.encodeScene sectorScene) of
           -- and grain lengths all move, and the ratchet subdivides the swung
           -- slot, which is what the golden pins.
         , swing: { tape: 0.6, play: 0.55, grid: 16 }
-        , tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression
+        , tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression, samplePattern: "", cut: 0
         , rules:
             [ CL.rule (CL.Every 16 14) (CL.OpRatchet 3.0)
             , CL.rule (CL.Every 8 7) (CL.OpShift (-0.0625))
@@ -1779,7 +1813,7 @@ conspicillumFixRun = case CP.decodeScene (CP.encodeScene fixScene) of
         { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
         , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
         , walk: { jump: 0.15, hold: 0.1, home: 0.1, grid: 16, reach: 0 }
-        , swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression
+        , swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps, warp: CL.noWarp, progression: CL.noProgression, samplePattern: "", cut: 0
         , rules:
             [ CL.rule (CL.Hit CL.Snare 0.5) (CL.OpPshift 1.5)
             , { when: CL.Hit CL.Kick 0.5, op: CL.OpRsnPitch 0.0
@@ -1833,7 +1867,7 @@ conspicillumPermuteRun = case CP.decodeScene (CP.encodeScene permuteScene) of
         , swing: CL.noSwing
         , tape: { bars: 2, order: [ 0, 1, 1, 0 ], samples: [] }
         , steps: { grid: 8, to: [ -1, -1, 5, -1, 2, -1, -1, 7 ], p: [ 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.3 ] }
-        , warp: CL.noWarp, progression: CL.noProgression
+        , warp: CL.noWarp, progression: CL.noProgression, samplePattern: "", cut: 0
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
@@ -1883,7 +1917,7 @@ conspicillumVirtualRun = case CP.decodeScene (CP.encodeScene virtualScene) of
         , swing: CL.noSwing
         , tape: { bars: 0, order: [ 0, 2, 1, 3, 4 ], samples: [ 2, 0, 1, 2, 9 ] }
         , steps: CL.noSteps
-        , warp: CL.noWarp, progression: CL.noProgression
+        , warp: CL.noWarp, progression: CL.noProgression, samplePattern: "", cut: 0
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
@@ -1929,6 +1963,7 @@ conspicillumWarpRun =
         , walk: CL.noWalk, swing: CL.noSwing, tape: CL.oneBar, steps: CL.noSteps
         , warp
         , progression: CL.noProgression
+        , samplePattern: "", cut: 0
         , rules: [ CL.rule (CL.Every 4 2) (CL.OpSpeed (-1.0)) ]
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
@@ -2074,7 +2109,7 @@ conspicillumDisplayRun = intercalate "\n" (presetLines <> drawings)
 
   grain at n begin sustain speed =
     { at, n, begin, end: begin + sustain / 2.0, sustain, speed, gain: 1.0, pan: 0.5, accelerate: 0.0
-    , fx: CL.noFx, chain: CL.noChain, ratchet: 1, send: 0 }
+    , fx: CL.noFx, chain: CL.noChain, ratchet: 1, send: 0, cut: 0 }
 
 -- | The sets the presets play from, as far as drawing them goes: taken from
 -- | the real corpora on 2026-09-27, so the sentences read as they do at the rig.

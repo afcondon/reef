@@ -1,0 +1,11 @@
+s "chords" # n "<0 4>(3,8) [7 5]" # seed 3
+s "chords" # n "<0 4>/6" # cut 1 # seed 3
+s "chords" # n "0 1 5 ~" :: 0 n0 0 1000000 su2500000 sp1000000 cut0 o0 | 250000 n1 0 1000000 su13000000 sp1000000 cut0 o0 | 500000 n2 0 1000000 su750000 sp1000000 cut0 o0 | 875000 n2 0 1000000 su750000 sp1000000 cut0 o0
+s "chords" # n "0 1 5 ~" # cut 1 :: 0 n0 0 1000000 su2500000 sp1000000 cut1 o0 | 250000 n1 0 1000000 su13000000 sp1000000 cut1 o0 | 500000 n2 0 1000000 su750000 sp1000000 cut1 o0 | 875000 n2 0 1000000 su750000 sp1000000 cut1 o0
+s "chords" # n "[0,1]" # cut 2 :: 0 n0 0 1000000 su2500000 sp1000000 cut2 o0 | 0 n1 0 1000000 su13000000 sp1000000 cut2 o0
+s "chords" # n "~" :: 
+s "chords" # n "0 1" # speed 0.5 :: 0 n0 0 1000000 su5000000 sp500000 cut0 o0 | 250000 n1 0 1000000 su26000000 sp500000 cut0 o0
+s "chords" # n "0 1" # speed -2 :: 0 n0 0 1000000 su1250000 sp-2000000 cut0 o0 | 250000 n1 0 1000000 su6500000 sp-2000000 cut0 o0
+s "chords" # n "0" # always (ratchet 2) :: 0 n0 0 500000 su1250000 sp1000000 cut0 o0 | 500000 n0 0 500000 su1250000 sp1000000 cut0 o0
+s "chords" # n "0" # always (send 1) :: 0 n0 0 1000000 su2500000 sp1000000 cut0 o0 | 0 n0 0 1000000 su2500000 sp1000000 cut0 o10
+s "chords" # grains 2 # sustain 0.5 :: 0 n0 0 200000 su500000 sp1000000 cut0 o0 | 500000 n2 333333 1000000 su500000 sp1000000 cut0 o0

@@ -75,9 +75,11 @@ module Reef.Conspicillum.Cloud
   , Send
   , Spec
   , Emit
+  , Play
   , cycleSeed
   , applies
   , cycleOf
+  , cycleOfPlays
   ) where
 
 import Prelude
@@ -87,7 +89,7 @@ import Data.Int (floor, round, toNumber)
 import Data.Int.Bits (and)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Reef.Bits (xorshift32)
-import Reef.Conspicillum.Corpus (Cloud, Corpus, Grainable, Query, clampTo, grainAt, levelGain, pick, wrap01)
+import Reef.Conspicillum.Corpus (Cloud, Corpus, Grain, Grainable, Query, clampTo, grainAt, levelGain, pick, wrap01)
 import Reef.Conspicillum.Harmonic (Target)
 import Reef.Marbles (Seed, nextRand, seedFrom)
 
@@ -508,7 +510,23 @@ type Spec =
   -- | A chord a cycle. Empty is no progression, and then the query's own
   -- | harmonic target (if any) holds for every cycle, as before.
   , progression :: Progression
+  -- | `n "0 4 7 5"`: Tidal's mini-notation over a set's samples, as written.
+  -- | Empty is a cloud. Not empty, the instrument is a sampler: the pattern
+  -- | says which sample sounds when, and each plays whole (`Play`). Text,
+  -- | because reef never evaluates Tidal (Littorina is GPL): the rig does, and
+  -- | hands `cycleOfPlays` what this cycle holds.
+  , samplePattern :: String
+  -- | `cut 1`: SuperDirt's cut group, as Tidal writes it. 0 (the default) lets
+  -- | every sound ring to its end; in a group, each new sound ends the one
+  -- | still ringing. Opt-in, as in Tidal, because which one you want is a
+  -- | musical choice: overlapping chords, or one chord at a time.
+  , cut :: Int
   }
+
+-- | One event of `samplePattern` in one cycle, as the rig evaluated it: where
+-- | in the cycle, and which sample. An index past the end of the set wraps, as
+-- | SuperDirt's `n` does.
+type Play = { at :: Number, index :: Int }
 
 -- | **Playing a tape at a tempo that is not its own.** `ratio` is the play
 -- | tempo over the tape's (1: native), and the mode is Ableton's choice:
@@ -629,6 +647,9 @@ type Emit =
   -- | Which send `OpSend` asked for; `cycleOf` turns it into a copy on the
   -- | send's chain, so every Emit that reaches the rig says 0.
   , send :: Int
+  -- | SuperDirt's cut group: the spec's `cut`, so 0 (ring to the end) unless
+  -- | the line says `cut n`.
+  , cut :: Int
   }
 
 -- ── the per-cycle seed ───────────────────────────────────────────────────────
@@ -810,18 +831,24 @@ applyOp op e = case op of
 -- | same. Note that the seed still advances for a dropped grain, so a query
 -- | narrowing does not reshuffle the grains that do survive.
 cycleOf :: Corpus -> Query -> Spec -> Int -> Int -> Array Emit
-cycleOf corpus query spec base cyc = case chordOf spec.progression cyc of
-  Nothing -> cycleUnder corpus query spec base cyc
+cycleOf corpus query spec base cyc = cycleOfPlays [] corpus query spec base cyc
+
+-- | `cycleOf`, with what `samplePattern` holds this cycle. A scene with a
+-- | pattern and no plays is a silent cycle (a rest is a legitimate thing to
+-- | ask for); a scene with no pattern ignores `plays` and is the cloud.
+cycleOfPlays :: Array Play -> Corpus -> Query -> Spec -> Int -> Int -> Array Emit
+cycleOfPlays plays corpus query spec base cyc = case chordOf spec.progression cyc of
+  Nothing -> cycleUnder plays corpus query spec base cyc
   Just chord ->
-    cycleUnder corpus
+    cycleUnder plays corpus
       (query { harmonic = Just { target: chord, minFit: spec.progression.minimumFit, strength: spec.progression.strength } })
       (retune chord spec)
       base
       cyc
 
 -- | One cycle under a fixed query: `cycleOf` once the chord is decided.
-cycleUnder :: Corpus -> Query -> Spec -> Int -> Int -> Array Emit
-cycleUnder corpus query spec base cyc =
+cycleUnder :: Array Play -> Corpus -> Query -> Spec -> Int -> Int -> Array Emit
+cycleUnder plays corpus query spec base cyc =
   map landSwung $ concatMap sendCopies $ concatMap expand
     (foldl step
        { seed: cycleSeed base cyc
@@ -832,13 +859,28 @@ cycleUnder corpus query spec base cyc =
        }
        indexed).out
   where
-  count = length spec.onsets
+  playing = spec.samplePattern /= ""
+  onsets = if playing then map _.at plays else spec.onsets
+  count = length onsets
 
   -- Its own stream, so walking never moves a grain the walk did not touch.
   walkSeed = cycleSeed (base + 500009) cyc
 
-  indexed :: Array { i :: Int, at :: Number }
-  indexed = mapWithIndex (\i at -> { i, at }) spec.onsets
+  indexed :: Array { i :: Int, at :: Number, played :: Maybe Grainable }
+  indexed = mapWithIndex (\i at -> { i, at, played: if playing then index plays i >>= sampleOf else Nothing }) onsets
+
+  sampleOf :: Play -> Maybe Grainable
+  sampleOf p
+    | null corpus.samples = Nothing
+    | otherwise = index corpus.samples (posMod p.index (length corpus.samples))
+
+  -- A played sample reads all of itself. `sustain` is the file's length at
+  -- this speed, so the window is not stretched and the pitch is its own.
+  whole :: Grainable -> Grain
+  whole g =
+    { n: g.index, begin: 0.0, end: 1.0
+    , sustain: if spec.speed == 0.0 then g.secs else g.secs / max spec.speed (negate spec.speed)
+    }
 
   -- The ordinal counts across cycles, so `Every 3 0` marks every third grain
   -- continuously rather than restarting each bar. At a few hundred grains a
@@ -856,7 +898,10 @@ cycleUnder corpus query spec base cyc =
       readSwung = if spec.cloud.follow == 0.0 then read else onTape (swingWarp sw.tape sw.grid read)
       fit = min (swingStretch sw.play sw.grid o.at) (swingStretch sw.tape sw.grid read)
       { chosen: picked, seed: s1 } = pick query corpus acc.seed
-      chosen = if spec.cloud.follow == 0.0 || null spec.tape.samples then picked else barSample
+      chosen
+        | playing = o.played
+        | spec.cloud.follow == 0.0 || null spec.tape.samples = picked
+        | otherwise = barSample
     in case chosen of
       Nothing -> { seed: s1, head: hd, stepSeed: ss, fired: acc.fired, out: acc.out }
       Just g ->
@@ -864,9 +909,11 @@ cycleUnder corpus query spec base cyc =
           -- Fitted BEFORE placing, so the window that must fit in the tape is
           -- the grain's real length: the last short slice of a swung bar sits
           -- nearer the end than a straight sixteenth would be allowed to.
-          { grain, seed: s2 } = grainAt (spec.cloud { sustain = spec.cloud.sustain * fit }) readSwung g s1
-          wg = warpGrain spec.warp
-                 { begin: grain.begin, end: grain.end, sustain: grain.sustain, speed: spec.speed }
+          { grain, seed: s2 } =
+            if playing then { grain: whole g, seed: s1 }
+            else grainAt (spec.cloud { sustain = spec.cloud.sustain * fit }) readSwung g s1
+          placed = { begin: grain.begin, end: grain.end, sustain: grain.sustain, speed: spec.speed }
+          wg = if playing then placed else warpGrain spec.warp placed
           base' =
             { at: o.at
             , n: grain.n
@@ -881,6 +928,7 @@ cycleUnder corpus query spec base cyc =
             , chain: spec.chain
             , ratchet: 1
             , send: 0
+            , cut: spec.cut
             }
           sc = scoresAt g (if spec.cloud.follow == 0.0 then read else onTape read)
           r = foldl (applyRule ordinal sc) { e: base', seed: s2, fired: acc.fired, i: 0 } spec.rules
@@ -906,8 +954,8 @@ cycleUnder corpus query spec base cyc =
 
   slotOf :: Number -> Number
   slotOf at =
-    let later = foldl (\m x -> if x > at && x < m then x else m) (1.0 + first) spec.onsets
-        first = case index spec.onsets 0 of
+    let later = foldl (\m x -> if x > at && x < m then x else m) (1.0 + first) onsets
+        first = case index onsets 0 of
           Just x -> x
           Nothing -> 0.0
     in later - at

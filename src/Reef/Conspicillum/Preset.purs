@@ -48,6 +48,7 @@ data Bank
   | Effects
   | Resonators
   | Progressions
+  | Sampler
 
 derive instance eqBank :: Eq Bank
 
@@ -65,6 +66,7 @@ bankName = case _ of
   Effects -> "Effects"
   Resonators -> "Resonator"
   Progressions -> "Progression"
+  Sampler -> "Sampler"
 
 -- | A knob a preset puts on the panel (`Notation.Knob`): part of the line,
 -- | since CR-29.

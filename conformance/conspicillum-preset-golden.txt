@@ -84,4 +84,8 @@ Chromatic descent | Progression | grain=grainLength, position=readPosition, spra
 Diminished drift | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
 Wet progression | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
 Everything at once | Progression | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 8 chords | canonical
-presets: 86 resolved
+Four chords | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
+Chords in a rhythm | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
+Stacked | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
+Slow chords | Sampler | level=gain, pan=pan, space=sendLevelB | no progression | canonical
+presets: 90 resolved

@@ -626,4 +626,32 @@ presetSources =
     , query: emptyQuery
     , knobs: [ knob GrainLength "grain", knob ReadPosition "position", knob Spray "spray", knob (SendLevel SendB) "space" ]
     }
+  , { name: "Four chords"
+    , bank: Sampler
+    , about: "four whole chords a bar, ringing into each other"
+    , line: "s \"chord-hits-0924-171929\" # n \"0 4 7 5\" # seed 12345"
+    , query: emptyQuery
+    , knobs: [ knob Speed "speed", knob Gain "level", knob Pan "pan", knob (SendLevel SendB) "space" ]
+    }
+  , { name: "Chords in a rhythm"
+    , bank: Sampler
+    , about: "a Tidal pattern choosing the chords, each ending the last"
+    , line: "s \"chord-hits-0924-171929\" # n \"<0 4>(3,8) [7 5]\" # cut 1 # seed 12345"
+    , query: emptyQuery
+    , knobs: [ knob Speed "speed", knob Gain "level", knob Pan "pan", knob (SendLevel SendB) "space" ]
+    }
+  , { name: "Stacked"
+    , bank: Sampler
+    , about: "two chords at once, alternating pairs, each pair ending the last"
+    , line: "s \"chord-hits-0924-171929\" # n \"<[0,4] [7,5]>\" # cut 1 # seed 12345"
+    , query: emptyQuery
+    , knobs: [ knob Speed "speed", knob Gain "level", knob Pan "pan", knob (SendLevel SendB) "space" ]
+    }
+  , { name: "Slow chords"
+    , bank: Sampler
+    , about: "whole 14-second chords every 12 seconds at 120 bpm, overlapping by two"
+    , line: "s \"chord-hits-0915-232247\" # n \"<0 4 7 5>/6\" # seed 12345"
+    , query: emptyQuery
+    , knobs: [ knob Gain "level", knob Pan "pan", knob (SendLevel SendB) "space" ]
+    }
   ]

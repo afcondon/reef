@@ -622,6 +622,18 @@ echo "== conspicillumNotationRun (the one-line notation): node vs erl =="
 diff /tmp/reef-conspicillum-notation-node.txt /tmp/reef-conspicillum-notation-erl.txt && echo "  OK conspicillumNotationRun node == erl (parse and print identical)"
 diff "$CONSPICILLUM_NOTATION_GOLDEN" /tmp/reef-conspicillum-notation-node.txt && echo "  OK conspicillumNotationRun matches frozen golden"
 
+# --- Conspicillum: a sampler cycle (conspicillumPlayRun) ---------------------
+CONSPICILLUM_PLAY_GOLDEN="$REEF/conformance/conspicillum-play-golden.txt"
+echo "== conspicillumPlayRun (whole samples from the rig's plays): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumPlayRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumPlayRun);' \
+) > /tmp/reef-conspicillum-play-node.txt
+( cd "$PURERL" && erl -pa ebin -noshell \
+  -eval 'io:format("~ts", ['"'"'reef_conformance@ps'"'"':conspicillumPlayRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-play-erl.txt
+diff /tmp/reef-conspicillum-play-node.txt /tmp/reef-conspicillum-play-erl.txt && echo "  OK conspicillumPlayRun node == erl"
+diff "$CONSPICILLUM_PLAY_GOLDEN" /tmp/reef-conspicillum-play-node.txt && echo "  OK conspicillumPlayRun matches frozen golden"
+
 # --- Conspicillum: reading where the sample sounds (conspicillumSoundingRun) --
 # CR-28. Grain windows over sounding spans, and gain normalised by level.
 CONSPICILLUM_SOUNDING_GOLDEN="$REEF/conformance/conspicillum-sounding-golden.txt"

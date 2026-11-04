@@ -19,6 +19,11 @@
 -- | Vocabulary, in the order `print` writes it:
 -- |
 -- | - `s "set"`, `s "set:4"` — the set, and one sample of it (else the whole)
+-- | - `n "0 4 7 5"` — Tidal's mini-notation over the set's samples: each plays
+-- |   whole, so the line is a sampler rather than a cloud. Kept as written; the
+-- |   rig evaluates it (`Cloud.samplePattern`)
+-- | - `cut 1` — SuperDirt's cut group: each new sound ends the last. Without
+-- |   it, everything rings to its end
 -- | - `grains 16`, `euclid 5 8`, `onsets "0 0.375 0.5"` — where grains land
 -- | - `sustain`, `position`, `spray`, `follow` — the cloud
 -- | - `walk jump hold home`, `grid n`, `reach n` — the walk
@@ -104,6 +109,8 @@ defaultLine =
       , steps: noSteps
       , warp: noWarp
       , progression: noProgression
+      , samplePattern: ""
+      , cut: 0
       , rules: []
       , speed: 1.0
       , gain: 1.0
@@ -237,6 +244,8 @@ term l toks = case uncons toks of
           n <- note ("s \"" <> s <> "\": the sample after : is a number") (Int.fromString k)
           Right l { set = name, n = Just n }
         _ -> Right l { set = s, n = Nothing }
+    "n" -> one w \a -> str w a >>= \t -> withSpec _ { samplePattern = t }
+    "cut" -> one w \a -> int w a >>= \k -> withSpec _ { cut = k }
     "seed" -> one w \a -> int w a <#> \k -> l { seed = k }
     "knobs" -> one w \a -> str w a >>= knobList <#> \ks -> l { knobs = ks }
     "grains" -> one w \a -> int w a >>= \k -> withSpec _ { onsets = even k }
@@ -448,6 +457,8 @@ print l = intercalate " # " (filter (_ /= "") parts)
   int1 name k k0 = if k == k0 then "" else name <> " " <> show k
   parts =
     [ "s " <> q (l.set <> maybe "" (\k -> ":" <> show k) l.n) ]
+      <> [ if sp.samplePattern == "" then "" else "n " <> q sp.samplePattern ]
+      <> [ int1 "cut" sp.cut d.cut ]
       <> [ onsetsTerm ]
       <> [ num1 "sustain" sp.cloud.sustain d.cloud.sustain
          , num1 "position" sp.cloud.position d.cloud.position

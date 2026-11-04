@@ -198,6 +198,8 @@ type WireSpec =
   -- | A chord is `{ pcs, root, bass }`; follow is 0 off, 1 root, 2 bass,
   -- | 3 chord tones (`Cloud.ResonatorFollow`).
   , progression :: { chords :: Array Target, minimumFit :: Number, strength :: Number, follow :: Int }
+  , samplePattern :: String  -- empty: a cloud
+  , cut :: Int  -- SuperDirt's cut group; 0 none
   }
 
 type WireScene =

@@ -190,7 +190,7 @@ presetList = case presets of
     ]
       <> (banks >>= bank ps)
   where
-  banks = [ Early, Found, Polychords, Sector, Fix, Dub, Swung, Harmony, Envelopes, Effects, Resonators, Progressions ]
+  banks = [ Early, Found, Polychords, Sector, Fix, Dub, Swung, Harmony, Envelopes, Effects, Resonators, Progressions, Sampler ]
   bank ps b =
     let members = filter (\p -> p.bank == b) ps
     in
