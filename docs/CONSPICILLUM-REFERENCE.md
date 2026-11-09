@@ -200,17 +200,41 @@ it (`tune root`, `tune bass`, `tune tones`). Named for what the chord-hit corpor
 
 ## Presets
 
-92 presets in 14 banks. Each is its line, and the knobs it puts on the panel; a query, where it has one, is noted.
+101 presets in 14 banks. Each is its line, and the knobs it puts on the panel; a query, where it has one, is noted.
 
 ### Demos
 
-**Sampler · a kit from one sweep** — demo, Sampler: one drum voice swept by Quadrat, played whole as a kit (low short hit the kick, bright short hits the hats, a long bright one the crash)
+**Cloud · a bed** — demo, Cloud: grains with no timeline: long, sparse, sprayed over the whole of a chord set
 
 ```
-s "drum-hits-0912-121546" # n "12 [~ 11] 3 [11 11] 12 [12 11] 3 <[11 9] [~ 47]>" # seed 12345 # knobs "speed gain:level pan sendLevelB:space"
+s "chord-hits-0915-230332" # grains 5 # sustain 0.9 # position 0.5 # spray 1 # follow 0 # gain 0.6 # room 0.5 # size 0.9 # dry 0.3 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
 ```
 
-Knobs: speed (speed), level (gain), pan (pan), space (send B)
+Knobs: grain (grain length), position (read position), spray (spray), space (send B)
+
+**Cloud · Burroughs, the dark** — demo, Cloud: grains chosen by what Quadrat measured, leaning hard to the duller splices; switch to the bright one to hear the voice change while nothing moves in time
+
+```
+s "burroughs-cutup" # grains 6 # sustain 0.5 # position 0.4 # spray 1 # follow 0 # gain 0.85 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
+```
+
+Knobs: grain (grain length), position (read position), spray (spray), space (send B). Has a query.
+
+**Cloud · Burroughs, the bright** — demo, Cloud: the same line, the query leaning to the brightest splices (zero crossings high): sibilants and breath
+
+```
+s "burroughs-cutup" # grains 6 # sustain 0.5 # position 0.4 # spray 1 # follow 0 # gain 0.85 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
+```
+
+Knobs: grain (grain length), position (read position), spray (spray), space (send B). Has a query.
+
+**Tape · straight, then chaos** — demo, Tape: the bar exactly as recorded; turn chaos up and the sixteenths start to leave their places
+
+```
+s "fd-beat-bar" # grid 8 # reach 3 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
+```
+
+Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 
 **Tape · the step table, gated** — demo, Tape: the bar's sixteenths with a step table written in; light pads on the Midifighter 3D to let steps jump, a side button to let go
 
@@ -219,6 +243,54 @@ s "fd-beat-bar" # steps "~ ~ ~ 0?0.5 ~ ~ 4?0.4 ~ ~ ~ ~ 8?0.5 ~ 12?0.6 ~ 2?0.3" #
 ```
 
 Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
+
+**Tape · four bars re-laid** — demo, Tape: a four-bar guitar take played in another order, an eight-bar form from four bars
+
+```
+s "guitar-1104-c-tape" # bars 4 # order "0 1 0 2 3 1 3 3" # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
+```
+
+Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
+
+**Tape · warp, gap** — demo, Tape: the guitar take was recorded at 107 bpm; at any other tempo each slice keeps its pitch and gaps open (slower) or slices clip (faster). Move the tempo to hear it
+
+```
+s "guitar-1104-c-tape" # bars 4 # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
+```
+
+Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
+
+**Virtual tape · a progression nobody played** — demo, Virtual tape: one recorded chord a bar, eight bars in an order never played
+
+```
+s "chord-hits-0924-171929" # bars 8 # samples "<0 4 7 5 8 4 7 0>" # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
+```
+
+Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
+
+**Harmonic selection · grains that fit the chord** — demo, Harmonic selection: a cloud over every chord recorded, each grain chosen because it voices the chord of the bar
+
+```
+s "chord-hits-0915-232247" # grains 12 # sustain 0.3 # position 0.4 # spray 0.6 # follow 0 # chords "<Bm Bm(maj7) Bdim F#m>" # fit 0.6 0.95 # gain 0.8 # room 0.4 # size 0.8 # dry 0.3 # seed 12345 # knobs "grainLength:grain readPosition:position spray sendLevelB:space"
+```
+
+Knobs: grain (grain length), position (read position), spray (spray), space (send B)
+
+**Sampler · a bassline from one sweep** — demo, Sampler: Quadrat swept one drum through an octave of pitch, so its samples are notes; the middle decay row (12-23) played as a bassline
+
+```
+s "drum-hits-0912-121546" # n "<[12 ~ 12 19 ~ 12 17 15] [12 ~ 12 19 ~ 22 19 17]>" # cut 1 # seed 12345 # knobs "speed gain:level pan sendLevelB:space"
+```
+
+Knobs: speed (speed), level (gain), pan (pan), space (send B)
+
+**Sampler · Burroughs as a kit** — demo, Sampler: Morphagene splices of a spoken cut-up, played whole by pattern, each ending the last
+
+```
+s "burroughs-cutup" # n "14 [~ 12] 3 [14 14] 14 [~ 12] 3 <[12 9] 11>" # cut 1 # seed 12345 # knobs "speed gain:level pan sendLevelB:space"
+```
+
+Knobs: speed (speed), level (gain), pan (pan), space (send B)
 
 ### Early
 

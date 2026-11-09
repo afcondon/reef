@@ -1,5 +1,14 @@
-Sampler · a kit from one sweep | Demos | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
+Cloud · a bed | Demos | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Cloud · Burroughs, the dark | Demos | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Cloud · Burroughs, the bright | Demos | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
+Tape · straight, then chaos | Demos | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | REPRINTS AS s "fd-beat-bar" # grid 8 # reach 3 # seed 12345
 Tape · the step table, gated | Demos | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Tape · four bars re-laid | Demos | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Tape · warp, gap | Demos | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | REPRINTS AS s "guitar-1104-c-tape" # bars 4 # seed 12345
+Virtual tape · a progression nobody played | Demos | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
+Harmonic selection · grains that fit the chord | Demos | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | 4 chords | canonical
+Sampler · a bassline from one sweep | Demos | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
+Sampler · Burroughs as a kit | Demos | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
 Single hit | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Read head walk | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Cloud | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
@@ -90,4 +99,4 @@ Four chords | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no 
 Chords in a rhythm | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
 Stacked | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
 Slow chords | Sampler | level=gain, pan=pan, space=sendLevelB | no progression | canonical
-presets: 92 resolved
+presets: 101 resolved
