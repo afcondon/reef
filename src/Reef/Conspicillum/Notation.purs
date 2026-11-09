@@ -362,12 +362,12 @@ chordList s =
     Array.foldM (\acc name -> note ("no chord called " <> name) (chordNamed name) <#> snoc acc) [] names
 
 -- | `~ ~ 5?0.4 ~ 2` — one token a step; `~` stays.
-stepTable :: String -> Either String { grid :: Int, to :: Array Int, p :: Array Number }
+stepTable :: String -> Either String { grid :: Int, to :: Array Int, p :: Array Number, gate :: Array Boolean }
 stepTable s = do
   let ws = filter (_ /= "") (String.split (String.Pattern " ") s)
   cells <- Array.foldM (\acc w -> cell w <#> snoc acc) [] ws
   pure if null cells then noSteps
-       else { grid: length cells, to: map _.to cells, p: map _.p cells }
+       else { grid: length cells, to: map _.to cells, p: map _.p cells, gate: [] }
   where
   cell w = case String.split (String.Pattern "?") w of
     [ "~" ] -> Right { to: -1, p: 1.0 }
@@ -547,7 +547,7 @@ onsetLayout os
     k <- range 1 n
     if euclid k n == os then [ { k, n } ] else []
 
-stepsText :: { grid :: Int, to :: Array Int, p :: Array Number } -> String
+stepsText :: forall r. { grid :: Int, to :: Array Int, p :: Array Number | r } -> String
 stepsText st = intercalate " " (mapWithIndex cell st.to)
   where
   cell i t =

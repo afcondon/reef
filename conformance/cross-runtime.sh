@@ -582,6 +582,20 @@ echo "== conspicillumPermuteRun (multi-bar tape + bar order + step table): node 
 diff /tmp/reef-conspicillum-permute-node.txt /tmp/reef-conspicillum-permute-erl.txt && echo "  OK conspicillumPermuteRun node == erl (tape, order and step table identical)"
 diff "$CONSPICILLUM_PERMUTE_GOLDEN" /tmp/reef-conspicillum-permute-node.txt && echo "  OK conspicillumPermuteRun matches frozen golden"
 
+# --- Conspicillum step gate (Reef.Conformance.conspicillumGateRun) -------
+# A two-bar tape in a bar order, with Sector's per-step jump table (certain and
+# uncertain targets on a grid of 8) and walk holds on top.
+CONSPICILLUM_GATE_GOLDEN="$REEF/conformance/conspicillum-gate-golden.txt"
+echo "== conspicillumGateRun (the step gate: lit pads, written and random targets): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { conspicillumGateRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(conspicillumGateRun);' \
+  ) > /tmp/reef-conspicillum-gate-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~s", ['"'"'reef_conformance@ps'"'"':conspicillumGateRun()]), halt().' 2>/dev/null ) \
+  > /tmp/reef-conspicillum-gate-erl.txt
+diff /tmp/reef-conspicillum-gate-node.txt /tmp/reef-conspicillum-gate-erl.txt && echo "  OK conspicillumGateRun node == erl (gate identical)"
+diff "$CONSPICILLUM_GATE_GOLDEN" /tmp/reef-conspicillum-gate-node.txt && echo "  OK conspicillumGateRun matches frozen golden"
+
 # --- Conspicillum virtual tape (Reef.Conformance.conspicillumVirtualRun) -------
 # A tape made of separate samples, one per bar, in a bar order; one bar names
 # a sample that is not there and must drop, not default.

@@ -58,6 +58,7 @@ module Reef.Conformance
   , conspicillumSectorRun
   , conspicillumFixRun
   , conspicillumPermuteRun
+  , conspicillumGateRun
   , conspicillumVirtualRun
   , conspicillumWarpRun
   , conspicillumNotationRun
@@ -1866,13 +1867,62 @@ conspicillumPermuteRun = case CP.decodeScene (CP.encodeScene permuteScene) of
         , walk: { jump: 0.0, hold: 0.1, home: 0.0, grid: 16, reach: 0 }
         , swing: CL.noSwing
         , tape: { bars: 2, order: [ 0, 1, 1, 0 ], samples: [] }
-        , steps: { grid: 8, to: [ -1, -1, 5, -1, 2, -1, -1, 7 ], p: [ 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.3 ] }
+        , steps: { grid: 8, to: [ -1, -1, 5, -1, 2, -1, -1, 7 ], p: [ 1.0, 1.0, 1.0, 1.0, 0.5, 1.0, 1.0, 0.3 ], gate: [] }
         , warp: CL.noWarp, progression: CL.noProgression, samplePattern: "", cut: 0
         , rules: []
         , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
         , fx: CL.noFx, chain: CL.noChain, sends: []
         }
     , seed: 97531
+    }
+
+
+-- ── 16b. Conspicillum: the step gate, played on the 3D's pads ──────────────
+
+-- | A one-bar tape on a grid of 8 with a step table, gated: steps 0, 2 and 5
+-- | lit. Step 2 has a written target (5, certain) and jumps there; steps 0
+-- | and 5 have none and jump somewhere else, drawn from the gate's own die;
+-- | step 4 has a written target but is not lit, so it never jumps. Pins the
+-- | gate's second draw per grain (armed or not) and that it round-trips the
+-- | wire.
+conspicillumGateRun :: String
+conspicillumGateRun = case CP.decodeScene (CP.encodeScene gateScene) of
+  Left errs -> "CONSPICILLUM-GATE-DECODE-FAIL: " <> show errs
+  Right scene ->
+    intercalate "\n" (map (renderCycle scene) (range 0 5))
+  where
+  renderCycle scene cyc =
+    let es = CL.cycleOf scene.corpus scene.query scene.spec scene.seed cyc
+    in intercalate "\n" (mapWithIndex (renderEmit cyc) es)
+
+  renderEmit cyc i e =
+    "c" <> show cyc <> " g" <> show i <> " at " <> six e.at <> " b " <> six e.begin
+
+  six :: Number -> String
+  six x = show (round (x * 1000000.0))
+
+  tape =
+    { index: 0, secs: 2.0, peak: 0.45, rms: 0.08, zcr: 900.0, tilt: 0.1, decay: 2.0
+    , cell: [], params: [], notes: [], hits: CC.noHits, sounding: [], level: 0.0 }
+
+  gateScene =
+    { corpus: { name: "fd-beat-bar", samples: [ tape ] }
+    , query: CC.emptyQuery
+    , spec:
+        { onsets: map (\k -> toNumber k / 16.0) (range 0 15)
+        , cloud: { sustain: 0.125, position: 0.0, spray: 0.0, follow: 1.0 }
+        , walk: CL.noWalk
+        , swing: CL.noSwing
+        , tape: CL.oneBar
+        , steps:
+            { grid: 8, to: [ -1, -1, 5, -1, 1, -1, -1, -1 ], p: [ 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ]
+            , gate: [ true, false, true, false, false, true, false, false ] }
+        , warp: CL.noWarp, progression: CL.noProgression, samplePattern: "", cut: 0
+        , rules: []
+        , speed: 1.0, gain: 1.0, pan: 0.5, accelerate: 0.0
+        , fx: CL.noFx, chain: CL.noChain, sends: []
+        }
+    , seed: 86420
     }
 
 

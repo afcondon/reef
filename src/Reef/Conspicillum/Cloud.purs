@@ -474,10 +474,19 @@ oneBar = { bars: 1, order: [], samples: [] }
 -- | Applied after the walk, so a table can move even the downbeat, which the
 -- | random walk never does: that is a choice you wrote, not a die. Its draws
 -- | come from their own stream, one per grain.
-type Steps = { grid :: Int, to :: Array Int, p :: Array Number }
+-- |
+-- | **The gate** is played, not written: a pad per step (the Midifighter 3D's
+-- | sixteen), latched on or off. Empty is no gate, and the table jumps as
+-- | written, so every preset sounds as it did. Not empty, only an armed step
+-- | may jump: with its written target and probability when it has one, and
+-- | otherwise to another step of the bar, chosen at random, every time. A gate
+-- | draws a second number per grain, armed or not, so which pads are lit never
+-- | moves another step's die; with no gate the stream is as it always was.
+-- | Not part of the line: a gate is the moment, as the warp ratio is.
+type Steps = { grid :: Int, to :: Array Int, p :: Array Number, gate :: Array Boolean }
 
 noSteps :: Steps
-noSteps = { grid: 16, to: [], p: [] }
+noSteps = { grid: 16, to: [], p: [], gate: [] }
 
 -- | One send bus. `level` scales the copy's gain, like a send knob.
 type Send = { chain :: Chain, level :: Number }
@@ -890,8 +899,9 @@ cycleUnder plays corpus query spec base cyc =
     let
       ordinal = cyc * count + o.i
       hd0 = walkStep spec.cloud.follow spec.walk acc.head o.at
-      { u: us, seed: ss } = nextRand acc.stepSeed
-      hd = stepJump spec.cloud.follow spec.steps hd0 o.at us
+      { u: us, seed: ss0 } = nextRand acc.stepSeed
+      { u: ut, seed: ss } = if null spec.steps.gate then { u: 0.0, seed: ss0 } else nextRand ss0
+      hd = stepJump spec.cloud.follow spec.steps hd0 o.at us ut
       read = spec.cloud.follow * o.at + hd.offset
       sw = spec.swing
       -- Read on the tape's own grid: slice i begins where its hit is.
@@ -1056,9 +1066,10 @@ wrapUnit :: Number -> Number
 wrapUnit x = x - toNumber (floor x)
 
 -- | Apply the step table at the grain that starts a step: relocate with the
--- | step's probability. See `Steps`.
-stepJump :: Number -> Steps -> Head -> Number -> Number -> Head
-stepJump follow st h at u =
+-- | step's probability. `u` is the probability's die and `ut` the gate's
+-- | target die. See `Steps`.
+stepJump :: Number -> Steps -> Head -> Number -> Number -> Number -> Head
+stepJump follow st h at u ut =
   let
     grid = if st.grid < 1 then 1 else st.grid
     gridF = toNumber grid
@@ -1066,9 +1077,27 @@ stepJump follow st h at u =
     k = round x
     starts = x - toNumber k < 1.0e-6 && toNumber k - x < 1.0e-6
     kk = let m = k `mod` grid in if m < 0 then m + grid else m
-    p = fromMaybe 1.0 (index st.p kk)
-  in case index st.to kk of
-    Just t | starts && t >= 0 && u < p ->
+    written = case index st.to kk of
+      Just t | t >= 0 -> Just t
+      _ -> Nothing
+    -- Another step of the bar, never this one: a jump to where the head
+    -- already is would be no jump.
+    elsewhere =
+      if grid < 2 then Nothing
+      else let j = floor (ut * toNumber (grid - 1)) in Just (if j >= kk then j + 1 else j)
+    gated = not (null st.gate)
+    armed = fromMaybe false (index st.gate kk)
+    target
+      | not gated = written
+      | not armed = Nothing
+      | otherwise = case written of
+          Just t -> Just t
+          Nothing -> elsewhere
+    p = case written of
+      Just _ -> fromMaybe 1.0 (index st.p kk)
+      Nothing -> 1.0
+  in case target of
+    Just t | starts && u < p ->
       let r = toNumber t / gridF
       in h { offset = r - follow * at, prevRead = r }
     _ -> h

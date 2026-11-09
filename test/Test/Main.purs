@@ -6,7 +6,7 @@ module Test.Main (main) where
 
 import Prelude
 
-import Data.Array (filter, length, mapWithIndex, range, take)
+import Data.Array (filter, index, length, mapWithIndex, range, take)
 import Data.Either (Either(..), hush)
 import Data.Int (toNumber)
 import Data.Int as Int
@@ -181,8 +181,20 @@ main = do
     { actual: beginsAt { bars: 2, order: [ 1, 0 ], samples: [] } CL.noSteps 0, expected: heads 1 }
   assertEqual' "Conspicillum steps: [2, 3, 0, 1] on a grid of 4 swaps the halves of the bar"
     { actual: map (\e -> e * 4.0) (everyFourth (map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
-        (barSpec CL.oneBar { grid: 4, to: [ 2, 3, 0, 1 ], p: [] }) 1 0)))
+        (barSpec CL.oneBar { grid: 4, to: [ 2, 3, 0, 1 ], p: [], gate: [] }) 1 0)))
     , expected: [ 2.0, 3.0, 0.0, 1.0 ] }
+  let gatedSteps st = map (\e -> e * 4.0) (everyFourth (map _.begin (CL.cycleOf tapeCorpus CC.emptyQuery
+        (barSpec CL.oneBar st) 1 0)))
+  assertEqual' "Conspicillum gate: no pad lit, no step jumps, whatever the table says"
+    { actual: gatedSteps { grid: 4, to: [ 2, 3, 0, 1 ], p: [], gate: [ false, false, false, false ] }
+    , expected: [ 0.0, 1.0, 2.0, 3.0 ] }
+  assertEqual' "Conspicillum gate: a lit pad lets its step jump as written, and the head carries on"
+    { actual: gatedSteps { grid: 4, to: [ 2, 3, 0, 1 ], p: [], gate: [ false, false, true, false ] }
+    , expected: [ 0.0, 1.0, 0.0, 1.0 ] }
+  let unwritten = gatedSteps { grid: 4, to: [], p: [], gate: [ false, false, true, false ] }
+  assertEqual' "Conspicillum gate: a lit pad with no target written jumps somewhere else in the bar"
+    { actual: { before: take 2 unwritten, moved: map (_ /= 2.0) (index unwritten 2) }
+    , expected: { before: [ 0.0, 1.0 ], moved: Just true } }
   log "Reef Conspicillum tape and steps: OK"
 
   -- Conspicillum C5: realising a progression onto RECORDED chord voicings.
