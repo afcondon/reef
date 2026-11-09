@@ -200,7 +200,25 @@ it (`tune root`, `tune bass`, `tune tones`). Named for what the chord-hit corpor
 
 ## Presets
 
-90 presets in 13 banks. Each is its line, and the knobs it puts on the panel; a query, where it has one, is noted.
+92 presets in 14 banks. Each is its line, and the knobs it puts on the panel; a query, where it has one, is noted.
+
+### Demos
+
+**Sampler · a kit from one sweep** — demo, Sampler: one drum voice swept by Quadrat, played whole as a kit (low short hit the kick, bright short hits the hats, a long bright one the crash)
+
+```
+s "drum-hits-0912-121546" # n "12 [~ 11] 3 [11 11] 12 [12 11] 3 <[11 9] [~ 47]>" # seed 12345 # knobs "speed gain:level pan sendLevelB:space"
+```
+
+Knobs: speed (speed), level (gain), pan (pan), space (send B)
+
+**Tape · the step table, gated** — demo, Tape: the bar's sixteenths with a step table written in; light pads on the Midifighter 3D to let steps jump, a side button to let go
+
+```
+s "fd-beat-bar" # steps "~ ~ ~ 0?0.5 ~ ~ 4?0.4 ~ ~ ~ ~ 8?0.5 ~ 12?0.6 ~ 2?0.3" # seed 12345 # knobs "walkJump:chaos walkHold tapeFollow:tape_rate sendLevelA:throw"
+```
+
+Knobs: chaos (jump), repeat (repeat), tape rate (tape follow), throw (send A)
 
 ### Early
 

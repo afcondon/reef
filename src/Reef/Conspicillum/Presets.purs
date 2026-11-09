@@ -1,4 +1,4 @@
--- | **The presets**, as data: 86 scenes, each its line (chord progression
+-- | **The presets**, as data: 92 scenes, each its line (chord progression
 -- | included), its query, and the knobs worth playing.
 -- |
 -- | First written on 2026-09-27 by triggerfish's `audio/generate-presets.mjs`
@@ -24,7 +24,21 @@ presets = traverse resolve presetSources
 
 presetSources :: Array PresetSource
 presetSources =
-  [ { name: "Single hit"
+  [ { name: "Sampler · a kit from one sweep"
+    , bank: Demos
+    , about: "demo, Sampler: one drum voice swept by Quadrat, played whole as a kit (low short hit the kick, bright short hits the hats, a long bright one the crash)"
+    , line: "s \"drum-hits-0912-121546\" # n \"12 [~ 11] 3 [11 11] 12 [12 11] 3 <[11 9] [~ 47]>\" # seed 12345"
+    , query: emptyQuery
+    , knobs: [ knob Speed "speed", knob Gain "level", knob Pan "pan", knob (SendLevel SendB) "space" ]
+    }
+  , { name: "Tape · the step table, gated"
+    , bank: Demos
+    , about: "demo, Tape: the bar's sixteenths with a step table written in; light pads on the Midifighter 3D to let steps jump, a side button to let go"
+    , line: "s \"fd-beat-bar\" # steps \"~ ~ ~ 0?0.5 ~ ~ 4?0.4 ~ ~ ~ ~ 8?0.5 ~ 12?0.6 ~ 2?0.3\" # seed 12345"
+    , query: emptyQuery
+    , knobs: [ knob WalkJump "chaos", knob WalkHold "repeat", knob TapeFollow "tape rate", knob (SendLevel SendA) "throw" ]
+    }
+  , { name: "Single hit"
     , bank: Early
     , about: "one sample, fixed read head — the Morphagene gesture"
     , line: "s \"chord-hits-0916-185508:0\" # grains 8 # sustain 0.14 # position 0.35 # follow 0 # gain 0.9 # seed 12345"

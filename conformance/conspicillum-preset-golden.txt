@@ -1,3 +1,5 @@
+Sampler · a kit from one sweep | Demos | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
+Tape · the step table, gated | Demos | chaos=walkJump, repeat=walkHold, tape rate=tapeFollow, throw=sendLevelA | no progression | canonical
 Single hit | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Read head walk | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
 Cloud | Early | grain=grainLength, position=readPosition, spray=spray, space=sendLevelB | no progression | canonical
@@ -88,4 +90,4 @@ Four chords | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no 
 Chords in a rhythm | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
 Stacked | Sampler | speed=speed, level=gain, pan=pan, space=sendLevelB | no progression | canonical
 Slow chords | Sampler | level=gain, pan=pan, space=sendLevelB | no progression | canonical
-presets: 90 resolved
+presets: 92 resolved

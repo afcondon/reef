@@ -36,7 +36,8 @@ import Reef.Conspicillum.Protocol (WireQuery, WireSpec, toWireQuery, toWireSpec)
 
 -- | Presets come in banks, by what they are a study of.
 data Bank
-  = Early
+  = Demos
+  | Early
   | Found
   | Polychords
   | Sector
@@ -54,6 +55,7 @@ derive instance eqBank :: Eq Bank
 
 bankName :: Bank -> String
 bankName = case _ of
+  Demos -> "Demos"
   Early -> "Early"
   Found -> "Found"
   Polychords -> "Polychords"
