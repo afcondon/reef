@@ -2047,6 +2047,18 @@ conspicillumNotationRun = intercalate "\n" (map one lines)
     , "s \"x\" # follow 0 # knobs \"grainLength readPosition spray sendLevelB:space\""
     , "s \"x\" # knobs \"walkJump:a_lot_of_chaos tapeFollow\" # seed 7"
     , "s \"x\" # knobs \"grainLength bogus\""
+    -- the mode word (2026-11-11): each mode, its own refusals, and an old
+    -- sampler line whose inert words are not written back
+    , "cloud $ s \"x\" # grains 8 # sustain 0.1"
+    , "  tape  $  s \"x\" # follow -0.5 # bars 2"
+    , "sampler $ s \"x\" # n \"0 4\" # cut 1"
+    , "sampler $ s \"x\" # n \"0 4\" # sustain 0.1"
+    , "sampler $ s \"x\""
+    , "tape $ s \"x\" # follow 0"
+    , "tape $ s \"x\" # n \"0\""
+    , "cloud $ s \"x\" # bars 2"
+    , "cloud $ s \"x\" # follow 0.5"
+    , "s \"x\" # n \"0 4\" # sustain 0.1 # walk 0.2 0.1 0"
     ]
 
 

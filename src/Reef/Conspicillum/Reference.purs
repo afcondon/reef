@@ -16,10 +16,10 @@ import Prelude
 import Data.Array (filter, length, null)
 import Data.Either (Either(..))
 import Data.Foldable (intercalate)
-import Data.Maybe (fromMaybe, isNothing)
+import Data.Maybe (fromMaybe, isJust, isNothing)
 import Data.String as String
 import Reef.Conspicillum.Harmonic (namedChords)
-import Reef.Conspicillum.Notation (opNames)
+import Reef.Conspicillum.Notation (Mode(..), misplaced, modeName, opNames)
 import Reef.Conspicillum.Notation as Notation
 import Reef.Conspicillum.Parameter (Section(..), Taper(..), allParameters, describe, format, identifier, notationTerm, opParameter, sectionName)
 import Reef.Conspicillum.Cloud (Op(..))
@@ -27,7 +27,7 @@ import Reef.Conspicillum.Preset (Bank(..), Preset, bankName)
 import Reef.Conspicillum.Presets (presets)
 
 reference :: String
-reference = intercalate "\n" (introduction <> parameters <> rules <> chords <> presetList) <> "\n"
+reference = intercalate "\n" (introduction <> modes <> parameters <> rules <> chords <> presetList) <> "\n"
 
 introduction :: Array String
 introduction =
@@ -38,10 +38,11 @@ introduction =
   , "code and run `node tools/conspicillum-reference.mjs`. The conformance suite compares this"
   , "file with what node and the BEAM both print, so it cannot drift from the instrument."
   , ""
-  , "A scene is written as one line, `#`-separated, the way Tidal writes a pattern:"
+  , "A scene is written as one line, its mode first and then `#`-separated terms, the way Tidal"
+  , "writes a pattern:"
   , ""
   , "```"
-  , "s \"fd-beat-bar\" # walk 0.2 0.1 0.1 # grid 8 # swing 0.62 # fix snare 0.5 (pshift 1.5)"
+  , "tape $ s \"fd-beat-bar\" # walk 0.2 0.1 0.1 # grid 8 # swing 0.62 # fix snare 0.5 (pshift 1.5)"
   , "```"
   , ""
   , "Anything a line does not say is Sector's default: sixteen grains a bar, following the tape."
@@ -49,12 +50,45 @@ introduction =
   , ""
   , "## Contents"
   , ""
+  , "- [Modes](#modes)"
   , "- [Parameters](#parameters)"
   , "- [Rules](#rules)"
   , "- [Chords](#chords)"
   , "- [Presets](#presets)"
   , ""
   ]
+
+-- ── modes ────────────────────────────────────────────────────────────────────
+
+modes :: Array String
+modes =
+  [ "## Modes"
+  , ""
+  , "Every line says how it plays before anything else, as a Tidal function before the pattern."
+  , "A word with no meaning in the line's mode is refused, and the refusal says why, so a word"
+  , "carried over from another mode cannot quietly do nothing. A line written without a mode"
+  , "word is read as before (a pattern of samples is a sampler, `follow 0` is a cloud, the rest"
+  , "is tape) and printed with one."
+  , ""
+  , "- **`tape $`**: the material's own timeline, read along at `follow` (1 unless written)."
+  , "  Sector's beat tape, and the virtual tape (`samples \"<0 4 7 5>\"`, one sample a bar)."
+  , "- **`cloud $`**: grains with no timeline (`follow` 0, implied): a corpus queried, a texture."
+  , "- **`sampler $`**: each event of `n \"…\"` plays a whole sample, by pattern."
+  , ""
+  , "One sample or the whole set is written as Tidal writes it: `s \"set:4\"` or `s \"set\"`."
+  , ""
+  , "| Mode | Words it refuses |"
+  , "|---|---|"
+  ]
+    <> map row [ TapeMode, CloudMode, SamplerMode ]
+    <> [ "" ]
+  where
+  row m = "| `" <> modeName m <> " $` | "
+    <> intercalate ", " (map (\w -> "`" <> w <> "`") (filter (\w -> isJust (misplaced m w)) candidates))
+    <> " |"
+  candidates =
+    [ "n", "grains", "euclid", "onsets", "sustain", "position", "spray", "follow", "walk", "grid", "reach"
+    , "steps", "warp", "fit", "bars", "order", "samples", "tapeswing" ]
 
 -- ── parameters ───────────────────────────────────────────────────────────────
 

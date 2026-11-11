@@ -16,6 +16,23 @@
 -- | line has the corpora), the query, and the warp's ratio, which is the rig's
 -- | tempo and so belongs to the moment rather than to the scene.
 -- |
+-- | **Every line says its mode first** (AC, 2026-11-11), as a Tidal function
+-- | before the pattern: `tape $`, `cloud $` or `sampler $`.
+-- |
+-- | - `tape $` — the material's own timeline, read along at `follow`
+-- |   (1 unless written; 0 is a cloud, and is refused here): Sector's beat
+-- |   tape, and the virtual tape (`samples "<…>"`, one sample a bar)
+-- | - `cloud $` — grains with no timeline (`follow` 0, implied): a corpus
+-- |   queried, a texture
+-- | - `sampler $` — each event of `n "…"` plays a whole sample, by pattern
+-- |
+-- | The mode word decides, and a word with no meaning in the line's mode is an
+-- | error that says so (`modeWords`), so a word copied from another mode
+-- | can't silently do nothing. A line without a mode word (written before
+-- | 2026-11-11) is read as it always was, its mode inferred by `modeOf`, and
+-- | `print` writes the word, dropping the words its mode never read. One
+-- | sample or the whole set stays as Tidal writes it: `s "set:4"` or `s "set"`.
+-- |
 -- | Vocabulary, in the order `print` writes it:
 -- |
 -- | - `s "set"`, `s "set:4"` — the set, and one sample of it (else the whole)
@@ -46,6 +63,10 @@
 -- |   the parameter's own (`_` for a space). The rig never reads it.
 module Reef.Conspicillum.Notation
   ( Line
+  , Mode(..)
+  , modeOf
+  , modeName
+  , misplaced
   , Knob
   , defaultLine
   , knobLabel
@@ -66,10 +87,11 @@ import Prelude
 import Data.Array (drop, elemIndex, filter, findIndex, foldM, index, length, mapWithIndex, null, range, snoc, take, uncons)
 import Data.Array as Array
 import Data.Either (Either(..), note)
-import Data.Foldable (intercalate)
+import Data.Foldable (for_, intercalate)
 import Data.Int (floor, round, toNumber)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Control.Alt ((<|>))
+import Data.Maybe (Maybe(..), fromMaybe, isNothing, maybe)
 import Data.Number as Number
 import Data.String as String
 import Data.String.CodeUnits as SCU
@@ -124,6 +146,54 @@ defaultLine =
           ]
       }
   }
+
+-- ── modes ────────────────────────────────────────────────────────────────────
+
+data Mode = TapeMode | CloudMode | SamplerMode
+
+derive instance eqMode :: Eq Mode
+
+modeName :: Mode -> String
+modeName = case _ of
+  TapeMode -> "tape"
+  CloudMode -> "cloud"
+  SamplerMode -> "sampler"
+
+-- | What a line plays, as the engine decides it: a pattern of samples is a
+-- | sampler, a cloud has no timeline (`follow` 0), and the rest read a tape.
+modeOf :: Line -> Mode
+modeOf l
+  | l.spec.samplePattern /= "" = SamplerMode
+  | l.spec.cloud.follow == 0.0 = CloudMode
+  | otherwise = TapeMode
+
+-- | Why `word` means nothing in `mode`, if it doesn't. Read off the engine
+-- | (`Cloud.cycleUnder`): a sampler places no grains and reads no timeline; a
+-- | cloud reads no tape; only a sampler has a pattern of samples. `follow` is
+-- | the tape's own, since 0 is what makes a cloud.
+misplaced :: Mode -> String -> Maybe String
+misplaced mode word = case mode of
+  SamplerMode
+    | Array.elem word grainWords -> Just (word <> " places or reads grains, and a sampler $ line plays whole samples")
+    | Array.elem word tapeWords || word == "follow" -> Just (word <> " is a tape $ word, and this is a sampler $ line")
+  CloudMode
+    | word == "n" -> Just "n is a sampler $ word, and this is a cloud $ line"
+    | Array.elem word tapeWords || word == "follow" -> Just (word <> " is a tape $ word, and a cloud $ line has no timeline")
+  TapeMode
+    | word == "n" -> Just "n is a sampler $ word, and this is a tape $ line"
+  _ -> Nothing
+  where
+  grainWords = [ "grains", "euclid", "onsets", "sustain", "position", "spray", "walk", "grid", "reach", "steps", "warp", "fit" ]
+  tapeWords = [ "bars", "order", "samples", "tapeswing" ]
+
+-- | `tape $ s "…" # …`: the mode word and the rest, or no word.
+splitMode :: String -> { mode :: Maybe Mode, body :: String }
+splitMode src = fromMaybe { mode: Nothing, body: src } (try TapeMode <|> try CloudMode <|> try SamplerMode)
+  where
+  try m = do
+    rest <- String.stripPrefix (String.Pattern (modeName m)) (String.trim src)
+    body <- String.stripPrefix (String.Pattern "$") (String.trim rest)
+    pure { mode: Just m, body }
 
 -- | The rule ops, by wire number: the name a line uses is the index here.
 opNames :: Array String
@@ -198,8 +268,25 @@ terms = Array.foldl (\acc t -> if t == THash then snoc acc [] else addLast t acc
 
 parse :: String -> Either String Line
 parse src = do
-  toks <- tokenize src
-  foldM term defaultLine (filter (not <<< null) (terms toks))
+  let { mode, body } = splitMode src
+  toks <- tokenize body
+  let written = filter (not <<< null) (terms toks)
+  line <- foldM term (start mode) written
+  case mode of
+    Nothing -> Right line
+    Just m -> do
+      for_ written \t -> case Array.head t of
+        Just (TWord w) -> maybe (Right unit) Left (misplaced m w)
+        _ -> Right unit
+      case m of
+        TapeMode | line.spec.cloud.follow == 0.0 -> Left "follow 0 has no timeline: that is cloud $"
+        SamplerMode | line.spec.samplePattern == "" -> Left "a sampler $ line plays a pattern: add # n \"0 4 7 5\""
+        _ -> Right line
+  where
+  -- a cloud's follow is 0 without being written
+  start = case _ of
+    Just CloudMode -> defaultLine { spec = defaultLine.spec { cloud = defaultLine.spec.cloud { follow = 0.0 } } }
+    _ -> defaultLine
 
 num :: String -> Tok -> Either String Number
 num what = case _ of
@@ -449,8 +536,12 @@ q :: String -> String
 q s = "\"" <> s <> "\""
 
 print :: Line -> String
-print l = intercalate " # " (filter (_ /= "") parts)
+print l = modeName mode <> " $ " <> intercalate " # " (filter said parts)
   where
+  mode = modeOf l
+  -- a word its mode never reads is not written: it did nothing
+  said part = part /= "" && isNothing (misplaced mode (firstWord part))
+  firstWord part = maybe part (\i -> String.take i part) (String.indexOf (String.Pattern " ") part)
   sp = l.spec
   d = defaultLine.spec
   num1 name x x0 = if x == x0 then "" else name <> " " <> fmt x
