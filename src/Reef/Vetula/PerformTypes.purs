@@ -21,7 +21,10 @@ module Reef.Vetula.PerformTypes where
 import Prelude
 
 import Data.Array (reverse)
+import Data.Int (round)
 import Data.Maybe (Maybe(..))
+import Data.Number as Number
+import Data.String (trim)
 import Reef.PatternArg (PatternArg)
 import Reef.Clips (MidiClip)
 
@@ -48,8 +51,24 @@ data PerfFx
                      -- subdivision, alternation, euclid all live here (`arp "0 1 2"`,
                      -- `arp "0 ~ <2 3>"`). Parsed + interpreted at apply-time.
   | Strum Int        -- explode chord→time as a fast onset stagger (ms per note)
+  | Velocity PatternArg -- how hard each note is struck (`vel 0.6`, `vel "0.4 0.8 <1 0.5>"`):
+                     -- 0..1, or a MIDI velocity above 1. Like strum it changes no
+                     -- note and no time, so it is identity in the pattern; the
+                     -- sink samples it at each note (`velocityOf`).
 
 derive instance eqPerfFx :: Eq PerfFx
+
+-- | The MIDI velocity a card's notes are struck at when no `vel` says otherwise.
+defaultVelocity :: Int
+defaultVelocity = 90
+
+-- | A `vel` token as a MIDI velocity, 1..127: up to 1 it is a fraction of full
+-- | (`0.5` is 64), above 1 it is the velocity itself (`100`). Anything that is
+-- | not a number leaves the velocity as it was.
+velocityOf :: Int -> String -> Int
+velocityOf was tok = case Number.fromString (trim tok) of
+  Nothing -> was
+  Just x -> clamp 1 127 (round (if x <= 1.0 then x * 127.0 else x))
 
 -- | Arpeggiation order of a chord's notes (low→high, high→low, or bounce).
 data ArpDir = ArpUp | ArpDown | ArpUpDown

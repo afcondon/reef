@@ -156,6 +156,7 @@ fxDir = case _ of
   Arpg dir r -> "arp" <> printArpDir dir <> " " <> show r
   ArpP src -> "arp " <> quote src   -- the figure is quoted so its spaces survive as one arg
   Strum ms -> "strum " <> show ms
+  Velocity arg -> "vel " <> printArg arg
 
 quote :: String -> String
 quote x = "\"" <> x <> "\""
@@ -310,6 +311,8 @@ fxOfVerb verb arg = case verb of
   "arpdown" -> Just (Arpg ArpDown (clamp 1 16 (argInt 4 arg)))
   "arpupdown" -> Just (Arpg ArpUpDown (clamp 1 16 (argInt 4 arg)))
   "strum" -> Just (Strum (clamp 0 80 (argInt 14 arg)))
+  "vel" -> Just (Velocity (mkArgL arg))
+  "velocity" -> Just (Velocity (mkArgL arg))
   _ -> Nothing
 
 parseTerm :: String -> PerfTerm
