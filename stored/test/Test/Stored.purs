@@ -37,7 +37,7 @@ main = do
             ((Stored.read """{"bus":8,"channel":0,"coarse_setting":null,"kind":"calibration-table","label":"x","points":[]}""" <#> _.coarseSetting) == Just Nothing)
           <> expect "notes written and read are the same, quotes and all"
             ( let
-                kept = { label: "plaits-es9-jack1", table: "abc", module: "Plaits \"the black one\"", place: "top row\nleft", comment: "", before: "calibrate-before-1114-120000", after: "" }
+                kept = { label: "plaits-es9-jack1", table: "abc", module: "Plaits \"the black one\"", moduleKey: Just "mutable-instruments-plaits-2", place: "top row\nleft", comment: "", before: "calibrate-before-1114-120000", after: "" }
               in
                 Notes.read (Notes.write kept) == Just kept
             )

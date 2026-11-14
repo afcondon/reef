@@ -19,7 +19,7 @@ module Reef.Calibration.Notes
 import Prelude
 
 import Data.Maybe (Maybe)
-import Hawser.Message (field, recordOf)
+import Hawser.Message (field, optional, recordOf)
 import Hawser.Value (Value, fromText, string, toText)
 
 kind :: String
@@ -33,8 +33,11 @@ type Notes =
   { label :: String
   -- | The hash of the table these notes are about.
   , table :: String
-  -- | Which physical module.
+  -- | Which physical module, as a person would say it.
   , module :: String
+  -- | The same module by the key Marquetry's inventory gives it, when it
+  -- | was chosen from there: what tells two units of one model apart.
+  , moduleKey :: Maybe String
   -- | Which case, which row.
   , place :: String
   , comment :: String
@@ -47,10 +50,11 @@ type Notes =
 
 notes :: Value Notes
 notes = recordOf "calibration notes" $
-  (\label table mod place comment before after -> { label, table, module: mod, place, comment, before, after })
+  (\label table mod moduleKey place comment before after -> { label, table, module: mod, moduleKey, place, comment, before, after })
     <$> field "label" _.label string "the signal path"
     <*> field "table" _.table string "the hash of the table these are about"
     <*> field "module" _.module string "which physical module"
+    <*> optional "moduleKey" _.moduleKey string "its key in Marquetry's inventory"
     <*> field "where" _.place string "which case, which row"
     <*> field "comment" _.comment string "anything worth knowing later"
     <*> field "before" _.before string "the take of the sweep"
