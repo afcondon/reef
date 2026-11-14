@@ -1,0 +1,43 @@
+{
+  "calibration-vectors": 1,
+  "generatedBy": "Test.CalibrationVectors in reef; do not edit by hand, run `node conformance/calibration.mjs write`",
+  "toleranceVolts": 1e-9,
+  "tables": {
+    "saich-1": [{"volts": 0.0, "hz": 65.349}, {"volts": 0.25, "hz": 77.824}, {"volts": 0.5, "hz": 92.691}, {"volts": 0.75, "hz": 110.422}, {"volts": 1.0, "hz": 131.544}, {"volts": 1.25, "hz": 156.683}, {"volts": 1.5, "hz": 186.544}, {"volts": 1.75, "hz": 222.187}, {"volts": 2.0, "hz": 264.683}, {"volts": 2.25, "hz": 315.144}, {"volts": 2.5, "hz": 375.168}, {"volts": 2.75, "hz": 446.017}, {"volts": 3.0, "hz": 530.847}, {"volts": 3.25, "hz": 631.324}, {"volts": 3.5, "hz": 750.071}, {"volts": 3.75, "hz": 891.095}, {"volts": 4.0, "hz": 1058.725}, {"volts": 4.25, "hz": 1256.16}, {"volts": 4.5, "hz": 1489.997}, {"volts": 4.75, "hz": 1766.379}, {"volts": 5.0, "hz": 2086.409}],
+    "saich-1-reversed": [{"volts": 5.0, "hz": 2086.409}, {"volts": 4.75, "hz": 1766.379}, {"volts": 4.5, "hz": 1489.997}, {"volts": 4.25, "hz": 1256.16}, {"volts": 4.0, "hz": 1058.725}, {"volts": 3.75, "hz": 891.095}, {"volts": 3.5, "hz": 750.071}, {"volts": 3.25, "hz": 631.324}, {"volts": 3.0, "hz": 530.847}, {"volts": 2.75, "hz": 446.017}, {"volts": 2.5, "hz": 375.168}, {"volts": 2.25, "hz": 315.144}, {"volts": 2.0, "hz": 264.683}, {"volts": 1.75, "hz": 222.187}, {"volts": 1.5, "hz": 186.544}, {"volts": 1.25, "hz": 156.683}, {"volts": 1.0, "hz": 131.544}, {"volts": 0.75, "hz": 110.422}, {"volts": 0.5, "hz": 92.691}, {"volts": 0.25, "hz": 77.824}, {"volts": 0.0, "hz": 65.349}],
+    "ideal": [{"volts": -1.0, "hz": 55.0}, {"volts": 0.0, "hz": 110.0}, {"volts": 1.0, "hz": 220.0}, {"volts": 2.0, "hz": 440.0}],
+    "two-points": [{"volts": 0.0, "hz": 100.0}, {"volts": 4.0, "hz": 1600.0}],
+    "one-point": [{"volts": 1.5, "hz": 300.0}],
+    "same-pitch-twice": [{"volts": 0.0, "hz": 100.0}, {"volts": 1.0, "hz": 200.0}, {"volts": 2.0, "hz": 200.0}, {"volts": 3.0, "hz": 400.0}]
+  },
+  "cases": [
+    {"name": "saich-below", "table": "saich-1", "hz": 20.0, "volts": 0.0, "why": "below the sweep: the first voltage, not an extrapolation"},
+    {"name": "saich-first", "table": "saich-1", "hz": 65.349, "volts": 0.0, "why": "exactly the first point"},
+    {"name": "saich-just-inside", "table": "saich-1", "hz": 65.4, "volts": 0.001116322575614265, "why": "just inside"},
+    {"name": "saich-c3", "table": "saich-1", "hz": 130.8, "volts": 0.9918986854402799, "why": "between two points, where log and linear interpolation part"},
+    {"name": "saich-on-a-point", "table": "saich-1", "hz": 264.683, "volts": 2.0, "why": "exactly a measured point"},
+    {"name": "saich-c5", "table": "saich-1", "hz": 523.25, "volts": 2.9793034262485936, "why": "an octave and more up"},
+    {"name": "saich-high", "table": "saich-1", "hz": 2000.0, "volts": 4.936495502637198, "why": "in the last bracket"},
+    {"name": "saich-last", "table": "saich-1", "hz": 2086.409, "volts": 5.0, "why": "exactly the last point"},
+    {"name": "saich-above", "table": "saich-1", "hz": 8000.0, "volts": 5.0, "why": "above the sweep: the last voltage"},
+    {"name": "saich-note-36", "table": "saich-1", "hz": 65.40639132514966, "volts": 0.0012561588464088725, "why": "a MIDI note, C2"},
+    {"name": "saich-note-40", "table": "saich-1", "hz": 82.40688922821748, "volts": 0.33182513193735985, "why": "E2"},
+    {"name": "saich-note-55", "table": "saich-1", "hz": 195.99771799087463, "volts": 1.5706823686091758, "why": "G3"},
+    {"name": "saich-note-60", "table": "saich-1", "hz": 261.6255653005986, "volts": 1.9834033644439326, "why": "C4"},
+    {"name": "saich-note-72", "table": "saich-1", "hz": 523.2511306011972, "volts": 2.9793065286581233, "why": "C5"},
+    {"name": "saich-note-fractional", "table": "saich-1", "hz": 269.2917795270241, "volts": 2.024731959436153, "why": "a quarter-tone: fractional notes are allowed"},
+    {"name": "reversed-c5", "table": "saich-1-reversed", "hz": 523.25, "volts": 2.9793034262485936, "why": "the points are sorted by volts on entry"},
+    {"name": "reversed-below", "table": "saich-1-reversed", "hz": 20.0, "volts": 0.0, "why": "and the ends are the ends after sorting"},
+    {"name": "ideal-a2", "table": "ideal", "hz": 110.0, "volts": 0.0, "why": "a perfect volt per octave: 110 Hz at 0 V"},
+    {"name": "ideal-a4", "table": "ideal", "hz": 440.0, "volts": 2.0, "why": "440 Hz at 2 V"},
+    {"name": "ideal-tritone", "table": "ideal", "hz": 155.56349186104046, "volts": 0.5, "why": "half an octave above 110 Hz is half a volt"},
+    {"name": "ideal-negative", "table": "ideal", "hz": 77.78174593052023, "volts": -0.5, "why": "and below 0 V"},
+    {"name": "two-points-geometric-middle", "table": "two-points", "hz": 400.0, "volts": 1.9999999999999993, "why": "the middle in pitch of 100 and 1600 Hz is 400 Hz: 2 V"},
+    {"name": "two-points-quarter", "table": "two-points", "hz": 200.0, "volts": 0.999999999999999, "why": "one octave of four: 1 V"},
+    {"name": "one-point-below", "table": "one-point", "hz": 100.0, "volts": 1.5, "why": "one point: its voltage, whatever is asked"},
+    {"name": "one-point-above", "table": "one-point", "hz": 1000.0, "volts": 1.5, "why": "the same"},
+    {"name": "same-pitch-first-bracket", "table": "same-pitch-twice", "hz": 150.0, "volts": 0.5849625007211559, "why": "before the repeated pitch"},
+    {"name": "same-pitch-on-it", "table": "same-pitch-twice", "hz": 200.0, "volts": 1.0, "why": "on it: the first bracket that holds it gives its upper voltage"},
+    {"name": "same-pitch-after", "table": "same-pitch-twice", "hz": 300.0, "volts": 2.5849625007211565, "why": "after it"}
+  ]
+}
