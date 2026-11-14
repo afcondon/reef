@@ -11,6 +11,7 @@ import Effect (Effect)
 import Effect.Console (log)
 import Effect.Exception (throw)
 import Reef.Calibration (realise)
+import Reef.Calibration.Notes as Notes
 import Reef.Calibration.Stored as Stored
 
 -- | As DeepStar wrote one on 2026-07-11, shortened to three points.
@@ -34,6 +35,14 @@ main = do
             (isNothing (Stored.read """{"bus":8,"channel":0,"coarse_setting":null,"kind":"calibration-table","label":"x","points":[],"colour":"red"}"""))
           <> expect "a null coarse setting is nobody having recorded it"
             ((Stored.read """{"bus":8,"channel":0,"coarse_setting":null,"kind":"calibration-table","label":"x","points":[]}""" <#> _.coarseSetting) == Just Nothing)
+          <> expect "notes written and read are the same, quotes and all"
+            ( let
+                kept = { label: "plaits-es9-jack1", table: "abc", module: "Plaits \"the black one\"", place: "top row\nleft", comment: "", before: "calibrate-before-1114-120000", after: "" }
+              in
+                Notes.read (Notes.write kept) == Just kept
+            )
+          <> expect "notes as the page first wrote them, by hand, still read"
+            ( (Notes.read """{"label":"x","table":"h","module":"m","where":"w","comment":"c","before":"b","after":"a"}""" <#> _.place) == Just "w" )
           <> expect "a point without a pitch is refused"
             (isNothing (Stored.read """{"bus":8,"channel":0,"coarse_setting":null,"kind":"calibration-table","label":"x","points":[{"volts":1}]}"""))
   for_ failures \failure -> log ("FAIL  " <> failure)
