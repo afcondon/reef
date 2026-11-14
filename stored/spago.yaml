@@ -1,5 +1,5 @@
-# What Reef's values look like where they are kept. First: a calibration
-# table as it is stored in Amphora, described once with Hawser. Apart from
+# Calibration tables as they are kept in Amphora (described once with
+# Hawser), and the judgement of a calibration sweep. Apart from
 # reef itself so that reef stays light (it builds for the BEAM with the
 # purerl set alone); a consumer that reads or writes stored tables takes
 # this as well.
@@ -7,11 +7,14 @@ package:
   name: reef-stored
   dependencies:
     - arrays
+    - foldable-traversable
     - hawser
+    - integers
     - maybe
     - numbers
     - prelude
     - reef
+    - tuples
   test:
     main: Test.Stored
     dependencies:

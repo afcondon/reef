@@ -1,0 +1,693 @@
+{
+  "base": [
+    {
+      "name": "c2",
+      "hz": 65.41,
+      "note": "C2",
+      "offsetCents": 0.0955149536111555
+    },
+    {
+      "name": "a-little-sharp-of-c2",
+      "hz": 66,
+      "note": "C2",
+      "offsetCents": 15.641287000552705
+    },
+    {
+      "name": "a4",
+      "hz": 440,
+      "note": "A4",
+      "offsetCents": 0
+    },
+    {
+      "name": "between-notes",
+      "hz": 452.9,
+      "note": "A#4",
+      "offsetCents": -49.97318123429252
+    },
+    {
+      "name": "low",
+      "hz": 27.5,
+      "note": "A0",
+      "offsetCents": 0
+    },
+    {
+      "name": "c-sharp-6",
+      "hz": 1108.73,
+      "note": "C#6",
+      "offsetCents": -0.000818058741029679
+    }
+  ],
+  "calibration-judgement-vectors": 1,
+  "generatedBy": "TestJudgementOracle in deepstar/cmd/deepstar; do not edit by hand. The outputs are DeepStar's own, recorded before it is retired.",
+  "heard": [
+    {
+      "name": "agrees",
+      "why": "the ear and the detector agree: nothing moves",
+      "refHz": 65.41,
+      "hz": [
+        65.41,
+        130.9,
+        262.3
+      ],
+      "heardHz": 65.41,
+      "refused": false,
+      "octaves": 0,
+      "shiftedHz": [
+        65.41,
+        130.9,
+        262.3
+      ],
+      "baseNote": "",
+      "baseOffsetCents": 0,
+      "shiftedRefHz": 65.41
+    },
+    {
+      "name": "two-octaves-up",
+      "why": "the detector followed the period, the ear the fourth harmonic",
+      "refHz": 32.7,
+      "hz": [
+        32.7,
+        65.5,
+        131.2
+      ],
+      "heardHz": 130.81,
+      "refused": false,
+      "octaves": 2,
+      "shiftedHz": [
+        130.8,
+        262,
+        524.8
+      ],
+      "baseNote": "C3",
+      "baseOffsetCents": -0.17,
+      "shiftedRefHz": 130.8
+    },
+    {
+      "name": "an-octave-down",
+      "why": "the other way",
+      "refHz": 261.6,
+      "hz": [
+        261.6,
+        523.9
+      ],
+      "heardHz": 130.81,
+      "refused": false,
+      "octaves": -1,
+      "shiftedHz": [
+        130.8,
+        261.95
+      ],
+      "baseNote": "C3",
+      "baseOffsetCents": -0.17,
+      "shiftedRefHz": 130.8
+    },
+    {
+      "name": "ear-twenty-cents-out",
+      "why": "the ear supplies only the octave, so a rough estimate costs nothing",
+      "refHz": 32.7,
+      "hz": [
+        32.7,
+        65.5
+      ],
+      "heardHz": 66.2,
+      "refused": false,
+      "octaves": 1,
+      "shiftedHz": [
+        65.4,
+        131
+      ],
+      "baseNote": "C2",
+      "baseOffsetCents": -0.17,
+      "shiftedRefHz": 65.4
+    },
+    {
+      "name": "a-fifth-away",
+      "why": "not an octave error: refused",
+      "refHz": 65.41,
+      "hz": [
+        65.41,
+        130.9
+      ],
+      "heardHz": 98,
+      "refused": true,
+      "octaves": 0,
+      "shiftedHz": [
+        65.41,
+        130.9
+      ],
+      "baseNote": "",
+      "baseOffsetCents": 0,
+      "shiftedRefHz": 65.41
+    },
+    {
+      "name": "no-heard-pitch",
+      "why": "nothing to compare",
+      "refHz": 65.41,
+      "hz": [
+        65.41,
+        130.9
+      ],
+      "heardHz": 0,
+      "refused": true,
+      "octaves": 0,
+      "shiftedHz": [
+        65.41,
+        130.9
+      ],
+      "baseNote": "",
+      "baseOffsetCents": 0,
+      "shiftedRefHz": 65.41
+    }
+  ],
+  "problems": [
+    {
+      "name": "a-good-table",
+      "why": "nothing wrong",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": []
+    },
+    {
+      "name": "one-point",
+      "why": "cannot interpolate",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": [
+        "too-few-points"
+      ]
+    },
+    {
+      "name": "no-points",
+      "why": "nothing measured",
+      "points": [],
+      "kinds": [
+        "too-few-points"
+      ]
+    },
+    {
+      "name": "flat",
+      "why": "the same pitch at every step: a dead audio stream",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 65.41,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 65.41,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 2,
+          "hz": 65.41,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": [
+        "not-monotonic"
+      ]
+    },
+    {
+      "name": "folded",
+      "why": "pitch falls where it should rise",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 2,
+          "hz": 150,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": [
+        "not-monotonic"
+      ]
+    },
+    {
+      "name": "unsorted-but-good",
+      "why": "sorted by volts before judging",
+      "points": [
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": []
+    },
+    {
+      "name": "median-not-corroborated",
+      "why": "three readings and the median agrees with none within 5 cents",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 900,
+          "agreement_cents": 40
+        },
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": [
+        "unreliable-point"
+      ]
+    },
+    {
+      "name": "wild-spread-good-agreement",
+      "why": "an outlier occurred and the median survived it: not a problem",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 2236,
+          "agreement_cents": 2
+        },
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": []
+    },
+    {
+      "name": "agreement-exactly-five",
+      "why": "five cents is the edge, and is allowed",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 6,
+          "agreement_cents": 5
+        },
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": []
+    },
+    {
+      "name": "two-readings-far-apart",
+      "why": "two readings are never judged on agreement",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 2,
+          "spread_cents": 50,
+          "agreement_cents": 50
+        },
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": []
+    },
+    {
+      "name": "old-table-wide-spread",
+      "why": "a table from before agreement was recorded falls back to spread over 10 cents",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 12
+        },
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": [
+        "unreliable-point"
+      ]
+    },
+    {
+      "name": "old-table-narrow-spread",
+      "why": "and a narrow spread passes",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 200,
+          "reads": 3,
+          "spread_cents": 9
+        },
+        {
+          "volts": 2,
+          "hz": 400,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        }
+      ],
+      "kinds": []
+    },
+    {
+      "name": "no-reads-recorded",
+      "why": "a hand-made table with no reading counts is not judged on them",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100
+        },
+        {
+          "volts": 1,
+          "hz": 200
+        }
+      ],
+      "kinds": []
+    },
+    {
+      "name": "flat-and-unreliable",
+      "why": "every problem is reported, in order",
+      "points": [
+        {
+          "volts": 0,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 0.3,
+          "agreement_cents": 0.2
+        },
+        {
+          "volts": 1,
+          "hz": 100,
+          "reads": 3,
+          "spread_cents": 300,
+          "agreement_cents": 30
+        }
+      ],
+      "kinds": [
+        "not-monotonic",
+        "unreliable-point"
+      ]
+    }
+  ],
+  "readings": [
+    {
+      "name": "three-agreeing",
+      "why": "an ordinary point",
+      "hz": [
+        130.8,
+        130.82,
+        130.79
+      ],
+      "median": 130.8,
+      "spreadCents": 0.3970568533287667,
+      "agreementCents": 0.13236240299036947
+    },
+    {
+      "name": "one-wild",
+      "why": "one reading 1.86 octaves out: a huge spread, and a median that survived it",
+      "hz": [
+        261.6,
+        261.7,
+        950.2
+      ],
+      "median": 261.7,
+      "spreadCents": 2233.0423990953136,
+      "agreementCents": 0.6616602599425029
+    },
+    {
+      "name": "one-reading",
+      "why": "nothing to agree with",
+      "hz": [
+        440
+      ],
+      "median": 440,
+      "spreadCents": 0,
+      "agreementCents": 0
+    },
+    {
+      "name": "two-readings",
+      "why": "the median is their mean; each is the other's neighbour",
+      "hz": [
+        100,
+        101
+      ],
+      "median": 100.5,
+      "spreadCents": 17.226351572484134,
+      "agreementCents": 8.591749887439606
+    },
+    {
+      "name": "four-readings",
+      "why": "an even count: the mean of the middle two",
+      "hz": [
+        200,
+        202,
+        198,
+        400
+      ],
+      "median": 201,
+      "spreadCents": 1217.399483634138,
+      "agreementCents": 8.591749887439606
+    },
+    {
+      "name": "all-different-octaves",
+      "why": "no two agree",
+      "hz": [
+        110,
+        220,
+        440
+      ],
+      "median": 220,
+      "spreadCents": 2400,
+      "agreementCents": 1200
+    },
+    {
+      "name": "identical",
+      "why": "perfect agreement",
+      "hz": [
+        65.41,
+        65.41,
+        65.41
+      ],
+      "median": 65.41,
+      "spreadCents": 0,
+      "agreementCents": 0
+    },
+    {
+      "name": "none",
+      "why": "no readings at all",
+      "hz": [],
+      "median": 0,
+      "spreadCents": 0,
+      "agreementCents": 0
+    },
+    {
+      "name": "five-with-two-wild",
+      "why": "the median still sits in the good three",
+      "hz": [
+        98,
+        196.1,
+        98.1,
+        49,
+        98.05
+      ],
+      "median": 98.05,
+      "spreadCents": 2400.883057427494,
+      "agreementCents": 0.882607232507552
+    }
+  ],
+  "snap": [
+    {
+      "name": "already-there",
+      "why": "within tolerance, no fold",
+      "hz": 131,
+      "expect": 130.8,
+      "toleranceCents": 60,
+      "folded": 131,
+      "octaves": 0,
+      "ok": true
+    },
+    {
+      "name": "an-octave-down",
+      "why": "the detector found half the pitch",
+      "hz": 65.5,
+      "expect": 130.8,
+      "toleranceCents": 60,
+      "folded": 131,
+      "octaves": -1,
+      "ok": true
+    },
+    {
+      "name": "two-octaves-up",
+      "why": "a fourth harmonic",
+      "hz": 524,
+      "expect": 130.8,
+      "toleranceCents": 60,
+      "folded": 131,
+      "octaves": 2,
+      "ok": true
+    },
+    {
+      "name": "a-fifth-partial",
+      "why": "not near any octave: refused, not dragged into line",
+      "hz": 654,
+      "expect": 130.8,
+      "toleranceCents": 60,
+      "folded": 163.5,
+      "octaves": 2,
+      "ok": false
+    },
+    {
+      "name": "just-outside",
+      "why": "an octave down and 70 cents sharp of it",
+      "hz": 68.1,
+      "expect": 130.8,
+      "toleranceCents": 60,
+      "folded": 136.2,
+      "octaves": -1,
+      "ok": false
+    },
+    {
+      "name": "no-pitch",
+      "why": "nothing was read",
+      "hz": 0,
+      "expect": 130.8,
+      "toleranceCents": 60,
+      "folded": 0,
+      "octaves": 0,
+      "ok": false
+    },
+    {
+      "name": "no-expectation",
+      "why": "nothing to fold towards",
+      "hz": 131,
+      "expect": 0,
+      "toleranceCents": 60,
+      "folded": 131,
+      "octaves": 0,
+      "ok": false
+    }
+  ],
+  "toleranceCents": 0.000001,
+  "toleranceHz": 1e-9
+}
