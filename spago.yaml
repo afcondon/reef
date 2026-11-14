@@ -29,5 +29,8 @@ package:
 workspace:
   extraPackages:
     harmonia: 0.2.0
+    # For stored/ only: the shape of a kept calibration table.
+    hawser:
+      path: ../../purescript-hylograph-libs/purescript-hawser
   packageSet:
     registry: 77.13.1
