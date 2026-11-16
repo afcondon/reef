@@ -88,7 +88,7 @@ cycleArpDir = case _ of
   ArpUpDown -> ArpUp
 
 -- | A chord's notes in an arp direction's order.
-arpOrder :: ArpDir -> Array Int -> Array Int
+arpOrder :: forall a. ArpDir -> Array a -> Array a
 arpOrder = case _ of
   ArpUp -> identity
   ArpDown -> reverse

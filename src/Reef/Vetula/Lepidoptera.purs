@@ -63,6 +63,15 @@ module Reef.Vetula.Lepidoptera
   , readProgression
   , Staged
   , readStaged
+  , ClipNote
+  , StagedClip
+  , clipKey
+  , clipOfKey
+  , clipSource
+  , printClip
+  , readStagedClip
+  , stageClip
+  , clipTicksPerBeat
   ) where
 
 import Prelude
@@ -77,6 +86,7 @@ import Data.String.Common (joinWith, split, trim)
 import Reef.Macro (Form(..), parseLane, tokenize)
 import Reef.PatternArg (PatternArg(..), argSrc, printArg)
 import Reef.Vetula.PerformTypes (ArpDir(..), Layer, PerfFx(..), PerfSel(..), PerfTerm(..), When(..), mkLayer, printArpDir, termShort)
+import Reef.Clips (MidiClip)
 import Reef.Vetula.NoteText (parseBeats, parseProgression, rhythmSeq, tidalNoteName, weighted)
 
 -- | A named chord set the voices reference. `chords` are note-lists in *stored
@@ -365,6 +375,7 @@ type VoiceSpec =
   , stack   :: Array Layer
   , term    :: PerfTerm
   , muted   :: Boolean
+  , clip    :: Maybe StagedClip      -- a captured clip as the source, in place of chords
   }
 
 -- | **One card as one line**, the form a card takes on the stage and in
@@ -379,7 +390,9 @@ type VoiceSpec =
 printCard :: VoiceSpec -> String
 printCard spec = printVoice
   { channel: spec.channel
-  , source: if null spec.chords then Nothing else Just (printProgression spec.chords)
+  , source: case spec.clip of
+      Just c -> Just (clipSource c.name)
+      Nothing -> if null spec.chords then Nothing else Just (printProgression spec.chords)
   , seqText: trim spec.seqText
   , stack: spec.stack
   , term: spec.term
@@ -407,13 +420,18 @@ parseCard line = parseCardIn (const Nothing) 0 line
 -- | know gives none, and the card is silent until the name is saved.
 parseCardIn :: (String -> Maybe Staged) -> Int -> String -> Maybe VoiceSpec
 parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
+  -- a clip as a voice, as Limulus writes it: `clip "gem-truck" # slow 2`
+  toks | toks !! 0 == Just "clip" -> do
+    name <- unquote <$> toks !! 1
+    let v = voiceOf n (Just (clipSource name)) (joinWith " " ([ "\"\"" ] <> drop 2 toks))
+    pure (specOf v []) { seqText = "", clip = lookup (clipSource name) >>= _.clip }
   toks | toks !! 0 == Just "vetula" -> do
     name <- unquote <$> toks !! 1
     let
       rest = drop 2 toks
       ownSeq = maybe false isQuoted (rest !! 0)
       v = voiceOf n (Just name) (joinWith " " (if ownSeq then rest else [ "\"\"" ] <> rest))
-      staged = fromMaybe { chords: [], beats: [] } (lookup name)
+      staged = fromMaybe { chords: [], beats: [], clip: Nothing } (lookup name)
     pure (specOf v staged.chords) { seqText = if ownSeq then v.seqText else stagedSeq staged }
   toks | Just channel <- toks !! 0 >>= parseCh -> do
     let
@@ -426,8 +444,9 @@ parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
       v = voiceOf channel src (joinWith " " (if ownSeq then rest else [ "\"\"" ] <> rest))
       chords = maybe [] chordsOf src
       named = maybe false (not <<< isChords) src
-      staged = { chords, beats: maybe [] beatsOf src }
-    pure (specOf v chords) { seqText = if ownSeq || not named then v.seqText else stagedSeq staged }
+      staged = { chords, beats: maybe [] beatsOf src, clip: Nothing }
+      clip = src >>= \t -> if isClip t then lookup (unquote t) >>= _.clip else Nothing
+    pure (specOf v chords) { seqText = if isJustArr clip then "" else if ownSeq || not named then v.seqText else stagedSeq staged, clip = clip }
   _ -> Nothing
   where
   chordsOf src
@@ -445,6 +464,7 @@ parseCardIn lookup n line = case stripPunct (tokenize (trim line)) of
     , stack: v.stack
     , term: v.term
     , muted: v.muted
+    , clip: Nothing
     }
 
 -- | One chord per bar, in order: `<0 1 2 3>`.
@@ -460,7 +480,9 @@ cardProgression :: String -> Maybe String
 cardProgression line = case stripPunct (tokenize (trim line)) of
   toks | toks !! 0 == Just "vetula" -> unquote <$> toks !! 1
        | isJustArr (toks !! 0 >>= parseCh) -> case toks !! 1 of
-           Just s | s /= "-" && not (isChords s) -> Just (unquote s)
+           -- a clip is not a progression, and its line carries no chords,
+           -- so the page may print it back
+           Just s | s /= "-" && not (isChords s) && not (isClip s) -> Just (unquote s)
            _ -> Nothing
   _ -> Nothing
 
@@ -499,10 +521,87 @@ readProgression text = parseProgression text
 
 -- | A saved progression as a card reads it: its chords, and their lengths
 -- | in beats if it was given a rhythm (empty: one chord a bar).
-type Staged = { chords :: Array (Array Int), beats :: Array Int }
+type Staged = { chords :: Array (Array Int), beats :: Array Int, clip :: Maybe StagedClip }
 
 readStaged :: String -> Staged
-readStaged text = { chords: parseProgression text, beats: parseBeats text }
+readStaged text = { chords: parseProgression text, beats: parseBeats text, clip: Nothing }
+
+-- ============================================================================
+-- A clip on the stage
+-- ============================================================================
+
+-- | One note of a clip as a card plays it: when it starts and how long it
+-- | sounds, in ticks (`clipTicksPerBeat` to the beat), its pitch, how hard
+-- | it was struck, and the head or voice that played it.
+type ClipNote = { at :: Int, pitch :: Int, vel :: Int, gate :: Int, head :: Int }
+
+-- | **A captured clip on the stage**: `vetula/clip/<name>`, which Vetula
+-- | writes for each clip in the library and the rig reads to play the cards
+-- | that name it (`ch3 clip:gem-truck`, `v3 $ clip "gem-truck"`), as it does
+-- | a saved progression. `ticks` is the clip's length, after which it comes
+-- | round again; it need not be a whole number of bars.
+type StagedClip = { name :: String, ticks :: Int, notes :: Array ClipNote }
+
+-- | 96 to the beat: a sixteenth is 24, so swing and a head at three to the
+-- | beat both land on a tick.
+clipTicksPerBeat :: Int
+clipTicksPerBeat = 96
+
+clipKey :: String -> String
+clipKey name = "vetula/clip/" <> name
+
+clipOfKey :: String -> Maybe String
+clipOfKey key = stripPrefix (Pattern "vetula/clip/") key
+
+-- | A clip as a card's source: `clip:gem-truck`, where a progression's name
+-- | would be. Also the name it is looked up by (`parseCardIn`).
+clipSource :: String -> String
+clipSource name = "clip:" <> name
+
+isClip :: String -> Boolean
+isClip s = isJustArr (stripPrefix (Pattern "clip:") (unquote s))
+
+-- | The clip as its stage text: its length, then five numbers a note.
+printClip :: StagedClip -> String
+printClip c = joinWith " " (map show ([ c.ticks ] <> bind c.notes \n -> [ n.at, n.pitch, n.vel, n.gate, n.head ]))
+
+-- | A staged clip read back, under the name its key gave. Text that is not
+-- | one reads as a clip of no notes.
+readStagedClip :: String -> String -> Staged
+readStagedClip name text =
+  let
+    nums = mapMaybe Int.fromString (filter (_ /= "") (split (Pattern " ") (trim text)))
+    notes k acc = case nums !! k, nums !! (k + 1), nums !! (k + 2), nums !! (k + 3), nums !! (k + 4) of
+      Just at, Just pitch, Just vel, Just gate, Just head -> notes (k + 5) (snoc acc { at, pitch, vel, gate, head })
+      _, _, _, _, _ -> acc
+  in
+    { chords: [], beats: []
+    , clip: Just { name, ticks: max 1 (fromMaybe 1 (nums !! 0)), notes: notes 1 [] } }
+
+-- | **A library clip as the stage keeps it.** The clip's times are in
+-- | microseconds at the tempo it was captured at; here they become ticks of
+-- | the beat, so it plays at whatever the tempo is now. Its length is taken
+-- | to the nearest sixteenth (a passage marked in Review is rarely a whole
+-- | number of bars, and need not be). A clip that lost its tempo is read at
+-- | 120.
+stageClip :: String -> MidiClip -> StagedClip
+stageClip name c =
+  let
+    bpm = case c.bpm of
+      Just b | b > 1.0 -> b
+      _ -> 120.0
+    tick micros = Int.round (micros * bpm / 60000000.0 * Int.toNumber clipTicksPerBeat)
+    sixteenth = clipTicksPerBeat / 4
+    ticks = max sixteenth (((tick c.lenMicros + sixteenth / 2) / sixteenth) * sixteenth)
+    note e =
+      { at: ((tick e.fireUnixMicros `mod` ticks) + ticks) `mod` ticks
+      , pitch: e.pitch
+      , vel: max 1 (min 127 e.vel)
+      , gate: max 1 (tick (e.gateMs * 1000.0))
+      , head: e.headIdx
+      }
+  in
+    { name, ticks, notes: map note c.events }
 
 docFromVoices :: String -> Array VoiceSpec -> PerfDoc
 docFromVoices key specs =
