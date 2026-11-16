@@ -458,7 +458,7 @@ main = do
   assertEqual' "Melichthys: opens on a sixteen-bar line, a quarter of it between entries"
     { actual: map (\l -> { seed: l.seed, bars: l.bars, entries: l.entries }) Melichthys.fresh.line, expected: Just { seed: 5, bars: 16, entries: [ 0, 8, 16, 24 ] } }
   assertEqual' "Melichthys: flat waves leave the melody where it was, at one loudness"
-    { actual: map (\n -> { degree: n.degree, vel: n.vel }) (Melichthys.sounded { seed: 5, bars: 8, entries: [], waves: Melichthys.flatWaves })
+    { actual: map (\n -> { degree: n.degree, vel: n.vel }) (Melichthys.sounded { seed: 5, bars: 8, entries: [], waves: Melichthys.flatWaves, ground: [], every: 1, pull: 0, tick: 0, weights: [] })
     , expected: map (\n -> { degree: n.degree, vel: Melichthys.baseVelocity }) (Melichthys.lineOf 5 8) }
   assertEqual' "Melichthys: a sine peaks a quarter of the way round, a ramp runs end to end"
     { actual: [ Melichthys.waveAt 1 0 { shape: 0, cycles: 1, phase: 0, dyn: 0, bend: 0 } 64 256, Melichthys.waveAt 1 0 { shape: 0, cycles: 1, phase: 0, dyn: 0, bend: 0 } 192 256, Melichthys.waveAt 1 0 { shape: 2, cycles: 1, phase: 0, dyn: 0, bend: 0 } 0 256 ]

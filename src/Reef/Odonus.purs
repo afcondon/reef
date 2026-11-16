@@ -250,7 +250,17 @@ type Odonus = OdonusOf Head
 -- | restart. The cells are the line as drawn, so this says what they are; a
 -- | grid has none.
 -- | `waves` shape the line as it is drawn (`Reef.Melichthys.sounded`).
-type Line = { seed :: Int, bars :: Int, entries :: Array Int, waves :: Array Wave }
+-- |
+-- | `ground` is a progression the heads play over (AC, 2026-11-16): its
+-- | chords as pitch classes, bass first, each lasting `every` bars of time,
+-- | not of the line, so every head is under the same chord wherever it is
+-- | reading. `pull` (0..100) says which notes go to the chord's nearest tone:
+-- | those whose `weights` entry (by cell: the beat a note falls on, its
+-- | length, whether it ends a phrase) is at least `100 - pull`. The rest pass
+-- | between them in the scale. `tick` counts steps since the heads started.
+type Line =
+  { seed :: Int, bars :: Int, entries :: Array Int, waves :: Array Wave
+  , ground :: Array (Array Int), every :: Int, pull :: Int, tick :: Int, weights :: Array Int }
 
 -- | One slow wave over a line, as an LFO over a patch (AC, 2026-11-16): its
 -- | shape (0 sine, 1 triangle, 2 ramp up, 3 ramp down, 4 square, 5 random
@@ -980,19 +990,35 @@ type Fired =
 -- | off or skipped. So no cell a head steps onto is passed over silently,
 -- | whatever its speed.
 stepEmit :: Odonus -> { odo :: Odonus, fired :: Array Fired }
-stepEmit o =
+stepEmit o0 =
   let
+    o = followGround o0
     rs = map (headTicks o) o.heads
     o2 = o { heads = map _.head rs }
     firedFor idx r = mapMaybe (fire idx r.head) r.ticks
     fire idx hd t = case o2.cells !! t.cursor of
       Just c | t.pulsed && not hd.mute && c.gate && not c.skip ->
-        Just { headIdx: idx, pitch: renderHead o2 idx hd c, glide: c.glide
+        Just { headIdx: idx, pitch: renderHead (pulledAt t.cursor o2) idx hd c, glide: c.glide
              , dur: c.dur, ratchet: c.ratchet, vel: c.vel
              , offNum: t.num, offDen: t.den }
       _ -> Nothing
   in
     { odo: o2, fired: concat (mapWithIndex firedFor rs) }
+
+-- | A line's ground, followed: the chord in force at this step, sixteen
+-- | steps to the bar, round and round the progression. No ground: unchanged.
+followGround :: Odonus -> Odonus
+followGround o = case o.line of
+  Just l | n <- length l.ground, n > 0 ->
+    o { chord = l.ground !! ((l.tick / (16 * max 1 l.every)) `mod` n), line = Just l { tick = l.tick + 1 } }
+  _ -> o
+
+-- | Over a ground, whether the note in cell `cursor` is pulled to the chord:
+-- | if not, it is rendered with no chord, so it stays in the scale.
+pulledAt :: Int -> Odonus -> Odonus
+pulledAt cursor o = case o.line of
+  Just l | length l.ground > 0, not (l.pull > 0 && fromMaybe 0 (l.weights !! cursor) >= 100 - l.pull) -> o { chord = Nothing }
+  _ -> o
 
 -- ---------------------------------------------------------------------------
 -- editing

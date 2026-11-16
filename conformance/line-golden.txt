@@ -337,7 +337,7 @@
 337 | h1 p65 d1 r1 v102
 338 | h0 p74 d1 r1 v83  h1 p63 d1 r1 v102
 339 | h0 p70 d1 r1 v82  h1 p67 d1 r1 v101
-340 | h0 p80 d2 r1 v61  h1 p68 d4 r1 v101
+340 | h0 p80 d2 r1 v61  h1 p67 d4 r1 v101
 341 | -
 342 | h0 p75 d2 r1 v60
 343 | -
@@ -345,7 +345,7 @@
 345 | h0 p72 d1 r1 v58
 346 | h0 p68 d1 r1 v57  h1 p80 d1 r1 v97
 347 | h0 p72 d1 r1 v56  h1 p79 d1 r1 v96
-348 | h0 p68 d4 r1 v56  h1 p77 d2 r1 v96
+348 | h0 p67 d4 r1 v56  h1 p76 d2 r1 v96
 349 | -
 350 | h1 p72 d2 r1 v94
 351 | -
@@ -353,7 +353,7 @@
 353 | h1 p68 d1 r1 v91
 354 | h0 p70 d1 r1 v54  h1 p67 d1 r1 v90
 355 | h0 p62 d1 r1 v54  h1 p68 d1 r1 v89
-356 | h0 p62 d8 r1 v54  h1 p70 d4 r1 v88
+356 | h0 p63 d8 r1 v54  h1 p72 d4 r1 v88
 357 | -
 358 | -
 359 | -
@@ -369,7 +369,7 @@
 369 | h1 p79 d1 r1 v58
 370 | h0 p60 d1 r1 v62  h1 p75 d1 r1 v57
 371 | h0 p56 d1 r1 v63  h1 p79 d1 r1 v56
-372 | h0 p65 d2 r1 v44  h1 p75 d4 r1 v56
+372 | h0 p65 d2 r1 v44  h1 p77 d4 r1 v56
 373 | -
 374 | h0 p65 d2 r1 v47
 375 | -
@@ -377,7 +377,7 @@
 377 | h0 p60 d1 r1 v51
 378 | h0 p58 d1 r1 v53  h1 p77 d1 r1 v54
 379 | h0 p62 d1 r1 v54  h1 p68 d1 r1 v54
-380 | h0 p58 d4 r1 v56  h1 p68 d8 r1 v54
+380 | h0 p56 d4 r1 v56  h1 p68 d8 r1 v54
 381 | -
 382 | -
 383 | -
@@ -409,7 +409,7 @@
 409 | h0 p67 d1 r1 v95
 410 | h0 p58 d1 r1 v97  h1 p70 d1 r1 v67
 411 | h0 p58 d1 r1 v99  h1 p68 d1 r1 v69
-412 | h0 p63 d4 r1 v101  h1 p67 d2 r1 v71
+412 | h0 p63 d4 r1 v101  h1 p68 d2 r1 v71
 413 | -
 414 | h1 p63 d2 r1 v75
 415 | -
@@ -417,67 +417,67 @@
 417 | h1 p62 d1 r1 v82
 418 | h0 p58 d1 r1 v110  h1 p60 d1 r1 v84
 419 | h0 p56 d1 r1 v112  h1 p62 d1 r1 v86
-420 | h0 p55 d8 r1 v113  h1 p62 d1 r1 v88
-421 | h1 p63 d1 r1 v91
-422 | h1 p70 d1 r1 v93
+420 | h0 p56 d8 r1 v113  h1 p61 d1 r1 v88
+421 | h1 p65 d1 r1 v91
+422 | h1 p68 d1 r1 v93
 423 | h1 p68 d1 r1 v95
 424 | h1 p65 d1 r1 v97
-425 | h1 p63 d1 r1 v99
+425 | h1 p65 d1 r1 v99
 426 | h1 p65 d1 r1 v102
-427 | h1 p67 d1 r1 v103
-428 | h0 p55 d4 r1 v120  h1 p75 d1 r1 v86  h2 p43 d4 r1 v120  h3 p50 d4 r1 v120
-429 | h1 p74 d1 r1 v88
-430 | h1 p75 d1 r1 v90
-431 | h1 p75 d1 r1 v92
-432 | h0 p56 d2 r1 v122  h1 p75 d1 r1 v94  h3 p51 d2 r1 v122
-433 | h1 p74 d1 r1 v95
-434 | h0 p60 d1 r1 v123  h1 p65 d1 r1 v97  h3 p55 d1 r1 v123
-435 | h0 p58 d1 r1 v123  h1 p65 d1 r1 v99  h3 p53 d1 r1 v123
-436 | h0 p67 d2 r1 v103  h1 p70 d4 r1 v101  h2 p44 d2 r1 v122  h3 p62 d2 r1 v103
+427 | h1 p68 d1 r1 v103
+428 | h0 p56 d4 r1 v120  h1 p77 d1 r1 v86  h2 p44 d4 r1 v120  h3 p49 d4 r1 v120
+429 | h1 p73 d1 r1 v88
+430 | h1 p77 d1 r1 v90
+431 | h1 p77 d1 r1 v92
+432 | h0 p56 d2 r1 v122  h1 p77 d1 r1 v94  h3 p53 d2 r1 v122
+433 | h1 p73 d1 r1 v95
+434 | h0 p61 d1 r1 v123  h1 p65 d1 r1 v97  h3 p56 d1 r1 v123
+435 | h0 p56 d1 r1 v123  h1 p65 d1 r1 v99  h3 p53 d1 r1 v123
+436 | h0 p67 d2 r1 v103  h1 p71 d4 r1 v101  h2 p43 d2 r1 v122  h3 p64 d2 r1 v103
 437 | -
-438 | h0 p63 d2 r1 v103  h3 p58 d2 r1 v103
+438 | h0 p64 d2 r1 v103  h3 p59 d2 r1 v103
 439 | -
 440 | h0 p60 d1 r1 v102  h1 p67 d2 r1 v107  h2 p48 d1 r1 v123  h3 p55 d1 r1 v102
-441 | h0 p58 d1 r1 v102  h3 p53 d1 r1 v102
-442 | h0 p56 d1 r1 v102  h1 p65 d1 r1 v110  h2 p46 d1 r1 v123  h3 p51 d1 r1 v102
-443 | h0 p60 d1 r1 v101  h1 p63 d1 r1 v112  h3 p55 d1 r1 v101
-444 | h0 p62 d4 r1 v101  h1 p62 d8 r1 v113  h2 p55 d2 r1 v103  h3 p56 d4 r1 v101
+441 | h0 p59 d1 r1 v102  h3 p52 d1 r1 v102
+442 | h0 p55 d1 r1 v102  h1 p64 d1 r1 v110  h2 p47 d1 r1 v123  h3 p52 d1 r1 v102
+443 | h0 p60 d1 r1 v101  h1 p64 d1 r1 v112  h3 p55 d1 r1 v101
+444 | h0 p64 d4 r1 v101  h1 p64 d8 r1 v113  h2 p55 d2 r1 v103  h3 p55 d4 r1 v101
 445 | -
 446 | -
 447 | -
-448 | h0 p68 d2 r1 v99  h2 p51 d2 r1 v103  h3 p63 d2 r1 v99
+448 | h0 p67 d2 r1 v99  h2 p52 d2 r1 v103  h3 p64 d2 r1 v99
 449 | -
-450 | h0 p74 d1 r1 v97  h3 p68 d1 r1 v97
-451 | h0 p72 d1 r1 v96  h3 p67 d1 r1 v96
-452 | h0 p70 d2 r1 v96  h1 p62 d4 r1 v120  h2 p48 d1 r1 v102  h3 p65 d2 r1 v96
+450 | h0 p55 d4 r1 v120
+451 | -
+452 | -
 453 | -
-454 | h0 p65 d2 r1 v94  h2 p46 d1 r1 v102  h3 p60 d2 r1 v94
+454 | h0 p55 d2 r1 v122
 455 | -
-456 | h0 p63 d1 r1 v92  h1 p63 d2 r1 v122  h2 p44 d1 r1 v102  h3 p58 d1 r1 v92
-457 | h0 p62 d1 r1 v91  h3 p56 d1 r1 v91
-458 | h0 p60 d1 r1 v90  h1 p67 d1 r1 v123  h2 p48 d1 r1 v101  h3 p55 d1 r1 v90
-459 | h0 p62 d1 r1 v89  h1 p65 d1 r1 v123  h3 p56 d1 r1 v89
-460 | h0 p63 d4 r1 v88  h1 p74 d2 r1 v103  h2 p50 d4 r1 v101  h3 p58 d4 r1 v88
+456 | h0 p60 d1 r1 v123
+457 | h0 p59 d1 r1 v123
+458 | h0 p67 d2 r1 v103
+459 | -
+460 | h0 p64 d2 r1 v103
 461 | -
-462 | h1 p70 d2 r1 v103
-463 | -
-464 | h0 p65 d2 r1 v85  h1 p67 d1 r1 v102  h3 p60 d2 r1 v85
-465 | h1 p65 d1 r1 v102
-466 | h0 p74 d1 r1 v83  h1 p63 d1 r1 v102  h3 p68 d1 r1 v83
-467 | h0 p70 d1 r1 v82  h1 p67 d1 r1 v101  h3 p65 d1 r1 v82
-468 | h0 p80 d2 r1 v61  h1 p68 d4 r1 v101  h2 p56 d2 r1 v99  h3 p75 d2 r1 v61
+462 | h0 p60 d1 r1 v102
+463 | h0 p59 d1 r1 v102
+464 | h0 p55 d1 r1 v102
+465 | h0 p60 d1 r1 v101
+466 | h0 p63 d4 r1 v101
+467 | -
+468 | -
 469 | -
-470 | h0 p75 d2 r1 v60  h3 p70 d2 r1 v60
+470 | h0 p68 d2 r1 v99
 471 | -
-472 | h0 p74 d1 r1 v58  h1 p75 d2 r1 v99  h2 p62 d1 r1 v97  h3 p68 d1 r1 v58
-473 | h0 p72 d1 r1 v58  h3 p67 d1 r1 v58
-474 | h0 p68 d1 r1 v57  h1 p80 d1 r1 v97  h2 p60 d1 r1 v96  h3 p63 d1 r1 v57
-475 | h0 p72 d1 r1 v56  h1 p79 d1 r1 v96  h3 p67 d1 r1 v56
-476 | h0 p68 d4 r1 v56  h1 p77 d2 r1 v96  h2 p58 d2 r1 v96  h3 p63 d4 r1 v56
+472 | h0 p75 d1 r1 v97
+473 | h0 p72 d1 r1 v96
+474 | h0 p72 d2 r1 v96  h1 p63 d4 r1 v120
+475 | -
+476 | h0 p65 d2 r1 v94
 477 | -
-478 | h1 p72 d2 r1 v94
-479 | -
-480 | h0 p68 d2 r1 v55  h1 p70 d1 r1 v92  h2 p53 d2 r1 v94  h3 p63 d2 r1 v55
+478 | h0 p63 d1 r1 v92  h1 p63 d2 r1 v122
+479 | h0 p63 d1 r1 v91
+480 | h0 p60 d1 r1 v90  h1 p68 d1 r1 v123
 odonusPatch "line"
   { scale: C minor
   , distribution: Natural
@@ -500,6 +500,8 @@ odonusPatch "line"
   , line: [ 9, 8 ]
   , entries: [ 0, 3, 16, 16 ]
   , waves: [ 0, 1, 12, -80, 0, 2, 4, 12, 25, -45, 5, 7, 0, 0, 55 ]
+  , ground: [ 0, 4, 7, 11, -1, 5, 8, 0, 3, -1, 1, 5, 8, -1 ]
+  , harmony: [ 1, 100 ]
   , heads:
       [ head rows 1.0 fwd transp 0 off 0 len 76 euclid 16 16 clock dur
       , head rows 1.0 fwd transp 0 spread 0 4 off 0 len 76 euclid 16 16 clock dur

@@ -810,7 +810,11 @@ lineRun = intercalate "\n" (final.out <> [ text, "line patch round-trip " <> sho
     , { tick: 200, input: SetLineWave 3 (-80) }, { tick: 201, input: SetLineWave 16 5 }
     , { tick: 202, input: SetLineWave 17 7 }, { tick: 203, input: SetLineWave 20 55 }
     , { tick: 260, input: SetLineWave 8 2 }, { tick: 261, input: SetLineWave 12 (-45) }
-    , { tick: 300, input: DrawLine 9 8 } ]
+    , { tick: 300, input: DrawLine 9 8 }
+    -- a ground of three chords, a bar each, pulling the weighty notes, then all
+    , { tick: 340, input: SetLineGround [ 0, 4, 7, 11, -1, 5, 8, 0, 3, -1, 1, 5, 8, -1 ] }
+    , { tick: 341, input: SetLineEvery 1 }, { tick: 342, input: SetLinePull 60 }
+    , { tick: 420, input: SetLinePull 100 }, { tick: 450, input: RestartLine } ]
   final = foldl advance { st: s0, out: [] } (range 1 480)
   advance acc i =
     let r = stepEmit (foldl applyEncoded acc.st (filter (\t -> t.tick == i) script)).odo

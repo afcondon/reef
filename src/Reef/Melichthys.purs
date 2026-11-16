@@ -25,13 +25,20 @@ module Reef.Melichthys
   , setWave
   , flatWaves
   , baseVelocity
+  , weightsOf
+  , setGround
+  , setEvery
+  , setPull
+  , chordsOf
+  , flatOf
+  , padOf
   ) where
 
 import Prelude
 
-import Data.Array (filter, foldl, length, mapWithIndex, modifyAt, range, replicate, snoc, updateAt, (!!))
+import Data.Array (filter, foldl, length, mapWithIndex, modifyAt, nub, range, replicate, snoc, sort, updateAt, (!!))
 import Data.Foldable (maximum, minimum)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Reef.Marbles (seedFrom)
 import Reef.Melody (Note, barSteps, flatten, generate, lineSteps)
 import Reef.Odonus (Cell, Head, Line, Odonus, Wave, defaultOdonus, floorDivI, knobMax, rateTable, unitRateIx)
@@ -93,6 +100,59 @@ sounded l =
       }
   in
     (foldl step { at: 0, out: [] } notes).out
+
+-- | How much each note of a line carries, 0..100, by cell: a note on the bar
+-- | line more than one on the third beat, that more than the other beats and
+-- | those more than what falls between; a long note more than a short one;
+-- | and a note that ends a phrase (a rest follows, or the line ends) more
+-- | again. A rest carries nothing. The notes a ground pulls first.
+weightsOf :: Array Sounded -> Array Int
+weightsOf line = (foldl step { at: 0, i: 0, out: [] } line).out
+  where
+  step acc n =
+    let
+      place = acc.at `mod` 16
+      beat
+        | place == 0 = 50
+        | place == 8 = 35
+        | place `mod` 4 == 0 = 20
+        | place `mod` 2 == 0 = 5
+        | otherwise = 0
+      long
+        | n.dur >= 8 = 35
+        | n.dur >= 4 = 25
+        | n.dur >= 2 = 10
+        | otherwise = 0
+      ends = if maybe true _.rest (line !! (acc.i + 1)) then 15 else 0
+    in
+      { at: acc.at + n.dur, i: acc.i + 1, out: snoc acc.out (if n.rest then 0 else min 100 (beat + long + ends)) }
+
+-- | Give the line a ground to play over (chords as pitch classes, bass
+-- | first), or with none take it away and leave the scale alone.
+setGround :: Array (Array Int) -> Odonus -> Odonus
+setGround chords o = case o.line of
+  Nothing -> o
+  Just l ->
+    let ground = filter (\c -> length c > 0) (map (map (\n -> ((n `mod` 12) + 12) `mod` 12)) chords)
+    in (if length ground == 0 then o { chord = Nothing } else o) { line = Just l { ground = ground } }
+
+-- | A ground on the wire and in a patch: each chord's pitch classes, then -1.
+flatOf :: Array (Array Int) -> Array Int
+flatOf = foldl (\acc c -> acc <> c <> [ -1 ]) []
+
+chordsOf :: Array Int -> Array (Array Int)
+chordsOf flat = (foldl step { now: [], out: [] } flat).out
+  where
+  step acc n = if n < 0 then { now: [], out: snoc acc.out acc.now } else acc { now = snoc acc.now n }
+
+-- | How many bars each chord of the ground lasts.
+setEvery :: Int -> Odonus -> Odonus
+setEvery v o = o { line = o.line <#> _ { every = clamp 1 16 v } }
+
+-- | How much of the line the ground pulls to its chords: none at 0, the
+-- | notes that carry most first, every note at 100.
+setPull :: Int -> Odonus -> Odonus
+setPull v o = o { line = o.line <#> _ { pull = clamp 0 100 v } }
 
 -- | The cells of a line, with the register they need: the octaves the line
 -- | spans, and how many of them lie under the tonic.
@@ -192,20 +252,25 @@ draw seed bars0 o =
         [ { shape: 0, cycles: 1, phase: 12, dyn: 40, bend: 0 }
         , { shape: 1, cycles: max 1 (bars / 4), phase: 12, dyn: 25, bend: 0 }
         , { shape: 0, cycles: 2, phase: 0, dyn: 0, bend: 0 } ]
-    drawn = { seed, bars, entries, waves }
+    kept = case o.line of
+      Just l -> { ground: l.ground, every: l.every, pull: l.pull }
+      Nothing -> { ground: [], every: 2, pull: 50 }
+    shaped = sounded { seed, bars, entries, waves, ground: [], every: 1, pull: 0, tick: 0, weights: [] }
+    drawn = { seed, bars, entries, waves, ground: kept.ground, every: kept.every, pull: kept.pull, tick: 0, weights: weightsOf shaped }
   in
-    restart ((loadSounded (sounded drawn) o) { line = Just drawn })
+    restart ((loadSounded shaped o) { line = Just drawn })
 
 -- | When head `h` comes in, in half bars after a restart (none past the
 -- | line's own length). It takes effect at the next `restart`.
 setEntry :: Int -> Int -> Odonus -> Odonus
 setEntry h v o = o { line = o.line <#> \l -> l { entries = fromMaybe l.entries (updateAt h (clamp 0 (2 * l.bars) v) l.entries) } }
 
--- | Every head back to the start of the line, each coming in at its entry.
+-- | Every head back to the start of the line, each coming in at its entry,
+-- | and the ground back to its first chord.
 -- | A wait is counted in the head's own ticks, so half a bar is eight of them
 -- | times its speed (whole at every speed but the thirds, which round down).
 restart :: Odonus -> Odonus
-restart o = enter (mapWithIndex wait o.heads) o
+restart o = enter (mapWithIndex wait o.heads) (o { line = o.line <#> _ { tick = 0 } })
   where
   entries = fromMaybe [] (map _.entries o.line)
   wait i h =
@@ -233,3 +298,12 @@ waiting o h =
       _ -> len - 1
   in
     len > 1 && h.cursor == 0 && h.seqPos == before && h.direction /= 1
+
+-- | A chord of the ground as a held pad: its first pitch class as a bass
+-- | note in the octave from C2, and every pitch class once in the octave
+-- | from F3. The upper notes never leave that octave, so from chord to chord
+-- | each moves as little as it can.
+padOf :: Array Int -> Array Int
+padOf chord = case chord !! 0 of
+  Nothing -> []
+  Just root -> [ 36 + root `mod` 12 ] <> sort (nub (map (\pc -> 53 + (pc - 5 + 120) `mod` 12) chord))

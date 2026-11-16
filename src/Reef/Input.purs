@@ -171,6 +171,9 @@ data Input
   | SetHeadEntry Int Int      -- head, when it comes in: half bars after a restart
   | RestartLine               -- every head back to the start, each at its entry
   | SetLineWave Int Int       -- wave * 8 + control (shape, cycles, phase, dyn, bend), its value
+  | SetLineGround (Array Int) -- the ground's chords as pitch classes, a -1 after each; none: no ground
+  | SetLineEvery Int          -- bars to a chord of the ground
+  | SetLinePull Int           -- how much of the line the ground pulls, 0..100
   | FanOffsets Int
   | StaggerLengths Int
   | SpreadOctaves Int
@@ -270,6 +273,9 @@ applyInput = case _ of
   SetHeadEntry h v -> onOdo (Melichthys.setEntry h v)
   RestartLine -> onOdo Melichthys.restart
   SetLineWave at v -> onOdo (Melichthys.setWave (at / 8) (at `mod` 8) v)
+  SetLineGround flat -> onOdo (Melichthys.setGround (Melichthys.chordsOf flat))
+  SetLineEvery v -> onOdo (Melichthys.setEvery v)
+  SetLinePull v -> onOdo (Melichthys.setPull v)
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
   SpreadOctaves n -> onOdo (spreadOctaves n)
@@ -385,6 +391,9 @@ toWire = case _ of
   SetHeadEntry h v -> w0 { tag = "SetHeadEntry", a = h, b = v }
   RestartLine -> w0 { tag = "RestartLine" }
   SetLineWave at v -> w0 { tag = "SetLineWave", a = at, b = v }
+  SetLineGround flat -> w0 { tag = "SetLineGround", ns = flat }
+  SetLineEvery v -> w0 { tag = "SetLineEvery", a = v }
+  SetLinePull v -> w0 { tag = "SetLinePull", a = v }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
   SpreadOctaves n -> w0 { tag = "SpreadOctaves", a = n }
@@ -463,6 +472,9 @@ fromWire w = case w.tag of
   "SetHeadEntry" -> Just (SetHeadEntry w.a w.b)
   "RestartLine" -> Just RestartLine
   "SetLineWave" -> Just (SetLineWave w.a w.b)
+  "SetLineGround" -> Just (SetLineGround w.ns)
+  "SetLineEvery" -> Just (SetLineEvery w.a)
+  "SetLinePull" -> Just (SetLinePull w.a)
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)
   "SpreadOctaves" -> Just (SpreadOctaves w.a)

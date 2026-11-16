@@ -116,7 +116,9 @@ printPatch p =
       -- Melichthys: the line's draw and the heads' entries stand for the
       -- cells, which are then written empty and drawn again on reading
       <> maybe [] (\l -> [ "  , line: " <> ints [ l.seed, l.bars ], "  , entries: " <> ints l.entries
-                         , "  , waves: " <> ints (concatMap (\w -> [ w.shape, w.cycles, w.phase, w.dyn, w.bend ]) l.waves) ]) o.line <>
+                         , "  , waves: " <> ints (concatMap (\w -> [ w.shape, w.cycles, w.phase, w.dyn, w.bend ]) l.waves) ]
+                         <> (if null l.ground then [] else [ "  , ground: " <> ints (Melichthys.flatOf l.ground) ])
+                         <> [ "  , harmony: " <> ints [ l.every, l.pull ] ]) o.line <>
       [ "  , heads:"
       , "      [ " <> joinWith "\n      , " (map printHead o.heads) <> " ]"
       , "  , gen:"
@@ -444,6 +446,8 @@ patchP = do
   lineV <- optionalP (field "line" (list intP))
   entriesV <- optionalP (field "entries" (list intP))
   wavesV <- optionalP (field "waves" (list intP))
+  groundV <- optionalP (field "ground" (list intP))
+  harmonyV <- optionalP (field "harmony" (list intP))
   heads0 <- field "heads" (list headP)
   gen <- field "gen" (list genP)
   punctP '}'
@@ -468,7 +472,11 @@ patchP = do
     clockIx = maybe defaultOdonus.clockIx rateIxOf clockV
     drawn = case lineV of
       Just [ seed, bars ] -> \o -> Melichthys.draw seed bars
-        (o { line = entriesV <#> \entries -> { seed, bars, entries, waves: maybe Melichthys.flatWaves wavesOf wavesV } })
+        (o { line = entriesV <#> \entries ->
+               { seed, bars, entries, waves: maybe Melichthys.flatWaves wavesOf wavesV
+               , ground: maybe [] Melichthys.chordsOf groundV
+               , every: fromMaybe 2 (harmonyV >>= (_ !! 0)), pull: fromMaybe 50 (harmonyV >>= (_ !! 1))
+               , tick: 0, weights: [] } })
       _ -> identity
     wavesOf flat = mapMaybe
       (\i -> ado
