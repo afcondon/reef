@@ -60,6 +60,11 @@ legacy span 3
 move patch | RecallPatch
 move unison | UnifyHeadsOf
 move unison bad | refused: unison copies pattern, direction, speed, int, rhythm or clock, not 'tempo'
+move unison from | UnifyHeadsFrom,UnifyHeadsFrom
+move unison from bad | refused: unison from a head, 1 to 4, not 5
+move limit | SetGenOn,SetAmt,SetVelFloor,SetVelCeiling,SetVelFloor,SetVelCeiling
+move limit off | SetVelFloor,SetVelCeiling
+move limit bad | refused: limit vel LO HI: 110 is above 60
 move now | RecallNow
 move one line | RecallPatch
 move broken | refused: this odonusPatch does not read (the fields in their printed order?)

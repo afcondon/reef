@@ -1,0 +1,522 @@
+  1 | h0 p67 d2 r1 v58
+  2 | -
+  3 | h0 p62 d2 r1 v59
+  4 | -
+  5 | h0 p63 d4 r1 v60
+  6 | -
+  7 | -
+  8 | -
+  9 | h0 p62 d2 r1 v63
+ 10 | -
+ 11 | h0 p67 d1 r1 v64
+ 12 | h0 p65 d1 r1 v65
+ 13 | h0 p63 d4 r1 v66
+ 14 | -
+ 15 | -
+ 16 | -
+ 17 | h0 p70 d2 r1 v69
+ 18 | -
+ 19 | h0 p65 d2 r1 v70
+ 20 | -
+ 21 | h0 p67 d4 r1 v72
+ 22 | -
+ 23 | -
+ 24 | -
+ 25 | h0 p65 d2 r1 v75
+ 26 | -
+ 27 | h0 p70 d1 r1 v77
+ 28 | h0 p68 d1 r1 v78
+ 29 | h0 p67 d4 r1 v79
+ 30 | -
+ 31 | -
+ 32 | -
+ 33 | h0 p68 d2 r1 v82
+ 34 | -
+ 35 | h0 p74 d1 r1 v82
+ 36 | h0 p72 d1 r1 v81
+ 37 | h0 p70 d4 r1 v81
+ 38 | -
+ 39 | -
+ 40 | -
+ 41 | h0 p67 d2 r1 v58
+ 42 | -
+ 43 | h0 p62 d2 r1 v59
+ 44 | -
+ 45 | h0 p63 d4 r1 v60
+ 46 | -
+ 47 | -
+ 48 | -
+ 49 | h0 p62 d2 r1 v63
+ 50 | -
+ 51 | h0 p67 d1 r1 v64
+ 52 | h0 p65 d1 r1 v65
+ 53 | h0 p63 d4 r1 v66
+ 54 | -
+ 55 | -
+ 56 | -
+ 57 | h0 p70 d2 r1 v69
+ 58 | -
+ 59 | h0 p65 d2 r1 v70
+ 60 | -
+ 61 | h0 p67 d4 r1 v72
+ 62 | -
+ 63 | -
+ 64 | -
+ 65 | h0 p65 d2 r1 v75  h1 p74 d2 r1 v58
+ 66 | -
+ 67 | h0 p70 d1 r1 v77  h1 p68 d2 r1 v59
+ 68 | h0 p68 d1 r1 v78
+ 69 | h0 p67 d4 r1 v79  h1 p70 d4 r1 v60
+ 70 | -
+ 71 | -
+ 72 | -
+ 73 | h0 p68 d2 r1 v82  h1 p68 d2 r1 v63
+ 74 | -
+ 75 | h0 p74 d1 r1 v82  h1 p74 d1 r1 v64
+ 76 | h0 p72 d1 r1 v81  h1 p72 d1 r1 v65
+ 77 | h0 p70 d4 r1 v81  h1 p70 d4 r1 v66
+ 78 | -
+ 79 | -
+ 80 | -
+ 81 | h0 p70 d2 r1 v80  h1 p77 d2 r1 v69
+ 82 | -
+ 83 | h0 p75 d1 r1 v79  h1 p72 d2 r1 v70
+ 84 | h0 p74 d1 r1 v79
+ 85 | h0 p72 d4 r1 v79  h1 p74 d4 r1 v72
+ 86 | -
+ 87 | -
+ 88 | -
+ 89 | h0 p72 d2 r1 v77  h1 p72 d2 r1 v75
+ 90 | -
+ 91 | h0 p70 d2 r1 v77  h1 p77 d1 r1 v77
+ 92 | h1 p75 d1 r1 v78
+ 93 | h0 p68 d4 r1 v76  h1 p74 d4 r1 v79
+ 94 | -
+ 95 | -
+ 96 | -
+ 97 | h0 p67 d8 r1 v76  h1 p75 d2 r1 v82
+ 98 | -
+ 99 | h1 p80 d1 r1 v82
+100 | h1 p79 d1 r1 v81
+101 | h1 p77 d4 r1 v81
+102 | -
+103 | -
+104 | -
+105 | h0 p70 d2 r1 v74  h1 p77 d2 r1 v80
+106 | -
+107 | h0 p75 d2 r1 v76  h1 p82 d1 r1 v79
+108 | h1 p80 d1 r1 v79
+109 | h0 p74 d4 r1 v78  h1 p79 d4 r1 v79
+110 | -
+111 | -
+112 | -
+113 | h0 p75 d2 r1 v82  h1 p79 d2 r1 v77
+114 | -
+115 | h0 p70 d1 r1 v84  h1 p77 d2 r1 v77
+116 | h0 p72 d1 r1 v85
+117 | h0 p74 d4 r1 v86  h1 p75 d4 r1 v76
+118 | -
+119 | -
+120 | -
+121 | h0 p67 d2 r1 v58
+122 | -
+123 | h0 p62 d2 r1 v59
+124 | -
+125 | h0 p63 d4 r1 v60
+126 | -
+127 | -
+128 | -
+129 | h0 p62 d2 r1 v63
+130 | -
+131 | h0 p67 d1 r1 v64
+132 | h0 p65 d1 r1 v65
+133 | h0 p63 d4 r1 v66
+134 | -
+135 | -
+136 | -
+137 | h0 p70 d2 r1 v69
+138 | -
+139 | h0 p65 d2 r1 v70
+140 | -
+141 | h0 p67 d4 r1 v72
+142 | -
+143 | -
+144 | -
+145 | h0 p65 d2 r1 v75  h1 p74 d2 r1 v58
+146 | -
+147 | h0 p70 d1 r1 v77  h1 p68 d2 r1 v59
+148 | h0 p68 d1 r1 v78
+149 | h0 p67 d4 r1 v79  h1 p70 d4 r1 v60
+150 | -
+151 | -
+152 | -
+153 | h0 p68 d2 r1 v82  h1 p68 d2 r1 v63
+154 | -
+155 | h0 p74 d1 r1 v82  h1 p74 d1 r1 v64
+156 | h0 p72 d1 r1 v81  h1 p72 d1 r1 v65
+157 | h0 p70 d4 r1 v81  h1 p70 d4 r1 v66
+158 | -
+159 | -
+160 | -
+161 | h0 p70 d2 r1 v80  h1 p77 d2 r1 v69
+162 | -
+163 | h0 p75 d1 r1 v79  h1 p72 d2 r1 v70
+164 | h0 p74 d1 r1 v79
+165 | h0 p72 d4 r1 v79  h1 p74 d4 r1 v72
+166 | -
+167 | -
+168 | -
+169 | h0 p72 d2 r1 v77  h1 p72 d2 r1 v75
+170 | -
+171 | h0 p70 d2 r1 v77  h1 p77 d1 r1 v77
+172 | h1 p75 d1 r1 v78
+173 | h0 p68 d4 r1 v76  h1 p74 d4 r1 v79
+174 | -
+175 | -
+176 | -
+177 | h0 p67 d8 r1 v76  h1 p75 d2 r1 v82
+178 | -
+179 | h1 p80 d1 r1 v82
+180 | h1 p79 d1 r1 v81
+181 | h1 p77 d4 r1 v81
+182 | -
+183 | -
+184 | -
+185 | h0 p70 d2 r1 v74  h1 p77 d2 r1 v80
+186 | -
+187 | h0 p75 d2 r1 v76  h1 p82 d1 r1 v79
+188 | h1 p80 d1 r1 v79
+189 | h0 p74 d4 r1 v78  h1 p79 d4 r1 v79
+190 | -
+191 | -
+192 | -
+193 | h0 p75 d2 r1 v82  h1 p79 d2 r1 v77
+194 | -
+195 | h0 p70 d1 r1 v84  h1 p77 d2 r1 v77
+196 | h0 p72 d1 r1 v85
+197 | h0 p74 d4 r1 v86  h1 p75 d4 r1 v76
+198 | -
+199 | -
+200 | -
+201 | h0 p74 d2 r1 v71  h1 p74 d8 r1 v85
+202 | -
+203 | h0 p72 d2 r1 v71
+204 | -
+205 | h0 p70 d4 r1 v71
+206 | -
+207 | -
+208 | -
+209 | h0 p72 d2 r1 v71  h1 p77 d2 r1 v74
+210 | -
+211 | h0 p67 d1 r1 v71  h1 p82 d2 r1 v73
+212 | h0 p68 d1 r1 v71
+213 | h0 p70 d4 r1 v71  h1 p80 d4 r1 v73
+214 | -
+215 | -
+216 | -
+217 | h1 p82 d2 r1 v72
+218 | h0 p70 d1 r1 v70
+219 | h0 p68 d1 r1 v69  h1 p70 d1 r1 v72
+220 | h0 p70 d1 r1 v68  h1 p72 d1 r1 v72
+221 | h0 p68 d2 r1 v66  h1 p74 d4 r1 v72
+222 | -
+223 | h0 p67 d2 r1 v64
+224 | -
+225 | h0 p63 d2 r1 v62  h1 p74 d2 r1 v71
+226 | -
+227 | h0 p62 d1 r1 v60  h1 p79 d2 r1 v71
+228 | h0 p60 d1 r1 v59
+229 | h0 p62 d2 r1 v58  h1 p77 d4 r1 v71
+230 | -
+231 | h0 p74 d1 r1 v56
+232 | h0 p75 d1 r1 v55
+233 | h0 p75 d2 r1 v54  h1 p79 d2 r1 v71
+234 | -
+235 | h0 p74 d2 r1 v52  h1 p74 d1 r1 v71
+236 | h1 p75 d1 r1 v71
+237 | h0 p72 d4 r1 v51  h1 p77 d4 r1 v71
+238 | -
+239 | -
+240 | -
+241 | h0 p70 d8 r1 v47
+242 | h1 p77 d1 r1 v70
+243 | h1 p75 d1 r1 v69
+244 | h1 p77 d1 r1 v68
+245 | h1 p75 d2 r1 v66
+246 | -
+247 | h1 p74 d2 r1 v64
+248 | -
+249 | h0 p74 d2 r1 v42  h1 p70 d2 r1 v62  h2 p60 d2 r1 v106
+250 | -
+251 | h0 p68 d2 r1 v43  h1 p68 d1 r1 v60
+252 | h1 p67 d1 r1 v59
+253 | h0 p70 d4 r1 v44  h1 p68 d2 r1 v58  h2 p55 d2 r1 v107
+254 | -
+255 | h1 p80 d1 r1 v56
+256 | h1 p82 d1 r1 v55
+257 | h0 p68 d2 r1 v47  h1 p82 d2 r1 v54  h2 p56 d4 r1 v108
+258 | -
+259 | h0 p74 d1 r1 v49  h1 p80 d2 r1 v52
+260 | h0 p72 d1 r1 v61
+261 | h0 p67 d4 r1 v62  h1 p79 d4 r1 v54
+262 | -
+263 | -
+264 | -
+265 | h0 p77 d2 r1 v44  h1 p77 d8 r1 v55  h2 p51 d2 r1 v122
+266 | -
+267 | h0 p72 d2 r1 v45
+268 | -
+269 | h0 p68 d4 r1 v47  h2 p56 d1 r1 v123
+270 | -
+271 | h2 p55 d1 r1 v123
+272 | -
+273 | h0 p65 d2 r1 v49  h1 p79 d2 r1 v56  h2 p53 d4 r1 v123
+274 | -
+275 | h0 p70 d1 r1 v51  h1 p74 d2 r1 v57
+276 | h0 p68 d1 r1 v52
+277 | h0 p67 d4 r1 v53  h1 p74 d4 r1 v58
+278 | -
+279 | -
+280 | -
+281 | h0 p62 d2 r1 v56  h1 p72 d2 r1 v60  h2 p68 d2 r1 v103
+282 | -
+283 | h0 p67 d1 r1 v58  h1 p77 d1 r1 v61
+284 | h0 p65 d1 r1 v59  h1 p75 d1 r1 v61
+285 | h0 p63 d4 r1 v60  h1 p74 d4 r1 v62  h2 p63 d2 r1 v103
+286 | -
+287 | -
+288 | -
+289 | h0 p60 d2 r1 v63  h1 p84 d2 r1 v44  h2 p65 d4 r1 v103
+290 | -
+291 | h0 p63 d1 r1 v65  h1 p79 d2 r1 v45
+292 | h0 p62 d1 r1 v66
+293 | h0 p60 d4 r1 v67  h1 p75 d4 r1 v47
+294 | -
+295 | -
+296 | -
+297 | h0 p60 d2 r1 v71  h1 p72 d2 r1 v49  h2 p63 d2 r1 v102
+298 | -
+299 | h0 p62 d2 r1 v74  h1 p77 d1 r1 v51
+300 | h0 p55 d4 r1 v120
+301 | -
+302 | -
+303 | -
+304 | h0 p56 d2 r1 v122
+305 | -
+306 | h0 p60 d1 r1 v123
+307 | h0 p58 d1 r1 v123
+308 | h0 p67 d2 r1 v103
+309 | -
+310 | h0 p63 d2 r1 v103
+311 | -
+312 | h0 p60 d1 r1 v102
+313 | h0 p58 d1 r1 v102
+314 | h0 p56 d1 r1 v102
+315 | h0 p60 d1 r1 v101
+316 | h0 p62 d4 r1 v101
+317 | -
+318 | -
+319 | -
+320 | h0 p68 d2 r1 v99
+321 | -
+322 | h0 p74 d1 r1 v97
+323 | h0 p72 d1 r1 v96
+324 | h0 p70 d2 r1 v96  h1 p62 d4 r1 v120
+325 | -
+326 | h0 p65 d2 r1 v94
+327 | -
+328 | h0 p63 d1 r1 v92  h1 p63 d2 r1 v122
+329 | h0 p62 d1 r1 v91
+330 | h0 p60 d1 r1 v90  h1 p67 d1 r1 v123
+331 | h0 p62 d1 r1 v89  h1 p65 d1 r1 v123
+332 | h0 p63 d4 r1 v88  h1 p74 d2 r1 v103
+333 | -
+334 | h1 p70 d2 r1 v103
+335 | -
+336 | h0 p65 d2 r1 v85  h1 p67 d1 r1 v102
+337 | h1 p65 d1 r1 v102
+338 | h0 p74 d1 r1 v83  h1 p63 d1 r1 v102
+339 | h0 p70 d1 r1 v82  h1 p67 d1 r1 v101
+340 | h0 p80 d2 r1 v61  h1 p68 d4 r1 v101
+341 | -
+342 | h0 p75 d2 r1 v60
+343 | -
+344 | h0 p74 d1 r1 v58  h1 p75 d2 r1 v99
+345 | h0 p72 d1 r1 v58
+346 | h0 p68 d1 r1 v57  h1 p80 d1 r1 v97
+347 | h0 p72 d1 r1 v56  h1 p79 d1 r1 v96
+348 | h0 p68 d4 r1 v56  h1 p77 d2 r1 v96
+349 | -
+350 | h1 p72 d2 r1 v94
+351 | -
+352 | h0 p68 d2 r1 v55  h1 p70 d1 r1 v92
+353 | h1 p68 d1 r1 v91
+354 | h0 p70 d1 r1 v54  h1 p67 d1 r1 v90
+355 | h0 p62 d1 r1 v54  h1 p68 d1 r1 v89
+356 | h0 p62 d8 r1 v54  h1 p70 d4 r1 v88
+357 | -
+358 | -
+359 | -
+360 | h1 p72 d2 r1 v85
+361 | -
+362 | h1 p80 d1 r1 v83
+363 | h1 p77 d1 r1 v82
+364 | h0 p53 d4 r1 v56  h1 p87 d2 r1 v61
+365 | -
+366 | h1 p82 d2 r1 v60
+367 | -
+368 | h0 p55 d2 r1 v60  h1 p80 d1 r1 v58
+369 | h1 p79 d1 r1 v58
+370 | h0 p60 d1 r1 v62  h1 p75 d1 r1 v57
+371 | h0 p56 d1 r1 v63  h1 p79 d1 r1 v56
+372 | h0 p65 d2 r1 v44  h1 p75 d4 r1 v56
+373 | -
+374 | h0 p65 d2 r1 v47
+375 | -
+376 | h0 p62 d1 r1 v49  h1 p75 d2 r1 v55
+377 | h0 p60 d1 r1 v51
+378 | h0 p58 d1 r1 v53  h1 p77 d1 r1 v54
+379 | h0 p62 d1 r1 v54  h1 p68 d1 r1 v54
+380 | h0 p58 d4 r1 v56  h1 p68 d8 r1 v54
+381 | -
+382 | -
+383 | -
+384 | h0 p60 d2 r1 v63
+385 | -
+386 | h0 p63 d1 r1 v67
+387 | h0 p62 d1 r1 v69
+388 | h0 p60 d2 r1 v71  h1 p60 d4 r1 v56
+389 | -
+390 | h0 p56 d2 r1 v75
+391 | -
+392 | h0 p56 d1 r1 v80  h1 p62 d2 r1 v60
+393 | h0 p55 d1 r1 v82
+394 | h0 p53 d1 r1 v84  h1 p67 d1 r1 v62
+395 | h0 p55 d1 r1 v86  h1 p63 d1 r1 v63
+396 | h0 p55 d1 r1 v88  h1 p72 d2 r1 v44
+397 | h0 p56 d1 r1 v91
+398 | h0 p63 d1 r1 v93  h1 p72 d2 r1 v47
+399 | h0 p62 d1 r1 v95
+400 | h0 p58 d1 r1 v97  h1 p68 d1 r1 v49
+401 | h0 p56 d1 r1 v99  h1 p67 d1 r1 v51
+402 | h0 p58 d1 r1 v102  h1 p65 d1 r1 v53
+403 | h0 p60 d1 r1 v103  h1 p68 d1 r1 v54
+404 | h0 p68 d1 r1 v86  h1 p65 d4 r1 v56
+405 | h0 p67 d1 r1 v88
+406 | h0 p68 d1 r1 v90
+407 | h0 p68 d1 r1 v92
+408 | h0 p68 d1 r1 v94  h1 p67 d2 r1 v63
+409 | h0 p67 d1 r1 v95
+410 | h0 p58 d1 r1 v97  h1 p70 d1 r1 v67
+411 | h0 p58 d1 r1 v99  h1 p68 d1 r1 v69
+412 | h0 p63 d4 r1 v101  h1 p67 d2 r1 v71
+413 | -
+414 | h1 p63 d2 r1 v75
+415 | -
+416 | h0 p60 d2 r1 v107  h1 p63 d1 r1 v80
+417 | h1 p62 d1 r1 v82
+418 | h0 p58 d1 r1 v110  h1 p60 d1 r1 v84
+419 | h0 p56 d1 r1 v112  h1 p62 d1 r1 v86
+420 | h0 p55 d8 r1 v113  h1 p62 d1 r1 v88
+421 | h1 p63 d1 r1 v91
+422 | h1 p70 d1 r1 v93
+423 | h1 p68 d1 r1 v95
+424 | h1 p65 d1 r1 v97
+425 | h1 p63 d1 r1 v99
+426 | h1 p65 d1 r1 v102
+427 | h1 p67 d1 r1 v103
+428 | h0 p55 d4 r1 v120  h1 p75 d1 r1 v86  h2 p43 d4 r1 v120  h3 p50 d4 r1 v120
+429 | h1 p74 d1 r1 v88
+430 | h1 p75 d1 r1 v90
+431 | h1 p75 d1 r1 v92
+432 | h0 p56 d2 r1 v122  h1 p75 d1 r1 v94  h3 p51 d2 r1 v122
+433 | h1 p74 d1 r1 v95
+434 | h0 p60 d1 r1 v123  h1 p65 d1 r1 v97  h3 p55 d1 r1 v123
+435 | h0 p58 d1 r1 v123  h1 p65 d1 r1 v99  h3 p53 d1 r1 v123
+436 | h0 p67 d2 r1 v103  h1 p70 d4 r1 v101  h2 p44 d2 r1 v122  h3 p62 d2 r1 v103
+437 | -
+438 | h0 p63 d2 r1 v103  h3 p58 d2 r1 v103
+439 | -
+440 | h0 p60 d1 r1 v102  h1 p67 d2 r1 v107  h2 p48 d1 r1 v123  h3 p55 d1 r1 v102
+441 | h0 p58 d1 r1 v102  h3 p53 d1 r1 v102
+442 | h0 p56 d1 r1 v102  h1 p65 d1 r1 v110  h2 p46 d1 r1 v123  h3 p51 d1 r1 v102
+443 | h0 p60 d1 r1 v101  h1 p63 d1 r1 v112  h3 p55 d1 r1 v101
+444 | h0 p62 d4 r1 v101  h1 p62 d8 r1 v113  h2 p55 d2 r1 v103  h3 p56 d4 r1 v101
+445 | -
+446 | -
+447 | -
+448 | h0 p68 d2 r1 v99  h2 p51 d2 r1 v103  h3 p63 d2 r1 v99
+449 | -
+450 | h0 p74 d1 r1 v97  h3 p68 d1 r1 v97
+451 | h0 p72 d1 r1 v96  h3 p67 d1 r1 v96
+452 | h0 p70 d2 r1 v96  h1 p62 d4 r1 v120  h2 p48 d1 r1 v102  h3 p65 d2 r1 v96
+453 | -
+454 | h0 p65 d2 r1 v94  h2 p46 d1 r1 v102  h3 p60 d2 r1 v94
+455 | -
+456 | h0 p63 d1 r1 v92  h1 p63 d2 r1 v122  h2 p44 d1 r1 v102  h3 p58 d1 r1 v92
+457 | h0 p62 d1 r1 v91  h3 p56 d1 r1 v91
+458 | h0 p60 d1 r1 v90  h1 p67 d1 r1 v123  h2 p48 d1 r1 v101  h3 p55 d1 r1 v90
+459 | h0 p62 d1 r1 v89  h1 p65 d1 r1 v123  h3 p56 d1 r1 v89
+460 | h0 p63 d4 r1 v88  h1 p74 d2 r1 v103  h2 p50 d4 r1 v101  h3 p58 d4 r1 v88
+461 | -
+462 | h1 p70 d2 r1 v103
+463 | -
+464 | h0 p65 d2 r1 v85  h1 p67 d1 r1 v102  h3 p60 d2 r1 v85
+465 | h1 p65 d1 r1 v102
+466 | h0 p74 d1 r1 v83  h1 p63 d1 r1 v102  h3 p68 d1 r1 v83
+467 | h0 p70 d1 r1 v82  h1 p67 d1 r1 v101  h3 p65 d1 r1 v82
+468 | h0 p80 d2 r1 v61  h1 p68 d4 r1 v101  h2 p56 d2 r1 v99  h3 p75 d2 r1 v61
+469 | -
+470 | h0 p75 d2 r1 v60  h3 p70 d2 r1 v60
+471 | -
+472 | h0 p74 d1 r1 v58  h1 p75 d2 r1 v99  h2 p62 d1 r1 v97  h3 p68 d1 r1 v58
+473 | h0 p72 d1 r1 v58  h3 p67 d1 r1 v58
+474 | h0 p68 d1 r1 v57  h1 p80 d1 r1 v97  h2 p60 d1 r1 v96  h3 p63 d1 r1 v57
+475 | h0 p72 d1 r1 v56  h1 p79 d1 r1 v96  h3 p67 d1 r1 v56
+476 | h0 p68 d4 r1 v56  h1 p77 d2 r1 v96  h2 p58 d2 r1 v96  h3 p63 d4 r1 v56
+477 | -
+478 | h1 p72 d2 r1 v94
+479 | -
+480 | h0 p68 d2 r1 v55  h1 p70 d1 r1 v92  h2 p53 d2 r1 v94  h3 p63 d2 r1 v55
+odonusPatch "line"
+  { scale: C minor
+  , distribution: Natural
+  , octave: 0
+  , span: 3
+  , scalarTransp: 0
+  , gate: 90
+  , quantize: scale
+  , swing: 0
+  , velHumanize: 0
+  , clock: 4.0
+  , marbles: { spread: 50, bias: 50 }
+  , notes: [  ]
+  , gates: [  ]
+  , skips: [  ]
+  , glides: [  ]
+  , durs: [  ]
+  , ratchets: [  ]
+  , vels: [  ]
+  , line: [ 9, 8 ]
+  , entries: [ 0, 3, 16, 16 ]
+  , waves: [ 0, 1, 12, -80, 0, 2, 4, 12, 25, -45, 5, 7, 0, 0, 55 ]
+  , heads:
+      [ head rows 1.0 fwd transp 0 off 0 len 76 euclid 16 16 clock dur
+      , head rows 1.0 fwd transp 0 spread 0 4 off 0 len 76 euclid 16 16 clock dur
+      , head rows 0.5 fwd transp 0 spread 0 -7 off 0 len 76 euclid 16 16 clock dur
+      , head rows 1.0 fwd transp 0 spread 0 -3 off 0 len 76 euclid 16 16 clock dur ]
+  , gen:
+      [ source notes rate 96 amt 20 off
+      , source gate rate 96 amt 30 off
+      , source skip rate 96 amt 30 off
+      , source glide rate 96 amt 30 off
+      , source len rate 72 amt 25 off
+      , source ratchet rate 72 amt 25 off
+      , source heads rate 96 amt 30 off
+      , source transp rate 96 amt 40 off
+      , source pattern rate 96 amt 30 off
+      , source speed rate 96 amt 30 off
+      , source key rate 96 amt 25 off
+      , source vel rate 72 amt 30 off ]
+  }
+line patch round-trip true

@@ -61,7 +61,7 @@ import Data.String.CodeUnits as CU
 import Data.Tuple (Tuple(..))
 import Reef.Gen (GenKind(..))
 import Reef.Input (Input(..), SimState)
-import Reef.Odonus (UnisonGroup(..), knobMax, unisonBit)
+import Reef.Odonus (UnisonGroup(..), knobMax, unisonAll, unisonBit, velLimitOf)
 import Reef.Odonus.Patch as Patch
 
 -- | A parsed line: gestures, a sequence of moves, or a move for n bars.
@@ -122,7 +122,11 @@ restore is s = concatMap undo is
     -- one of harmony and outScale holds the output, so restore whichever did
     SetOutScale _ _ -> [ SetOutScale (_.pattern <$> s.odo.outScale) (maybe 0 _.root s.odo.outScale), SetHarmony s.odo.harmony ]
     SetRoot _ -> [ SetRoot s.odo.rootPc ]
+    SetVelFloor _ -> velLimitBack
+    SetVelCeiling _ -> velLimitBack
     _ -> []
+  -- the whole range first, so either order of floor and ceiling fits
+  velLimitBack = let l = velLimitOf s.odo in [ SetVelFloor 1, SetVelCeiling 127, SetVelFloor l.lo, SetVelCeiling l.hi ]
   genBack k = case gen k of
     Just g -> [ SetGenOn k g.on, SetAmt k g.amt, SetRate k g.rate ]
     Nothing -> []
@@ -132,13 +136,14 @@ restore is s = concatMap undo is
 -- | Every verb, with its arguments, for help text and errors.
 verbs :: Array String
 verbs =
-  [ "unison [pattern|direction|speed|int|rhythm|clock …]"
+  [ "unison [from HEAD] [pattern|direction|speed|int|rhythm|clock …]"
   , "phase N"
   , "stagger N"
   , "notes low|mid|melody|roll"
   , "mutate KIND [AMOUNT]"
   , "still [KIND]"
   , "rate KIND N"
+  , "limit vel LO HI | off"
   , "freeze"
   , "thaw"
   , "gate PERCENT"
@@ -184,7 +189,23 @@ kindNamed w = case find (\(Tuple n _) -> n == w) kinds of
 verb :: String -> Array String -> Either String (Array Input)
 verb name args = case name, args of
   "unison", [] -> Right [ UnifyHeads ]
+  -- `unison from 3 …`: the head copied, counted from 1 as on the panel
+  "unison", ws | Just { head: "from", tail } <- uncons ws -> case uncons tail of
+    Just { head: n, tail: groups } -> do
+      h <- int n
+      when (h < 1 || h > 4) (Left ("unison from a head, 1 to 4, not " <> n))
+      mask <- if null groups then Right unisonAll else sum <$> traverse unisonWord (nub groups)
+      Right [ UnifyHeadsFrom (h - 1) mask ]
+    Nothing -> Left "unison from HEAD (1 to 4)"
   "unison", ws -> (\bits -> [ UnifyHeadsOf (sum bits) ]) <$> traverse unisonWord (nub ws)
+  -- the VELOCITY source's limiter: its drift stays between LO and HI
+  "limit", [ "vel", "off" ] -> Right [ SetVelFloor 1, SetVelCeiling 127 ]
+  "limit", [ "vel", lo, hi ] -> do
+    l <- int lo
+    h <- int hi
+    when (l > h) (Left ("limit vel LO HI: " <> lo <> " is above " <> hi))
+    -- the whole range first, so the new floor is never held under the old ceiling
+    Right [ SetVelFloor 1, SetVelCeiling 127, SetVelFloor l, SetVelCeiling h ]
   "phase", [ n ] -> one FanOffsets <$> int n
   "stagger", [ n ] -> one StaggerLengths <$> int n
   "notes", [ "low" ] -> Right [ SetAllNotes 0 ]

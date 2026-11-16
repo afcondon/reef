@@ -53,6 +53,7 @@ module Reef.Conformance
   , invertRun
   , routeRun
   , patchRun
+  , lineRun
   , conspicillumRun, conspicillumGrains
   , conspicillumCloudRun, conspicillumCycles
   , conspicillumSectorRun
@@ -101,6 +102,7 @@ import Reef.Odonus (floorDivI, Cell, Fired, Head, Odonus, defaultOdonus, renderC
 import Reef.Gen (GenKind(..), GenSource, genKinds, genDefaultRate, genDefaultAmt)
 import Reef.Engine (followHarmony, sampleInput, stepTick)
 import Reef.Input (Input(..), SimState, Tagged, applyInput, fromWire, toWire)
+import Reef.Melichthys as Melichthys
 import Reef.PitchSet (PitchSet(..))
 import Reef.PitchSet as PS
 import Reef.Protocol (decodeInput, decodeSim, encodeInput)
@@ -689,6 +691,10 @@ inputScript =
   , { tick: 340, input: SetSpread 5 }
   , { tick: 380, input: ToggleDistribution }
   , { tick: 390, input: SetVoices "off" }   -- back to every head on its melody
+  , { tick: 392, input: SetVelCeiling 100 }   -- the VELOCITY source's limiter:
+  , { tick: 392, input: SetVelFloor 70 }      -- its drift stays in 70..100
+  , { tick: 393, input: SetRate GVel 0 }      -- and it drifts on every step
+  , { tick: 395, input: UnifyHeadsFrom 2 5 }  -- pattern + int, from head III
   ]
 
 -- | Apply one tick-tagged input THROUGH THE CODEC: encode to JSON then decode back
@@ -749,6 +755,9 @@ inputDigest i s =
     <> " | " <> intercalate "," (map cellDig s.odo.cells)
     <> " | " <> intercalate "  " (mapWithIndex (headDig s.odo) s.odo.heads)
     <> " | " <> intercalate "," (map genDig s.gen)
+    -- the limiter and the velocities it holds, written once there is one, so
+    -- the lines from before it read as they did
+    <> maybe "" (\l -> " | vl" <> show l.lo <> "-" <> show l.hi <> " " <> intercalate "," (map (show <<< _.vel) s.odo.cells)) s.odo.velLimit
   where
   genDig :: GenSource -> String
   genDig src = (if src.on then "1" else "0") <> ":" <> show src.rate <> ":" <> show src.amt
@@ -785,6 +794,31 @@ simRun = case decodeSim handoffJson of
 
 -- ── the patch as text, and recalling it (Reef.Odonus.Patch) ─────────────────
 
+-- | Melichthys (`Reef.Melichthys`): the heads over a drawn line, with the
+-- | three gestures that are its own going through the codec: a head's entry
+-- | moved and the heads restarted, then a new, shorter line drawn. Every step
+-- | is rendered, so the line's own rhythm, the entries and the draw itself
+-- | (the generator's arithmetic) are all held to one answer on both runtimes.
+-- | The last lines are the patch text and whether it reads back the same.
+lineRun :: String
+lineRun = intercalate "\n" (final.out <> [ text, "line patch round-trip " <> show (Just text == map Patch.printPatch (Patch.parsePatch text)) ])
+  where
+  s0 = { odo: Melichthys.fresh, gen: [], spread: 0.5, bias: 0.5, seed: seedFrom 1, frozen: false }
+  script =
+    [ { tick: 40, input: SetHeadEntry 1 3 }, { tick: 41, input: RestartLine }
+    , { tick: 120, input: SetHeadSpeedIx 2 2 }, { tick: 121, input: RestartLine }
+    , { tick: 200, input: SetLineWave 3 (-80) }, { tick: 201, input: SetLineWave 16 5 }
+    , { tick: 202, input: SetLineWave 17 7 }, { tick: 203, input: SetLineWave 20 55 }
+    , { tick: 260, input: SetLineWave 8 2 }, { tick: 261, input: SetLineWave 12 (-45) }
+    , { tick: 300, input: DrawLine 9 8 } ]
+  final = foldl advance { st: s0, out: [] } (range 1 480)
+  advance acc i =
+    let r = stepEmit (foldl applyEncoded acc.st (filter (\t -> t.tick == i) script)).odo
+    in { st: acc.st { odo = r.odo }, out: snoc acc.out (renderStep i r.fired) }
+  text = Patch.printPatch
+    { name: "line", odo: final.st.odo, gen: Patch.reconcileGen [], genSpread: 0.5, genBias: 0.5
+    , swing: 0.0, velHumanize: 0, locks: [] }
+
 -- | A patch and an instant printed and read back, a patch from before `span`,
 -- | the two recall moves Limulus sends, and what they do to a running state.
 patchRun :: String
@@ -819,6 +853,11 @@ patchRun = intercalate "\n" (patchLines <> nowLines <> legacy <> moves <> recall
     [ "move patch | " <> moveLine ("odonus $ " <> t1)
     , "move unison | " <> moveLine "odonus $ unison pattern direction int"
     , "move unison bad | " <> moveLine "odonus $ unison tempo"
+    , "move unison from | " <> moveLine "odonus $ unison from 3 pattern int # unison from 2"
+    , "move unison from bad | " <> moveLine "odonus $ unison from 5"
+    , "move limit | " <> moveLine "odonus $ mutate vel 40 # limit vel 60 110"
+    , "move limit off | " <> moveLine "odonus $ limit vel off"
+    , "move limit bad | " <> moveLine "odonus $ limit vel 110 60"
     , "move now | " <> moveLine ("odonus $ " <> tn)
     , "move one line | " <> moveLine ("odonus $ " <> String.replaceAll (String.Pattern "\n") (String.Replacement " ") t1)
     , "move broken | " <> moveLine "odonus $ odonusPatch \"x\" { scale: C"

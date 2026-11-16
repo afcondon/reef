@@ -70,6 +70,14 @@ module Reef.Odonus
   , unisonGroups
   , unisonBit
   , unisonAll
+  , unifyHeadsFrom
+  , cellCount
+  , Line
+  , Wave
+  , velLimitOf
+  , limitVel
+  , setVelFloor
+  , setVelCeiling
   , fanOffsets
   , staggerLengths
   , spreadOctaves
@@ -237,6 +245,20 @@ odonusToWire o = o { heads = map headToWire o.heads }
 
 type Odonus = OdonusOf Head
 
+-- | The line the heads read where the grid was (Melichthys, `Reef.Melichthys`):
+-- | the draw that made it, and when each head comes in, in half bars from a
+-- | restart. The cells are the line as drawn, so this says what they are; a
+-- | grid has none.
+-- | `waves` shape the line as it is drawn (`Reef.Melichthys.sounded`).
+type Line = { seed :: Int, bars :: Int, entries :: Array Int, waves :: Array Wave }
+
+-- | One slow wave over a line, as an LFO over a patch (AC, 2026-11-16): its
+-- | shape (0 sine, 1 triangle, 2 ramp up, 3 ramp down, 4 square, 5 random
+-- | levels), how many cycles it makes in the line, where in its cycle the line
+-- | starts (sixteenths of one), and how much of it goes to the notes'
+-- | velocities (`dyn`) and to their degrees (`bend`), each -100..100.
+type Wave = { shape :: Int, cycles :: Int, phase :: Int, dyn :: Int, bend :: Int }
+
 -- | Odonus with its heads of type `h`: `Head`, or `HeadWire` on the wire.
 type OdonusOf h =
   { cells :: Array Cell   -- length 16
@@ -284,6 +306,11 @@ type OdonusOf h =
       -- VOICES: a voicing and a rule per head (`Reef.Odonus.Voices`,
       -- docs/kb/plans/odonus-voices.md). Nothing: every head plays its own
       -- melody, SPREAD as ever. A Maybe, so older states decode as none
+  , velLimit :: Maybe { lo :: Int, hi :: Int }
+  , line :: Maybe Line
+      -- the VELOCITY source's limiter: the floor and ceiling its drift stays
+      -- between (AC, 2026-11-15). Nothing: the whole range, 1..127. A hand on
+      -- a cell is not limited. A Maybe, so older states decode as none
   }
 
 -- | The active scale built from the root + interval mask.
@@ -399,7 +426,7 @@ nearestIndex set@(PitchSet s) note =
 -- | (its pattern's order from its offset).
 axisNote :: Odonus -> Head -> Int
 axisNote o hd =
-  let len = clampI 1 16 hd.len
+  let len = clampI 1 (cellCount o.cells) hd.len
   in maybe 0 _.note (o.cells !! gridAt (orderOf hd.patternIx) (modPos hd.offset len))
 
 -- | The notes of the cells in a head's loop: its pattern's order, from its
@@ -407,7 +434,7 @@ axisNote o hd =
 loopNotes :: Odonus -> Head -> Array Int
 loopNotes o hd =
   let
-    len = clampI 1 16 hd.len
+    len = clampI 1 (cellCount o.cells) hd.len
     order = orderOf hd.patternIx
   in
     mapMaybe (\k -> map _.note (o.cells !! gridAt order (modPos (k + hd.offset) len))) (range 0 (len - 1))
@@ -786,7 +813,7 @@ defaultOdonus =
   , pitchSet: Nothing
   , span: 3
   , octaveShift: 0, degShift: 0, gatePct: 90, clockIx: 6, headsPattern: Nothing, octavePattern: Nothing, degreePattern: Nothing, chord: Nothing, harmony: Nothing
-  , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing, voices: Nothing }
+  , scalePattern: Nothing, scaleHeld: Nothing, outScale: Nothing, gridHarmony: Nothing, voices: Nothing, velLimit: Nothing, line: Nothing }
 
 -- ---------------------------------------------------------------------------
 -- traversal — walk the head's pattern ordering, skip-aware
@@ -798,8 +825,16 @@ modPos a b = ((a `mod` b) + b) `mod` b
 skipAt :: Array Cell -> Int -> Boolean
 skipAt cells i = maybe false _.skip (cells !! i)
 
+-- | The cell at a position of a pattern's order. Past the order's end the
+-- | position is its own cell, so a material longer than the grid (a line,
+-- | `Reef.Melichthys`) is read straight through.
 gridAt :: Array Int -> Int -> Int
-gridAt order pos = fromMaybe 0 (order !! pos)
+gridAt order pos = fromMaybe pos (order !! pos)
+
+-- | How many cells a head may loop over: the grid's sixteen, or all of a
+-- | longer material.
+cellCount :: Array Cell -> Int
+cellCount cells = max 16 (length cells)
 
 data Dir = Fwd | Back | Pend
 
@@ -872,7 +907,7 @@ tickHead :: Array Cell -> Head -> { head :: Head, pulsed :: Boolean }
 tickHead cells h =
   let
     order = orderOf h.patternIx
-    len = clampI 1 16 h.len
+    len = clampI 1 (cellCount cells) h.len
     es = clampI 1 maxEsteps h.esteps
     dir = decodeDir h.direction
     n = walkLength dir len
@@ -1019,10 +1054,10 @@ setHeadTransp :: Int -> Int -> Odonus -> Odonus
 setHeadTransp h v = editHead h \hd -> hd { transp = clampI (-24) 24 v }
 
 setHeadOffset :: Int -> Int -> Odonus -> Odonus
-setHeadOffset h v = editHead h \hd -> hd { offset = clampI 0 15 v }
+setHeadOffset h v o = editHead h (\hd -> hd { offset = clampI 0 (cellCount o.cells - 1) v }) o
 
 setHeadLen :: Int -> Int -> Odonus -> Odonus
-setHeadLen h v = editHead h \hd -> hd { len = clampI 1 16 v }
+setHeadLen h v o = editHead h (\hd -> hd { len = clampI 1 (cellCount o.cells) v }) o
 
 -- | What moves head `h` on: 0 its steps, 1 its notes' lengths. Changing it
 -- | starts the new clock fresh (hold 0: move on at the next tick).
@@ -1194,6 +1229,27 @@ setGatePct n o = o { gatePct = clampI 10 200 n }
 setOdoClock :: Int -> Odonus -> Odonus
 setOdoClock ix o = o { clockIx = clampI 0 (length rateTable - 1) ix }
 
+-- | The VELOCITY source's limits, the whole range when none is set.
+velLimitOf :: Odonus -> { lo :: Int, hi :: Int }
+velLimitOf o = fromMaybe { lo: 1, hi: 127 } o.velLimit
+
+-- | A velocity the VELOCITY source may leave in a cell: its drift, held
+-- | between the limits. A cell a hand put outside them is brought inside by
+-- | the next drift that lands on it, and not before.
+limitVel :: Odonus -> Int -> Int
+limitVel o v = let l = velLimitOf o in clampI l.lo l.hi v
+
+-- | The limiter's floor (1..ceiling) and ceiling (floor..127). The whole
+-- | range is no limiter, stored as none.
+setVelFloor :: Int -> Odonus -> Odonus
+setVelFloor v o = let l = velLimitOf o in withVelLimit { lo: clampI 1 l.hi v, hi: l.hi } o
+
+setVelCeiling :: Int -> Odonus -> Odonus
+setVelCeiling v o = let l = velLimitOf o in withVelLimit { lo: l.lo, hi: clampI l.lo 127 v } o
+
+withVelLimit :: { lo :: Int, hi :: Int } -> Odonus -> Odonus
+withVelLimit l o = o { velLimit = if l.lo <= 1 && l.hi >= 127 then Nothing else Just l }
+
 -- | What a partial unison copies from head I (AC, 2026-10-14: often you want
 -- | most of head I, not all of it). PATTERN is the access pattern, DIRECTION
 -- | its direction (split from PATTERN the same day); RHYTHM is the Euclidean pair, the loop length and the offset,
@@ -1223,12 +1279,26 @@ unisonAll = 63
 -- | partial unison can land mid-play. No unison touches a mute (AC,
 -- | 2026-10-14: which heads play is set afterwards, on the head buttons).
 unifyHeadsOf :: Int -> Odonus -> Odonus
-unifyHeadsOf mask o
-  | mask == unisonAll = unifyHeads o
-  | otherwise = case o.heads !! 0 of
-      Just h0 -> o { heads = map (copy h0) o.heads }
-      Nothing -> o
+unifyHeadsOf = unifyHeadsFrom 0
+
+-- | Make every head a copy of head I, phase-aligned, each keeping its own
+-- | mute: the heads that play are in exact unison. The starting point for Steve Reich phasing — from here,
+-- | nudge one head's LEN (metric phasing, Clapping-Music style) or OFF (static
+-- | canon) and listen to them drift against each other.
+unifyHeads :: Odonus -> Odonus
+unifyHeads = unifyHeadsFrom 0 unisonAll
+
+-- | Unison on any head (AC, 2026-11-15): copy the groups in `mask` from head
+-- | `src` (0..3) to every head. The head you have been shaping need not be I.
+-- | A head that is not there changes nothing.
+unifyHeadsFrom :: Int -> Int -> Odonus -> Odonus
+unifyHeadsFrom src mask o = case o.heads !! src of
+  Just h0
+    | mask == unisonAll -> o { heads = map (\h -> (aligned h0) { mute = h.mute }) o.heads }
+    | otherwise -> o { heads = map (copy h0) o.heads }
+  Nothing -> o
   where
+  aligned h = h { cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1 }
   has g = (mask `div` unisonBit g) `mod` 2 == 1
   copy h0 h =
     let
@@ -1243,17 +1313,6 @@ unifyHeadsOf mask o
         else it
     in
       if has UClock then rh { clock = h0.clock } else rh
-
--- | Make every head a copy of head I, phase-aligned, each keeping its own
--- | mute: the heads that play are in exact unison. The starting point for Steve Reich phasing — from here,
--- | nudge one head's LEN (metric phasing, Clapping-Music style) or OFF (static
--- | canon) and listen to them drift against each other.
-unifyHeads :: Odonus -> Odonus
-unifyHeads o = case o.heads !! 0 of
-  Just h0 -> o { heads = map (\h -> (aligned h0) { mute = h.mute }) o.heads }
-  Nothing -> o
-  where
-  aligned h = h { cursor = 0, seqPos = 0, accumulator = 0, pendStep = 1 }
 
 -- ---------------------------------------------------------------------------
 -- Reichian phasing macros — drive all four heads' OFFSET / LEN at once

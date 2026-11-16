@@ -204,6 +204,21 @@ echo "== inputRun (400-step lockstep input replay): node vs erl =="
 diff /tmp/reef-inputrun-node.txt /tmp/reef-inputrun-erl.txt && echo "  ✅ inputRun node == erl (input protocol + codec identical over 400 steps)"
 diff "$INPUT_GOLDEN" /tmp/reef-inputrun-node.txt && echo "  ✅ inputRun matches frozen golden"
 
+# --- Melichthys (Reef.Conformance.lineRun) ------------------------------------
+# The heads over a drawn line: the generator's draw, the entries, a restart
+# and a second draw, with Melichthys's own three gestures through the codec,
+# every step rendered, then the line's patch text read back.
+LINE_GOLDEN="$REEF/conformance/line-golden.txt"
+echo "== lineRun (Melichthys: 480 steps over a drawn line): node vs erl =="
+( cd "$REEF" && node --input-type=module \
+  -e 'import { lineRun } from "./output/Reef.Conformance/index.js"; process.stdout.write(lineRun + "\n");' \
+  ) > /tmp/reef-linerun-node.txt
+( cd "$PURERL" && erl -pa ebin _build/default/lib/jsx/ebin -noshell \
+  -eval 'io:format("~ts~n", ['"'"'reef_conformance@ps'"'"':lineRun()]), halt().' 2>/dev/null \
+  ) > /tmp/reef-linerun-erl.txt
+diff /tmp/reef-linerun-node.txt /tmp/reef-linerun-erl.txt && echo "  ✅ lineRun node == erl"
+diff "$LINE_GOLDEN" /tmp/reef-linerun-node.txt && echo "  ✅ lineRun matches frozen golden"
+
 # --- SimState handoff net (Reef.Conformance.simRun) ---------------------------
 # THE P4d PROOF. Both runtimes DECODE the same real handoff JSON (a SimState the
 # JS frontend encoded, gen on + a seed) via Reef.Protocol.decodeSim, then step

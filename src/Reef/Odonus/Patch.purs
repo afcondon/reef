@@ -34,7 +34,7 @@ module Reef.Odonus.Patch
 
 import Prelude
 
-import Data.Array (concatMap, null, find, findIndex, length, mapWithIndex, range, snoc, uncons, unsnoc, (!!))
+import Data.Array (concatMap, null, find, findIndex, length, mapMaybe, mapWithIndex, range, snoc, uncons, unsnoc, (!!))
 import Data.Either (Either(..), either, hush)
 import Data.Foldable (foldl)
 import Data.Int as Int
@@ -44,11 +44,12 @@ import Data.Ord (abs)
 import Data.String.CodeUnits as CU
 import Data.String.Common (joinWith, toLower)
 import Reef.Gen (GenKind(..), GenSource, genDefaultAmt, genDefaultRate, genKinds)
-import Reef.Odonus (Head, Odonus, defaultOdonus, patternLibrary, setHarmony, setScalePattern, speedOf, speedTable, unitRateIx, clockOf)
+import Reef.Odonus (Head, Odonus, defaultOdonus, patternLibrary, setHarmony, setScalePattern, setVelCeiling, setVelFloor, speedOf, speedTable, unitRateIx, clockOf)
 import Reef.Scale (Distribution(..), normaliseIvls, rootName, rootNames, scaleTypes)
 import Reef.Vetula.Harmony (clockHarmony)
 import Reef.Odonus.Voices (parseVoices, printVoices)
 import Reef.Route.Locks (Locks, parseLocks, printLocks)
+import Reef.Melichthys as Melichthys
 
 -- | The whole authored setup: the model, plus the generators and feel that
 -- | live beside it on the page.
@@ -74,8 +75,9 @@ printPatch :: OdonusPatch -> String
 printPatch p =
   let
     o = p.odo
-    cellInts f = ints (map f o.cells)
-    cellBools f = bools (map f o.cells)
+    cells = maybe o.cells (const []) o.line
+    cellInts f = ints (map f cells)
+    cellBools f = bools (map f cells)
     pct x = show (Int.round (x * 100.0))
     -- by name when reef's table has one (Reef.Scale.scaleTypes), else as steps
     scaleText ivls = maybe (ints ivls) _.name
@@ -107,7 +109,15 @@ printPatch p =
       , "  , durs: " <> cellInts _.dur
       , "  , ratchets: " <> cellInts _.ratchet
       , "  , vels: " <> cellInts _.vel
-      , "  , heads:"
+      ]
+      -- the VELOCITY source's limiter, written only when there is one, so a
+      -- patch from before it prints as it did
+      <> maybe [] (\l -> [ "  , velLimit: " <> ints [ l.lo, l.hi ] ]) o.velLimit
+      -- Melichthys: the line's draw and the heads' entries stand for the
+      -- cells, which are then written empty and drawn again on reading
+      <> maybe [] (\l -> [ "  , line: " <> ints [ l.seed, l.bars ], "  , entries: " <> ints l.entries
+                         , "  , waves: " <> ints (concatMap (\w -> [ w.shape, w.cycles, w.phase, w.dyn, w.bend ]) l.waves) ]) o.line <>
+      [ "  , heads:"
       , "      [ " <> joinWith "\n      , " (map printHead o.heads) <> " ]"
       , "  , gen:"
       , "      [ " <> joinWith "\n      , " (map printGen p.gen) <> " ]"
@@ -430,6 +440,10 @@ patchP = do
   durs <- field "durs" (list intP)
   ratchets <- field "ratchets" (list intP)
   vels <- field "vels" (list intP)
+  velLimit <- optionalP (field "velLimit" (list intP))
+  lineV <- optionalP (field "line" (list intP))
+  entriesV <- optionalP (field "entries" (list intP))
+  wavesV <- optionalP (field "waves" (list intP))
   heads0 <- field "heads" (list headP)
   gen <- field "gen" (list genP)
   punctP '}'
@@ -447,9 +461,25 @@ patchP = do
       , span = fromMaybe defaultOdonus.span span
       , cells = cells, heads = heads
       , voices = voicesTxt >>= \t -> hush (parseVoices t) }
+    limited = case velLimit of
+      Just [ lo, hi ] -> setVelCeiling hi <<< setVelFloor lo
+      _ -> identity
     heads = map (\h -> h.head { speedIx = rateIxOf h.speed }) heads0
     clockIx = maybe defaultOdonus.clockIx rateIxOf clockV
-    odo = setScalePattern sc.pattern (setHarmony (quant (fromMaybe 1 stepDiv)) base { clockIx = clockIx })
+    drawn = case lineV of
+      Just [ seed, bars ] -> \o -> Melichthys.draw seed bars
+        (o { line = entriesV <#> \entries -> { seed, bars, entries, waves: maybe Melichthys.flatWaves wavesOf wavesV } })
+      _ -> identity
+    wavesOf flat = mapMaybe
+      (\i -> ado
+          shape <- flat !! (5 * i)
+          cycles <- flat !! (5 * i + 1)
+          phase <- flat !! (5 * i + 2)
+          dyn <- flat !! (5 * i + 3)
+          bend <- flat !! (5 * i + 4)
+          in { shape, cycles, phase, dyn, bend })
+      (range 0 (length flat / 5 - 1))
+    odo = drawn $ limited (setScalePattern sc.pattern (setHarmony (quant (fromMaybe 1 stepDiv)) base { clockIx = clockIx }))
   pure
     { name, odo
     , gen, genSpread: Int.toNumber marbles.spread / 100.0, genBias: Int.toNumber marbles.bias / 100.0

@@ -6,23 +6,26 @@ module Test.Main (main) where
 
 import Prelude
 
-import Data.Array (filter, index, length, mapWithIndex, range, take)
+import Data.Array (filter, foldl, index, length, mapWithIndex, range, take)
 import Data.Either (Either(..), hush)
 import Data.Int (toNumber)
 import Data.Int as Int
 import Effect (Effect)
 import Effect.Console (log)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Reef.Vetula.Perf (wrapAt)
 import Reef.Balistes.Kit (laneOfName)
 import Reef.Balistes.Kit as Kit
 import Reef.Balistes.Pattern as BP
 import Reef.Routing as Routing
-import Reef.Conformance (floorRun, voicingRun, seleneRun, durRun, pendulumRun, invertRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun, fillRun)
+import Data.String as String
+import Reef.Conformance (lineRun, floorRun, voicingRun, seleneRun, durRun, pendulumRun, invertRun, outScaleRun, routeRun, conspicillumHarmonicRun, conspicillumCloudRun, conspicillumRun, conspicillumGrains, run, chordRun, harmonyRun, headsRun, octaveRun, articulationRun, scaleRun, genRun, betaProbe, inputRun, simRun, balistesRun, balistesSimRun, balistesInputRun, fixedRun, vetulaRun, vetulaMidiRun, fillRun)
 import Reef.Conspicillum.Cloud as CL
 import Reef.Conspicillum.Corpus as CC
 import Reef.Marbles (seedFrom)
-import Reef.Odonus (defaultOdonus)
+import Reef.Melody as Melody
+import Reef.Melichthys as Melichthys
+import Reef.Odonus (defaultOdonus, stepEmit)
 import Reef.PitchSetGolden (tableRender)
 import Reef.Protocol (decodeOdonus, encodeOdonus)
 import Test.Assert (assert', assertEqual')
@@ -411,6 +414,56 @@ main = do
   assertEqual' "Vetula sequence indices wrap"
     { actual: map (wrapAt [ 10, 11, 12 ]) [ 0, 3, 4, -1, 7 ], expected: map Just [ 10, 10, 11, 12, 11 ] }
   log "Reef Vetula index wrap: OK"
+  -- Melichthys's line: every length asked for comes out whole bars long and
+  -- closes on a held tonic, and a seed always draws the same line
+  let
+    melodyOf bars sd = Melody.flatten (Melody.generate bars (seedFrom sd)).melody
+    closes ns = map (\n -> { tonic: n.degree `mod` 7 == 0, dur: n.dur, rest: n.rest }) (index ns (length ns - 1))
+    lines = do
+      bars <- [ 4, 8, 16, 32 ]
+      sd <- range 1 40
+      pure { bars, line: melodyOf bars sd, again: melodyOf bars sd }
+  assertEqual' "Melody: whole bars"
+    { actual: filter (\l -> Melody.lineSteps l.line /= l.bars * Melody.barSteps) lines, expected: [] }
+  assertEqual' "Melody: closes on the tonic, held half a bar"
+    { actual: filter (\l -> closes l.line /= Just { tonic: true, dur: 8, rest: false }) lines, expected: [] }
+  assertEqual' "Melody: a seed draws one line"
+    { actual: filter (\l -> l.line /= l.again) lines, expected: [] }
+  log "Reef Melody: OK"
+  -- Melichthys: head I, forward at ×1, plays the line itself (each note on
+  -- its step, at its pitch in the scale, for its length), and a head entered
+  -- 40 steps later plays the same 40 steps later: the heads read a line as
+  -- they read the grid, and a wait makes a canon
+  let
+    heardFrom sd =
+      let
+        line = melodyOf 16 sd
+        loaded = Melichthys.load line defaultOdonus
+        o0 = Melichthys.enter [ 0, 40 ] loaded
+          { heads = mapWithIndex (\i h -> h { mute = i > 1, speedIx = 4, direction = 0, invert = false, transp = 0, spreadOct = 0, spreadDeg = 0 }) loaded.heads }
+        run = foldl (\acc st -> let r = stepEmit acc.odo in { odo: r.odo, out: acc.out <> map (\f -> { head: f.headIdx, at: st, pitch: f.pitch, dur: f.dur }) r.fired })
+          { odo: o0, out: [] } (range 0 (16 * 16 + 39))
+        octaveOf d = if d >= 0 then d / 7 else negate ((6 - d) / 7)
+        pitchOf d = 60 + defaultOdonus.rootPc + 12 * octaveOf d + fromMaybe 0 (index defaultOdonus.scaleIvls (d - 7 * octaveOf d))
+        written = (foldl (\acc n -> { at: acc.at + n.dur, out: if n.rest then acc.out else acc.out <> [ { at: acc.at, pitch: pitchOf n.degree, dur: n.dur } ] }) { at: 0, out: [] } line).out
+        of_ h shift = map (\e -> { at: e.at - shift, pitch: e.pitch, dur: e.dur }) (filter (\e -> e.head == h) run.out)
+      in
+        { seed: sd, first: filter (\e -> e.at < 256) (of_ 0 0) == written, second: of_ 1 40 == written }
+  assertEqual' "Melichthys: a head plays the line, and a later head the same later"
+    { actual: filter (\r -> not (r.first && r.second)) (map heardFrom (range 1 20)), expected: [] }
+  -- the three gestures and a line's patch text (Reef.Conformance.lineRun;
+  -- its steps are held by conformance/line-golden.txt on both runtimes)
+  assertEqual' "Melichthys: a line's patch reads back as written"
+    { actual: index (String.split (String.Pattern "\n") lineRun) (length (String.split (String.Pattern "\n") lineRun) - 1), expected: Just "line patch round-trip true" }
+  assertEqual' "Melichthys: opens on a sixteen-bar line, a quarter of it between entries"
+    { actual: map (\l -> { seed: l.seed, bars: l.bars, entries: l.entries }) Melichthys.fresh.line, expected: Just { seed: 5, bars: 16, entries: [ 0, 8, 16, 24 ] } }
+  assertEqual' "Melichthys: flat waves leave the melody where it was, at one loudness"
+    { actual: map (\n -> { degree: n.degree, vel: n.vel }) (Melichthys.sounded { seed: 5, bars: 8, entries: [], waves: Melichthys.flatWaves })
+    , expected: map (\n -> { degree: n.degree, vel: Melichthys.baseVelocity }) (Melichthys.lineOf 5 8) }
+  assertEqual' "Melichthys: a sine peaks a quarter of the way round, a ramp runs end to end"
+    { actual: [ Melichthys.waveAt 1 0 { shape: 0, cycles: 1, phase: 0, dyn: 0, bend: 0 } 64 256, Melichthys.waveAt 1 0 { shape: 0, cycles: 1, phase: 0, dyn: 0, bend: 0 } 192 256, Melichthys.waveAt 1 0 { shape: 2, cycles: 1, phase: 0, dyn: 0, bend: 0 } 0 256 ]
+    , expected: [ 127, -127, -127 ] }
+  log "Reef Melichthys: OK"
 
 -- | The frozen render of `Reef.Conformance.run`. Head 0 walks the default
 -- | PitchSet (C minor, cells = discrete indices) — a clean ascending two-octave
@@ -618,6 +671,8 @@ probe3 | 0,24,3,1,21,14,5,22,22,14,20,18,23,2,6,21,20,0,20,10,24,23,0,13,24,20,1
 -- | FollowChord — ch1, phase advancing — which the old inline conformance never ran).
 -- | Regenerated 2026-10-14 for the partial unisons at ticks 240 and 250, and
 -- | head I's E(5,8) restarting with its ring from tick 205.
+-- | Regenerated 2026-11-15 for the VELOCITY limiter from tick 392 (its line
+-- | carries the limits and the velocities) and a unison from head III at 395.
 inputGolden :: String
 inputGolden = """  25 | k2 [0,2,3,5,7,8,10] s524102504 sp500 bi500 h- ch- | 7/1/1/1,17/1/1/1,34/1/1/1,51/1/1/1,68/1/1/1,85/1/1/1,102/1/3/1,119/1/1/1,136/1/1/1,153/1/1/1,170/1/1/1,187/1/1/1,204/1/1/1,221/1/1/1,238/1/1/1,255/1/1/1 | 9:9:0:6:0:16@70  2:8:5:4:2:16@58  7:4:0:6:3:16@65  3:19:0:5:2:16m@57 | 0:96:20,1:96:30,1:96:30,1:96:30,1:72:25,1:72:25,1:96:30,1:96:40,1:96:30,1:96:30,1:96:25,1:72:30
   50 | k2 [0,2,3,5,7,8,10] s1617428359 sp300 bi700 h- ch- | 187/1/1/1,177/1/1/1,178/1/1/1,178/1/1/1,170/1/1/1,175/1/1/1,198/1/3/1,162/1/1/1,180/1/1/1,179/1/1/1,190/1/1/1,177/1/1/1,185/1/1/1,191/1/3/1,189/1/1/1,176/1/1/1 | 2:2:0:6:0:16m@74  13:8:5:4:3:16@81  4:11:0:6:3:16m@72  9:6:0:5:2:16m@74 | 1:96:20,1:96:30,1:96:30,1:96:30,1:72:25,1:72:25,1:96:30,1:96:40,1:96:30,1:96:30,1:96:25,1:72:30
@@ -634,7 +689,7 @@ inputGolden = """  25 | k2 [0,2,3,5,7,8,10] s524102504 sp500 bi500 h- ch- | 7/1/
  325 | k7 [0,2,4,6,7,9,11] s1307061696 sp300 bi700 h- ch- | 253/1/1/1,199/1/1/1,108/1/1/1,215/1/1/1,162/1/1/1,186/1/1/1,182/1/3/1,242/1/1/1,204/3/1/1,96/3/1/1,63/1/1/1,212/1/1/1,10/3/1/1,58/3/3/1,24/1/1/1,177/1/1/1 | 9:14:-5:6:3:16@62  7:12:-5:6:2:16m@49  6:12:-5:6:3:16@56  7:12:-5:6:2:16m@54 | 1:96:20,1:96:30,1:96:30,1:96:30,1:72:25,1:72:25,1:120:30,1:96:60,1:96:30,1:96:30,1:96:25,1:72:30
  350 | k7 [0,4,5,7,9] s1629888615 sp300 bi700 h- ch- | 253/1/1/1,199/1/1/1,108/1/1/1,215/1/1/1,162/1/1/1,186/1/1/1,182/1/3/1,242/1/1/1,204/3/1/1,96/3/1/1,63/1/1/1,164/1/1/1,10/1/1/1,58/3/3/1,192/1/1/1,177/1/1/1 | 6:12:-5:6:3:16@74  7:12:-5:6:2:16m@59  10:13:-5:8:3:16@67  7:12:3:6:2:16m@74 | 1:96:20,1:96:30,1:96:30,1:96:30,1:72:25,1:72:25,1:120:30,1:96:60,1:96:30,1:96:30,1:96:25,1:72:30
  375 | k7 [0,1,4,5,7,8,10] s1593559689 sp300 bi700 h- ch- | 253/1/1/1,199/1/1/1,108/1/1/1,215/1/1/1,162/1/1/1,186/1/1/1,182/1/3/1,242/1/1/1,204/3/1/1,96/3/1/1,63/1/1/1,164/1/1/1,10/1/1/1,58/3/3/1,192/1/1/1,177/1/1/1 | 5:11:-5:6:3:16@75  3:11:-5:6:2:16m@62  6:12:-13:8:3:16@61  11:13:3:8:2:16m@75 | 1:96:20,1:96:30,1:96:30,1:96:30,1:72:25,1:72:25,1:120:30,1:96:60,1:96:30,1:96:30,1:96:25,1:72:30
- 400 | k7 [0,1,4,5,7,8,10] s1342496919 sp300 bi700 h- ch- | 253/1/1/1,199/1/1/1,108/1/1/1,215/1/1/1,162/1/1/1,186/1/1/1,182/1/3/1,242/1/1/1,204/3/1/1,96/3/1/1,63/1/1/1,164/1/1/1,10/1/1/1,58/3/3/1,192/1/1/1,177/1/1/1 | 5:11:-5:6:3:16@75  3:11:-5:6:2:16m@79  5:11:-13:8:3:16@67  7:12:3:8:2:16m@91 | 1:96:20,1:96:30,1:96:30,1:96:30,1:72:25,1:72:25,1:120:30,1:96:60,1:96:30,1:96:30,1:96:25,1:72:30"""
+ 400 | k7 [0,1,4,5,7,8,10] s1992294869 sp300 bi700 h- ch- | 253/1/1/1,199/1/1/1,108/1/1/1,215/1/1/1,162/1/1/1,186/1/1/1,182/1/3/1,242/1/1/1,204/3/1/1,96/3/1/1,63/1/1/1,164/1/1/1,10/1/1/0,58/3/3/1,192/1/1/1,177/1/1/1 | 5:11:-13:6:3:16@67  5:11:-13:6:3:16m@67  5:11:-13:8:3:16@67  6:12:-13:8:3:16m@67 | 1:96:20,1:96:30,1:96:30,1:96:30,1:72:25,1:72:25,1:120:30,1:96:60,1:96:30,1:96:30,1:96:25,1:0:30 | vl70-100 90,90,100,100,100,100,100,110,90,100,100,100,100,100,90,100"""
 
 -- | The frozen SimState handoff golden (P4d). `simRun` DECODES a real handoff JSON
 -- | — the string `Reef.Protocol.encodeSim` produced in the JS frontend for a

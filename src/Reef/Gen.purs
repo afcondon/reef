@@ -244,7 +244,9 @@ applyGen kind spread bias amt odo seed =
           { n: i, seed: s1 } = Marbles.nextInt 16 seed
           { n: d, seed: s2 } = Marbles.nextInt 2 s1
           cur = maybe 100 _.vel (odo.cells !! i)
-      in { odo: M.setCellVel i (cur + (if d == 0 then -mag else mag)) odo, seed: s2 }
+      -- held between the limiter's floor and ceiling (M.limitVel); with no
+      -- limiter that is the cell's own 1..127, as before
+      in { odo: M.setCellVel i (M.limitVel odo (cur + (if d == 0 then -mag else mag))) odo, seed: s2 }
 
 -- | Reroll `n` random cells from the Beta distribution, threading the seed.
 rerollNotes

@@ -58,10 +58,11 @@ import Reef.Odonus
   , setHeadClock, setHeadInvert, setHeadRestart, setHeadLen, setHeadMask, setHeadOffset, setHeadPulses, setHeadSpeedIx, setHeadTransp
   , setNote, setNotes, setOctaveShift, setPitchSet, setRandScale, setRoot, setSpread
   , spreadOctaves, staggerLengths, toggleDistribution, toggleGate, toggleGlide, toggleHeadMute
-  , toggleScaleNote, toggleSkip, unifyHeads, unifyHeadsOf, recallScene, setVoices
+  , toggleScaleNote, toggleSkip, unifyHeads, unifyHeadsOf, unifyHeadsFrom, recallScene, setVoices, setVelFloor, setVelCeiling
   )
 import Reef.PitchSet (PitchSet)
 import Reef.Odonus.Patch as Patch
+import Reef.Melichthys as Melichthys
 
 -- ── the synced simulation state ──────────────────────────────────────────────
 
@@ -94,6 +95,8 @@ data Input
   | SetCellDur Int Int
   | SetCellRatchet Int Int
   | SetCellVel Int Int
+  | SetVelFloor Int          -- the VELOCITY source's limiter (`Reef.Odonus.limitVel`)
+  | SetVelCeiling Int
   -- heads
   | SetHeadSpeedIx Int Int   -- head, value
   | SetHeadDir Int Int
@@ -162,6 +165,12 @@ data Input
   -- Reichian phase macros
   | UnifyHeads
   | UnifyHeadsOf Int          -- a unison mask (`Reef.Odonus.unisonBit`)
+  | UnifyHeadsFrom Int Int    -- the head copied (0..3), and a unison mask
+  -- Melichthys (`Reef.Melichthys`): the heads over one drawn line
+  | DrawLine Int Int          -- a new line: its seed, and its length in bars
+  | SetHeadEntry Int Int      -- head, when it comes in: half bars after a restart
+  | RestartLine               -- every head back to the start, each at its entry
+  | SetLineWave Int Int       -- wave * 8 + control (shape, cycles, phase, dyn, bend), its value
   | FanOffsets Int
   | StaggerLengths Int
   | SpreadOctaves Int
@@ -206,6 +215,8 @@ applyInput = case _ of
   SetCellDur i v -> onOdo (setCellDur i v)
   SetCellRatchet i v -> onOdo (setCellRatchet i v)
   SetCellVel i v -> onOdo (setCellVel i v)
+  SetVelFloor v -> onOdo (setVelFloor v)
+  SetVelCeiling v -> onOdo (setVelCeiling v)
   SetHeadSpeedIx h v -> onOdo (setHeadSpeedIx h v)
   SetHeadDir h v -> onOdo (setHeadDir h v)
   SetHeadTransp h v -> onOdo (setHeadTransp h v)
@@ -254,6 +265,11 @@ applyInput = case _ of
     Nothing -> s
   UnifyHeads -> onOdo unifyHeads
   UnifyHeadsOf m -> onOdo (unifyHeadsOf m)
+  UnifyHeadsFrom h m -> onOdo (unifyHeadsFrom h m)
+  DrawLine seed bars -> onOdo (Melichthys.draw seed bars)
+  SetHeadEntry h v -> onOdo (Melichthys.setEntry h v)
+  RestartLine -> onOdo Melichthys.restart
+  SetLineWave at v -> onOdo (Melichthys.setWave (at / 8) (at `mod` 8) v)
   FanOffsets n -> onOdo (fanOffsets n)
   StaggerLengths n -> onOdo (staggerLengths n)
   SpreadOctaves n -> onOdo (spreadOctaves n)
@@ -319,6 +335,8 @@ toWire = case _ of
   SetCellDur i v -> w0 { tag = "SetCellDur", a = i, b = v }
   SetCellRatchet i v -> w0 { tag = "SetCellRatchet", a = i, b = v }
   SetCellVel i v -> w0 { tag = "SetCellVel", a = i, b = v }
+  SetVelFloor v -> w0 { tag = "SetVelFloor", a = v }
+  SetVelCeiling v -> w0 { tag = "SetVelCeiling", a = v }
   SetHeadSpeedIx h v -> w0 { tag = "SetHeadSpeedIx", a = h, b = v }
   SetHeadDir h v -> w0 { tag = "SetHeadDir", a = h, b = v }
   SetHeadTransp h v -> w0 { tag = "SetHeadTransp", a = h, b = v }
@@ -362,6 +380,11 @@ toWire = case _ of
   RecallNow t -> w0 { tag = "RecallNow", txt = Just t }
   UnifyHeads -> w0 { tag = "UnifyHeads" }
   UnifyHeadsOf m -> w0 { tag = "UnifyHeadsOf", a = m }
+  UnifyHeadsFrom h m -> w0 { tag = "UnifyHeadsFrom", a = h, b = m }
+  DrawLine seed bars -> w0 { tag = "DrawLine", a = seed, b = bars }
+  SetHeadEntry h v -> w0 { tag = "SetHeadEntry", a = h, b = v }
+  RestartLine -> w0 { tag = "RestartLine" }
+  SetLineWave at v -> w0 { tag = "SetLineWave", a = at, b = v }
   FanOffsets n -> w0 { tag = "FanOffsets", a = n }
   StaggerLengths n -> w0 { tag = "StaggerLengths", a = n }
   SpreadOctaves n -> w0 { tag = "SpreadOctaves", a = n }
@@ -390,6 +413,8 @@ fromWire w = case w.tag of
   "SetCellDur" -> Just (SetCellDur w.a w.b)
   "SetCellRatchet" -> Just (SetCellRatchet w.a w.b)
   "SetCellVel" -> Just (SetCellVel w.a w.b)
+  "SetVelFloor" -> Just (SetVelFloor w.a)
+  "SetVelCeiling" -> Just (SetVelCeiling w.a)
   "SetHeadSpeedIx" -> Just (SetHeadSpeedIx w.a w.b)
   "SetHeadDir" -> Just (SetHeadDir w.a w.b)
   "SetHeadTransp" -> Just (SetHeadTransp w.a w.b)
@@ -433,6 +458,11 @@ fromWire w = case w.tag of
   "RecallNow" -> RecallNow <$> w.txt
   "UnifyHeads" -> Just UnifyHeads
   "UnifyHeadsOf" -> Just (UnifyHeadsOf w.a)
+  "UnifyHeadsFrom" -> Just (UnifyHeadsFrom w.a w.b)
+  "DrawLine" -> Just (DrawLine w.a w.b)
+  "SetHeadEntry" -> Just (SetHeadEntry w.a w.b)
+  "RestartLine" -> Just RestartLine
+  "SetLineWave" -> Just (SetLineWave w.a w.b)
   "FanOffsets" -> Just (FanOffsets w.a)
   "StaggerLengths" -> Just (StaggerLengths w.a)
   "SpreadOctaves" -> Just (SpreadOctaves w.a)
